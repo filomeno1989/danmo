@@ -2,15 +2,31 @@
  * Painel Principal (placeholder da Fase 1).
  *
  * Conforme combinado: o conteúdo deste painel decidimos NO FINAL da
- * migração, com o que realmente interessa à Danmo aparecer aqui. Por
- * agora mostra o estado da migração e boas-vindas, para todos os
- * colegas saberem em que ponto estamos.
+ * migração, com o que realmente interessa à Danmo aparecer aqui.
+ *
+ * A saudação vive numa linha discreta no topo (sem banner grande), com
+ * o cumprimento certo à hora de Maputo. O estado da migração fica em
+ * cartões leves para os colegas saberem em que ponto estamos.
  */
 
-import Image from "next/image";
 import { obterSessao, NIVEL_LABEL } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  CircleCheck,
+  Wrench,
+  Layers,
+  CalendarClock
+} from "lucide-react";
+
+/** Cumprimento certo à hora local de Moçambique (UTC+2). */
+function cumprimento(): string {
+  const agoraUtc = new Date();
+  const horaMaputo = (agoraUtc.getUTCHours() + 2) % 24;
+  if (horaMaputo < 12) return "Bom dia";
+  if (horaMaputo < 19) return "Boa tarde";
+  return "Boa noite";
+}
 
 export default async function PaginaInicio() {
   const sessao = await obterSessao();
@@ -19,83 +35,82 @@ export default async function PaginaInicio() {
   const cargo = sessao?.utilizador.cargo || "";
   const nivelTexto = NIVEL_LABEL[nivel] || nivel;
 
+  const quem = cargo ? `${cargo}` : nivelTexto ? `${nivelTexto}` : "";
+
   return (
     <div className="space-y-6">
-      {/* Boas-vindas */}
-      <section className="relative overflow-hidden rounded-2xl border border-sidebar-border bg-sidebar p-6 text-white sm:p-8">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -top-24 -right-16 h-64 w-64 rounded-full bg-[rgba(245,158,11,0.14)]"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -bottom-28 -left-10 h-56 w-56 rounded-full bg-[rgba(0,150,57,0.12)]"
-        />
-        <div className="relative flex flex-wrap items-center gap-4">
-          <Image
-            src="/logos/danmo-logo.png"
-            alt="Logo Danmo Service System"
-            width={56}
-            height={56}
-            className="h-14 w-auto object-contain"
-          />
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold sm:text-2xl">
-              Olá, {nome || "colaborador"}! Bem-vindo ao novo portal.
-            </h1>
-            <p className="mt-1 text-sm text-sidebar-foreground/80">
-              {cargo ? `${cargo} · ` : ""}
-              {nivelTexto ? `Nível: ${nivelTexto}` : ""}
-            </p>
-          </div>
+      {/* Saudação discreta (o banner grande saiu, conforme o teu pedido) */}
+      <section className="entrada-suave flex flex-wrap items-baseline justify-between gap-2 pt-1">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight sm:text-[1.35rem]">
+            {cumprimento()}
+            {nome ? `, ${nome}` : ""}{" "}
+            <span aria-hidden className="text-ambar">
+              .
+            </span>
+          </h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {quem ? `${quem} · ` : ""}Bem-vindo ao novo portal Danmo.
+          </p>
         </div>
       </section>
 
       {/* Estado da migração */}
       <section className="grid gap-4 md:grid-cols-3">
-        <Card>
+        <Card className="card-sombra">
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Badge className="bg-sucesso text-white">Fase 1</Badge>
+            <CardTitle className="flex items-center gap-2.5 text-base">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sucesso-bg text-sucesso">
+                <CircleCheck className="size-4.5" aria-hidden />
+              </span>
               Fundação
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Login protegido no servidor, menu por permissões, tema claro/escuro e
-            este painel. <span className="font-semibold text-sucesso">Concluída.</span>
+          <CardContent className="text-sm leading-relaxed text-muted-foreground">
+            Login protegido no servidor, menu por permissões, tema claro/escuro
+            unificado e auto-registo dos colegas.{" "}
+            <span className="font-semibold text-sucesso">Concluída.</span>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="card-sombra">
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Badge className="bg-ambar text-[#101b2d]">Fase 3</Badge>
+            <CardTitle className="flex items-center gap-2.5 text-base">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ambar-claro text-ambar-texto">
+                <Wrench className="size-4.5" aria-hidden />
+              </span>
               Oficina &amp; Manutenção
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
+          <CardContent className="text-sm leading-relaxed text-muted-foreground">
             A próxima a entrar: Ordens de Serviço, Checklist, Equipamentos e
-            Relatórios, exactamente como estão no hub actual.{" "}
+            Relatórios, tal como estão no hub actual.{" "}
             <span className="font-semibold text-aviso">A seguir.</span>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="card-sombra">
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Badge variant="outline">Fases 2 e 4 a 7</Badge>
+            <CardTitle className="flex items-center gap-2.5 text-base">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-info-bg text-info">
+                <Layers className="size-4.5" aria-hidden />
+              </span>
               Restantes módulos
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Faturação, Stock, Ferramentaria, HST, RH, Férias e a matriz visual de
-            permissões entram a seguir, módulo a módulo, com a tua aprovação.
+          <CardContent className="text-sm leading-relaxed text-muted-foreground">
+            Faturação, Stock, Ferramentaria, HST, RH, Férias e a matriz visual
+            de permissões, módulo a módulo, com a tua aprovação.{" "}
+            <span className="inline-flex items-center gap-1 text-aviso">
+              <CalendarClock className="size-3.5" aria-hidden />
+              Fases 2 e 4 a 7
+            </span>
           </CardContent>
         </Card>
       </section>
 
       {/* Nota sobre o conteúdo do painel */}
-      <Card className="border-dashed">
+      <Card className="border-dashed bg-transparent shadow-none">
         <CardContent className="p-6 text-sm leading-relaxed text-muted-foreground">
           <p className="font-semibold text-foreground">Sobre este painel</p>
           <p className="mt-2">

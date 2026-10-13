@@ -29,5 +29,15 @@ export const NIVEL_LABEL: Record<string, string> = {
   admin: "Admin",
   gestor: "Gestor",
   operador: "Operador",
-  consulta: "Consulta"
+  consulta: "Consulta",
+  // Contas criadas pelo auto-registo: ficam à espera que a administração
+  // lhes dê os acessos. Enquanto isso, só veem o Painel Principal.
+  pendente: "Acesso por aprovar"
+};
+
+/** Uma foto do slideshow de fundo do login. */
+export type FundoLogin = {
+  posicao: number;
+  nome: string;
+  foto: string; // data URL (base64) da imagem já comprimida
 };

@@ -5,6 +5,7 @@
  */
 
 import Link from "next/link";
+import { ArrowLeft, Hourglass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { moduloPorId } from "@/lib/permissoes";
@@ -18,10 +19,10 @@ export default async function PaginaEmMigracao({
   const modulo = moduloPorId(mod);
 
   return (
-    <Card className="mx-auto max-w-xl border-dashed">
+    <Card className="card-sombra mx-auto max-w-xl border-dashed">
       <CardContent className="p-8 text-center">
-        <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-ambar-claro text-2xl">
-          <span aria-hidden>⚙️</span>
+        <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-ambar-claro text-ambar-texto">
+          <Hourglass className="size-6" aria-hidden />
         </div>
         <h1 className="text-lg font-bold">
           {modulo ? modulo.label : "Módulo"} ainda não migraram para cá
@@ -39,7 +40,10 @@ export default async function PaginaEmMigracao({
           rápidas e mais protegidas.
         </p>
         <Button asChild className="mt-6">
-          <Link href="/">Voltar ao Painel Principal</Link>
+          <Link href="/">
+            <ArrowLeft aria-hidden />
+            Voltar ao Painel Principal
+          </Link>
         </Button>
       </CardContent>
     </Card>

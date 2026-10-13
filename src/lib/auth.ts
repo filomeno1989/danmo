@@ -35,6 +35,8 @@ export type RespostaValidacao = {
 export type Sessao = {
   utilizador: Utilizador;
   matriz: LinhaPermissao[];
+  /** Token cru da sessão (para RPCs de gestão que exigem p_token). */
+  token_sessao: string;
 };
 
 /**
@@ -58,14 +60,15 @@ export async function obterSessao(): Promise<Sessao | null> {
         nivel: "admin",
         precisa_trocar: false
       },
-      matriz: []
+      matriz: [],
+      token_sessao: token
     };
   }
 
   try {
     const res = await rpc<RespostaValidacao>("validar_sessao", { p_token: token });
     if (!res || res.valido !== true || !res.utilizador) return null;
-    return { utilizador: res.utilizador, matriz: res.matriz || [] };
+    return { utilizador: res.utilizador, matriz: res.matriz || [], token_sessao: token };
   } catch {
     // Sem ligação à base de dados: tratar como sessão inválida.
     return null;

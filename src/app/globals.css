@@ -1,10 +1,13 @@
 /**
  * globals.css - Identidade visual do portal Danmo (nova geração).
  *
- * A mesma paleta do hub actual (Navy / Ambar / Clean), agora organizada
- * em variaveis do Tailwind 4, com tema claro e escuro completos e bem
- * visiveis nos dois modos. Fontes do proprio sistema (sem downloads):
- * o portal abre rapido mesmo em redes fracas.
+ * Princípio do tema unificado: TODAS as superfícies (fundo, cartões,
+ * sidebar, topbar, menus) mudam juntas no modo claro e no modo escuro.
+ * Nada de "ambiente dividido": a identidade navy/ambar vive nos acentos,
+ * botões e detalhes da marca, não em meias telas fixas.
+ *
+ * Tipografia: fontes do próprio sistema (sem downloads) - o portal abre
+ * rápido mesmo em redes fracas e fica nativo em cada aparelho.
  */
 
 @import "tailwindcss";
@@ -13,107 +16,124 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Superficie e texto (claro, igual ao hub) */
-  --background: #f4f6f9;
-  --foreground: #2c3e50;
-  --card: #ffffff;
-  --card-foreground: #2c3e50;
-  --popover: #ffffff;
-  --popover-foreground: #2c3e50;
+  color-scheme: light;
 
-  /* Acoes principais: navy serio; Ambar fica como cor de marca */
+  /* Superfícies (modo claro) */
+  --background: #f4f6fa;
+  --foreground: #1e293b;
+  --card: #ffffff;
+  --card-foreground: #1e293b;
+  --popover: #ffffff;
+  --popover-foreground: #1e293b;
+
+  /* Acções principais: navy serio; ambar fica como cor de marca */
   --primary: #1e293b;
   --primary-foreground: #ffffff;
-  --secondary: #eceff3;
+  --secondary: #eef2f7;
   --secondary-foreground: #1e293b;
-  --muted: #eceff3;
-  --muted-foreground: #7f8c8d;
+  --muted: #eef2f7;
+  --muted-foreground: #64748b;
   --accent: #f1f5f9;
   --accent-foreground: #1e293b;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
+  --border: #e3e9f1;
+  --input: #d8e0ea;
   --ring: #f59e0b;
 
   /* Cores de estado (iguais ao hub) */
-  --sucesso: #10b981;
+  --sucesso: #059669;
   --sucesso-bg: #d1fae5;
-  --aviso: #f59e0b;
+  --aviso: #d97706;
   --aviso-bg: #fef3c7;
-  --erro: #ef4444;
+  --erro: #dc2626;
   --erro-bg: #fee2e2;
-  --info: #3b82f6;
+  --info: #2563eb;
   --info-bg: #dbeafe;
 
   /* Ambar da marca Danmo */
   --ambar: #f59e0b;
   --ambar-hover: #d97706;
   --ambar-claro: #fef3c7;
+  --ambar-texto: #92400e;
 
-  /* Sidebar navy em ambos os temas (chrome fixo, conteudo muda) */
-  --sidebar: #101b2d;
-  --sidebar-foreground: #cbd5e1;
-  --sidebar-secundario: #8aa0bd;
-  --sidebar-accent: rgba(255, 255, 255, 0.08);
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: rgba(255, 255, 255, 0.09);
-  --sidebar-activo: rgba(245, 158, 11, 0.16);
-  --sidebar-activo-texto: #fbbf24;
+  /* Chrome acompanha o tema (claro -> claro, escuro -> escuro) */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #334155;
+  --sidebar-secundario: #64748b;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #1e293b;
+  --sidebar-border: #e8edf4;
+  --sidebar-activo: rgba(245, 158, 11, 0.14);
+  --sidebar-activo-texto: #b45309;
 
-  /* Topbar acompanha a sidebar */
-  --topbar: #101b2d;
-  --topbar-foreground: #e2e8f0;
+  --topbar: #ffffff;
+  --topbar-foreground: #1e293b;
 
-  --radius: 10px;
+  /* Fundo da página de login (quando não há fotos) */
+  --fundo-login: linear-gradient(150deg, #16243c 0%, #101b2d 55%, #0c1526 100%);
+
+  --radius: 12px;
+
+  /* Sombra suave para cartões (modo claro) */
+  --sombra-card: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --sombra-pop: 0 10px 32px rgba(15, 23, 42, 0.14);
 }
 
 .dark {
-  --background: #0b0f19;
-  --foreground: #f1f5f9;
-  --card: #131c2e;
-  --card-foreground: #f1f5f9;
-  --popover: #131c2e;
-  --popover-foreground: #f1f5f9;
+  color-scheme: dark;
 
-  --primary: #f1f5f9;
+  --background: #0b0f19;
+  --foreground: #e6ebf4;
+  --card: #121a2b;
+  --card-foreground: #e6ebf4;
+  --popover: #141d30;
+  --popover-foreground: #e6ebf4;
+
+  --primary: #e6ebf4;
   --primary-foreground: #0b0f19;
-  --secondary: #1e293b;
-  --secondary-foreground: #f1f5f9;
-  --muted: #1e293b;
+  --secondary: #1c2739;
+  --secondary-foreground: #e6ebf4;
+  --muted: #1c2739;
   --muted-foreground: #94a3b8;
-  --accent: #1e293b;
-  --accent-foreground: #f1f5f9;
+  --accent: #1c2739;
+  --accent-foreground: #e6ebf4;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #1e293b;
-  --input: #1e293b;
+  --border: #202c42;
+  --input: #2a3a54;
   --ring: #f59e0b;
 
-  --sucesso: #10b981;
+  --sucesso: #34d399;
   --sucesso-bg: #064e3b;
-  --aviso: #f59e0b;
+  --aviso: #fbbf24;
   --aviso-bg: #78350f;
-  --erro: #ef4444;
+  --erro: #f87171;
   --erro-bg: #7f1d1d;
-  --info: #3b82f6;
+  --info: #60a5fa;
   --info-bg: #1e3a8a;
 
   --ambar: #f59e0b;
   --ambar-hover: #fbbf24;
   --ambar-claro: #332005;
+  --ambar-texto: #fbbf24;
 
-  --sidebar: #080c14;
-  --sidebar-foreground: #cbd5e1;
-  --sidebar-secundario: #8aa0bd;
-  --sidebar-accent: rgba(255, 255, 255, 0.07);
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: rgba(255, 255, 255, 0.07);
+  --sidebar: #0d1320;
+  --sidebar-foreground: #b6c2d6;
+  --sidebar-secundario: #7e8fac;
+  --sidebar-accent: #182234;
+  --sidebar-accent-foreground: #e6ebf4;
+  --sidebar-border: #1a2334;
   --sidebar-activo: rgba(245, 158, 11, 0.16);
   --sidebar-activo-texto: #fbbf24;
 
-  --topbar: #080c14;
-  --topbar-foreground: #e2e8f0;
+  --topbar: #0d1320;
+  --topbar-foreground: #e6ebf4;
+
+  --fundo-login: linear-gradient(150deg, #0e1626 0%, #0b0f19 55%, #090d16 100%);
+
+  --sombra-card: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --sombra-pop: 0 12px 36px rgba(0, 0, 0, 0.5);
 }
 
 @theme inline {
@@ -149,6 +169,7 @@
   --color-ambar: var(--ambar);
   --color-ambar-hover: var(--ambar-hover);
   --color-ambar-claro: var(--ambar-claro);
+  --color-ambar-texto: var(--ambar-texto);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -180,10 +201,31 @@
     font-family: var(--font-sans);
     line-height: 1.55;
     -webkit-tap-highlight-color: transparent;
+    /* Transição suave do tema (desactivada durante a primeira carga) */
+    transition: background-color 0.25s ease, color 0.25s ease;
   }
   html {
     scroll-behavior: smooth;
   }
+  /* Foco visível e consistente em todo o portal */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  /* Títulos com hierarquia profissional */
+  h1, h2, h3 {
+    letter-spacing: -0.015em;
+  }
+  /* Números alinhados em tabelas e relógios */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Cartões com sombra suave por tema */
+.card-sombra {
+  box-shadow: var(--sombra-card);
 }
 
 /* Barra de rolagem discreta (web) */
@@ -200,5 +242,62 @@
   }
   ::-webkit-scrollbar-track {
     background: transparent;
+  }
+}
+
+/* ============ Slideshow do fundo do login ============ */
+
+/* Camadas de foto com crossfade suave */
+.capa-fundo {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+  will-change: opacity;
+}
+.capa-fundo.visivel {
+  opacity: 1;
+}
+
+/* Véu escuro por cima da foto: o cartão fica sempre legível */
+.veu-fundo {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(8, 13, 24, 0.62) 0%,
+    rgba(8, 13, 24, 0.5) 50%,
+    rgba(8, 13, 24, 0.7) 100%
+  );
+}
+
+/* Quem prefere menos movimento: foto fixa, sem passar */
+@media (prefers-reduced-motion: reduce) {
+  .capa-fundo {
+    transition: none;
+  }
+}
+
+/* ============ Animações discretas de entrada ============ */
+
+@keyframes subir-entrada {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.entrada-suave {
+  animation: subir-entrada 0.35s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entrada-suave {
+    animation: none;
   }
 }

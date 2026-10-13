@@ -238,7 +238,7 @@ export async function POST(req: NextRequest) {
               {
                 ok: false,
                 erro:
-                  "Não é possível apagar: há itens desta secção já respondidos em checklists. Oculta os itens em vez de apagar."
+                  "Não é possível apagar: há itens desta secção já respondidos em checklists e o histórico tem de ficar intacto."
               },
               { status: 409 }
             );
@@ -255,11 +255,12 @@ export async function POST(req: NextRequest) {
             { status: 400 }
           );
         }
+        // A tabela checklist_template_itens só tem: id, secao_id,
+        // numero_item, descricao, ordem (não tem coluna ativo nem template_id).
         await update("checklist_template_itens", `id=eq.${corpo.itemId}`, {
           numero_item: corpo.numero_item != null && corpo.numero_item !== ("" as unknown as number) ? Number(corpo.numero_item) : null,
           descricao: corpo.descricao.trim(),
-          ordem: Number(corpo.ordem) || 0,
-          ativo: corpo.ativo !== false
+          ordem: Number(corpo.ordem) || 0
         });
         return NextResponse.json({ ok: true });
       }
@@ -283,8 +284,7 @@ export async function POST(req: NextRequest) {
           secao_id: secaoId,
           numero_item: corpo.numero_item != null ? Number(corpo.numero_item) : null,
           descricao: corpo.descricao.trim(),
-          ordem: proximaOrdem,
-          ativo: true
+          ordem: proximaOrdem
         });
         return NextResponse.json({ ok: true });
       }
@@ -301,7 +301,7 @@ export async function POST(req: NextRequest) {
           return NextResponse.json(
             {
               ok: false,
-              erro: `Este item já foi respondido em ${respondidos.length} checklist(s). Desmarca "Visível" em vez de apagar.`
+              erro: `Este item já foi respondido em ${respondidos.length} checklist(s). Não pode ser apagado para proteger o histórico.`
             },
             { status: 409 }
           );

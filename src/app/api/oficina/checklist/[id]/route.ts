@@ -50,13 +50,13 @@ export async function GET(_req: NextRequest, ctx: Contexto) {
     );
     const template = tplLista[0];
 
-    const [secoes, itensTemplate, itensResp, colaboradores] = await Promise.all([
+    // Os itens de template pertencem a SECÇÕES (a tabela
+    // checklist_template_itens não tem coluna template_id - as secções
+    // é que têm). Primeiro buscam-se as secções, depois os itens por
+    // secao_id, igual ao hub original (checklist_preencher.html).
+    const [secoes, itensResp, colaboradores] = await Promise.all([
       query<SecaoTemplate>(
         "checklist_template_secoes",
-        `select=*&template_id=eq.${checklist.template_id}&order=ordem.asc`
-      ),
-      query<ItemTemplate>(
-        "checklist_template_itens",
         `select=*&template_id=eq.${checklist.template_id}&order=ordem.asc`
       ),
       query<ItemPreenchido>("checklist_preenchidos_itens", `select=*&checklist_id=eq.${ckId}`),
@@ -65,6 +65,14 @@ export async function GET(_req: NextRequest, ctx: Contexto) {
         "select=id,name,code&active=eq.true&order=name.asc"
       )
     ]);
+
+    const secaoIds = secoes.map((s) => s.id);
+    const itensTemplate = secaoIds.length
+      ? await query<ItemTemplate>(
+          "checklist_template_itens",
+          `select=*&secao_id=in.(${secaoIds.join(",")})&order=ordem.asc`
+        )
+      : [];
 
     let os: OrdemServico | null = null;
     let equip: Equipamento | null = null;

@@ -130,7 +130,8 @@ export type ItemTemplate = {
   numero_item?: number | null;
   descricao: string;
   ordem: number;
-  ativo: boolean;
+  // NOTA: a tabela real não tem coluna "ativo" nem "template_id"
+  // (colunas reais: id, secao_id, numero_item, descricao, ordem).
 };
 
 export type ChecklistPreenchido = {

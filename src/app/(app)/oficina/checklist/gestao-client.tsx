@@ -238,8 +238,7 @@ export function GestaoChecklist({
           itemId: item.id,
           numero_item: linha.numero ? Number(linha.numero) : null,
           descricao: linha.descricao,
-          ordem: item.ordem,
-          ativo: linha.ativo
+          ordem: item.ordem
         },
         "Item actualizado."
       );
@@ -252,7 +251,7 @@ export function GestaoChecklist({
   async function apagarItem(itemId: number, usos: number) {
     if (usos > 0) {
       window.alert(
-        `Este item já foi respondido em ${usos} checklist(s). Para não perder esse histórico, desmarca "Visível" em vez de apagar.`
+        `Este item já foi respondido em ${usos} checklist(s). Não pode ser apagado para proteger o histórico.`
       );
       return;
     }
@@ -569,7 +568,7 @@ export function GestaoChecklist({
 
 /* Linha editável de item (estado local por linha) */
 
-type LinhaItem = { numero: string; descricao: string; ativo: boolean };
+type LinhaItem = { numero: string; descricao: string };
 
 function LinhaItemComponente({
   item,
@@ -586,12 +585,11 @@ function LinhaItemComponente({
 }) {
   const [linha, setLinha] = useState<LinhaItem>({
     numero: item.numero_item != null ? String(item.numero_item) : "",
-    descricao: item.descricao || "",
-    ativo: item.ativo !== false
+    descricao: item.descricao || ""
   });
 
   return (
-    <div className={"flex flex-wrap items-center gap-2 px-3 py-2 " + (linha.ativo ? "" : "opacity-50")}>
+    <div className="flex flex-wrap items-center gap-2 px-3 py-2">
       <Input
         type="number"
         className="h-8 w-16 shrink-0"
@@ -605,15 +603,6 @@ function LinhaItemComponente({
         onChange={(e) => setLinha({ ...linha, descricao: e.target.value })}
         aria-label="Descrição do item"
       />
-      <label className="flex shrink-0 items-center gap-1.5 text-xs font-normal">
-        <input
-          type="checkbox"
-          className="size-3.5 accent-[var(--primario)]"
-          checked={linha.ativo}
-          onChange={(e) => setLinha({ ...linha, ativo: e.target.checked })}
-        />
-        Visível
-      </label>
       {item.usos > 0 && (
         <span
           className="shrink-0 rounded-full bg-info-bg px-2 py-0.5 text-[0.68rem] font-semibold text-info"

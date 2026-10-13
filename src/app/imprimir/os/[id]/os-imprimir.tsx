@@ -36,6 +36,7 @@ type DadosObra = {
     peca: string;
     data?: string | null;
     quantidade?: number | null;
+    unidade?: string | null;
     colaborador?: string | null;
   }[];
 };
@@ -46,6 +47,13 @@ function fData(s?: string | null): string {
   const [a, m, d] = String(s).slice(0, 10).split("-");
   if (!a || !m || !d) return String(s);
   return `${d}/${m}/${a}`;
+}
+
+/** Quantidade com a unidade gravada: "4 Kg", "4 Lt", "2 un" (Unidade abreviada). */
+function qtdComUnidade(q?: number | null, u?: string | null): string {
+  if (q == null || !q) return "";
+  if (!u) return String(q);
+  return `${q} ${u === "Unidade" ? "un" : u}`;
 }
 
 /** Só os dígitos do código do colaborador (coluna Nº, como no hub). */
@@ -562,7 +570,7 @@ export function OsImprimir({ osId }: { osId: number }) {
                           <tr key={i}>
                             <td className="col-pp">{p ? p.peca : ""}</td>
                             <td className="col-dp">{p && p.data ? fData(p.data) : ""}</td>
-                            <td className="col-qp">{p ? p.quantidade || "" : ""}</td>
+                            <td className="col-qp">{p ? qtdComUnidade(p.quantidade, p.unidade) : ""}</td>
                             <td className="col-cp">{p ? p.colaborador || "" : ""}</td>
                           </tr>
                         );

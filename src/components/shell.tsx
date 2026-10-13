@@ -245,8 +245,8 @@ export function Shell({ utilizador, modulos, children }: Props) {
           {
             id: "personalizar",
             icone: ImageIcon,
-            cor: "text-info",
-            fundo: "bg-info-bg",
+            cor: "text-primario",
+            fundo: "bg-sucesso-bg",
             titulo: "Personalizar portal",
             texto: "Carrega fotos da empresa para o fundo do login e do painel, em Definições."
           }
@@ -726,21 +726,16 @@ export function Shell({ utilizador, modulos, children }: Props) {
           )}
         </div>
 
-        {/* Citação da marca no fundo da sidebar (quando há espaço para ela) */}
-        <div className={"shrink-0 border-t border-sidebar-border " + (comRotulos ? "px-4 py-4" : "hidden lg:block lg:py-3")}>
+        {/* Citação da marca no fundo da sidebar (compacta: sem desenho,
+            para o menu respirar) */}
+        <div className={"shrink-0 border-t border-sidebar-border " + (comRotulos ? "px-4 py-3" : "hidden lg:block lg:py-3")}>
           {comRotulos ? (
             <>
-              <svg viewBox="0 0 120 40" className="h-8 w-full text-primario opacity-35" aria-hidden>
-                <path
-                  d="M0 40 L26 12 L42 28 L58 6 L78 32 L94 20 L120 40 Z"
-                  fill="currentColor"
-                />
-              </svg>
-              <p className="mt-2.5 text-[0.72rem] leading-relaxed text-sidebar-secundario italic">
+              <p className="text-[0.72rem] leading-relaxed text-sidebar-secundario italic">
                 "Juntos construímos um sistema mais forte."
               </p>
-              <p className="mt-1 text-[0.68rem] font-bold tracking-wide text-sidebar-foreground/70">
-                Danmo
+              <p className="mt-1 text-[0.66rem] font-bold tracking-wide text-sidebar-foreground/70">
+                Danmo Service System, Lda
               </p>
             </>
           ) : (

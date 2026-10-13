@@ -137,42 +137,42 @@ export function PainelInicio({
         />
 
         <CartaoFase
-          classeFundo="fase-azul text-slate-900 dark:text-white"
+          classeFundo="fase-ambar text-amber-950 dark:text-white"
           icone={Cog}
-          tile="bg-blue-600 text-white dark:bg-white/15 dark:text-white"
+          tile="bg-ambar text-[#101b2d] dark:bg-white/15 dark:text-white"
           marcaAgua={Cog}
           titulo="Oficina & Manutenção"
-          corTitulo="text-slate-900 dark:text-white"
+          corTitulo="text-amber-950 dark:text-white"
           texto="A próxima a entrar: Ordens de Serviço, Checklist, Equipamentos e Relatórios, tal como estão no hub actual."
-          corTexto="text-slate-700/80 dark:text-white/75"
+          corTexto="text-amber-900/80 dark:text-white/75"
           pill={
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-200/80 px-3 py-1 text-[0.72rem] font-bold text-amber-900 dark:bg-amber-400 dark:text-amber-950">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-[0.72rem] font-bold text-amber-900 shadow-sm dark:bg-white/15 dark:text-amber-200">
               <Clock className="size-3.5" aria-hidden />
               A seguir
             </span>
           }
-          seta="border-blue-700/30 text-slate-900 hover:bg-blue-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
+          seta="border-amber-700/40 text-amber-950 hover:bg-amber-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
           href="/em-migracao?mod=oficina"
           externo
           rotulo="Oficina e Manutenção: ver o plano da Fase 3"
         />
 
         <CartaoFase
-          classeFundo="fase-violeta text-violet-950 dark:text-white"
+          classeFundo="fase-vermelha text-red-950 dark:text-white"
           icone={Layers}
-          tile="bg-violet-600 text-white dark:bg-white/15 dark:text-white"
+          tile="bg-red-600 text-white dark:bg-white/15 dark:text-white"
           marcaAgua={Layers}
           titulo="Restantes módulos"
-          corTitulo="text-violet-950 dark:text-white"
+          corTitulo="text-red-950 dark:text-white"
           texto="Faturação, Stock, Ferramentaria, HST, RH, Férias e a matriz visual de permissões, módulo a módulo, com a tua aprovação."
-          corTexto="text-violet-900/75 dark:text-white/75"
+          corTexto="text-red-900/75 dark:text-white/75"
           pill={
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-600/12 px-3 py-1 text-[0.72rem] font-bold text-violet-700 dark:bg-white/15 dark:text-violet-200">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-[0.72rem] font-bold text-red-800 shadow-sm dark:bg-white/15 dark:text-red-200">
               <CalendarClock className="size-3.5" aria-hidden />
               Fases 2 e 4 a 7
             </span>
           }
-          seta="border-violet-700/30 text-violet-900 hover:bg-violet-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
+          seta="border-red-700/30 text-red-900 hover:bg-red-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
           href="/em-migracao"
           externo
           rotulo="Restantes módulos: ver o plano de migração"
@@ -184,7 +184,7 @@ export function PainelInicio({
         <div className="grid md:grid-cols-[1.3fr,1fr]">
           <CardContent className="py-6 sm:py-7">
             <div className="flex items-center gap-3">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-info-bg text-info">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-sucesso-bg text-sucesso">
                 <Layers className="size-5.5" aria-hidden />
               </span>
               <h2 className="text-lg font-bold tracking-tight">Sobre este painel</h2>
@@ -207,7 +207,7 @@ export function PainelInicio({
             aria-hidden
             className="painel-sobre relative hidden flex-col items-center justify-center gap-3 p-8 text-center md:flex"
           >
-            <p className="script-danmo text-[1.7rem] leading-snug text-white/90">
+            <p className="script-danmo text-[1.7rem] leading-snug">
               Tecnologia que impulsiona
               <br />
               o nosso trabalho.

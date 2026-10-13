@@ -18,10 +18,11 @@
 :root {
   color-scheme: light;
 
-  /* Acento do tema claro: AZUL da marca (como no mockup claro).
-     O verde fica nas confirmações; o ambar é a assinatura do perfil. */
-  --primario: #2563eb;
-  --primario-forte: #1d4ed8;
+  /* Acento do tema claro: VERDE da marca Danmo (logo: verde, vermelho,
+     amarelo e preto). O ambar é a assinatura do perfil; confirmações
+     ficam no mesmo verde. */
+  --primario: #009639;
+  --primario-forte: #007a2f;
 
   /* Superfícies (modo claro) */
   --background: #f4f6fa;
@@ -44,7 +45,7 @@
   --destructive-foreground: #ffffff;
   --border: #e3e9f1;
   --input: #d8e0ea;
-  --ring: #3b82f6;
+  --ring: #009639;
 
   /* Cores de estado (iguais ao hub) */
   --sucesso: #059669;
@@ -69,8 +70,8 @@
   --sidebar-accent: #f1f5f9;
   --sidebar-accent-foreground: #1e293b;
   --sidebar-border: #e8edf4;
-  --sidebar-activo: rgba(37, 99, 235, 0.09);
-  --sidebar-activo-texto: #1e40af;
+  --sidebar-activo: rgba(0, 150, 57, 0.1);
+  --sidebar-activo-texto: #0a6e2e;
 
   --topbar: #ffffff;
   --topbar-foreground: #1e293b;
@@ -88,7 +89,8 @@
 .dark {
   color-scheme: dark;
 
-  /* Acento do tema escuro: VERDE da marca (como no mockup escuro) */
+  /* Acento do tema escuro: o mesmo VERDE da marca, mais luminoso
+     (o logo Danmo vive em fundo preto - aqui é igual). */
   --primario: #34d399;
   --primario-forte: #6ee7b7;
 
@@ -334,27 +336,45 @@
   border-color: rgba(52, 211, 153, 0.3);
 }
 
-.fase-azul {
-  background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
-  border-color: color-mix(in srgb, #3b82f6 25%, transparent);
+.fase-ambar {
+  background: linear-gradient(135deg, #fffbeb 0%, #fffef7 100%);
+  border-color: color-mix(in srgb, #f59e0b 32%, transparent);
 }
-.dark .fase-azul {
-  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 55%, #1a2f66 100%);
-  border-color: rgba(96, 165, 250, 0.32);
+.dark .fase-ambar {
+  background: linear-gradient(135deg, #78350f 0%, #92400e 52%, #a16207 100%);
+  border-color: rgba(251, 191, 36, 0.32);
 }
 
-.fase-violeta {
-  background: linear-gradient(135deg, #f5f3ff 0%, #faf5ff 100%);
-  border-color: color-mix(in srgb, #8b5cf6 25%, transparent);
+.fase-vermelha {
+  background: linear-gradient(135deg, #fef2f2 0%, #fff6f6 100%);
+  border-color: color-mix(in srgb, #dc2626 26%, transparent);
 }
-.dark .fase-violeta {
-  background: linear-gradient(135deg, #6d28d9 0%, #5b21b6 55%, #4c1d95 100%);
-  border-color: rgba(167, 139, 250, 0.32);
+.dark .fase-vermelha {
+  background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 55%, #7a1212 100%);
+  border-color: rgba(248, 113, 113, 0.32);
 }
 
 /* ============ Painel lateral do cartão "Sobre este painel" ============ */
 
+/* Acompanha o tema: no claro fica claro (com brilhos da marca), no
+   escuro mantém o painel profundo. O texto herda a cor daqui. */
 .painel-sobre {
+  color: #14532d;
+  background:
+    radial-gradient(
+      110% 150% at 85% 15%,
+      rgba(0, 150, 57, 0.14) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      90% 130% at 10% 90%,
+      rgba(245, 158, 11, 0.12) 0%,
+      transparent 50%
+    ),
+    linear-gradient(160deg, #f2faf5 0%, #eef5f0 60%, #ecf1ee 100%);
+}
+.dark .painel-sobre {
+  color: rgba(255, 255, 255, 0.9);
   background:
     radial-gradient(
       110% 150% at 85% 15%,

@@ -5,7 +5,7 @@
 
 const { chromium } = require("/home/z/.npm-global/lib/node_modules/playwright");
 
-const BASE = "http://localhost:3333";
+const BASE = process.env.BASE || "http://localhost:3333";
 const FOTOS = "/home/z/my-project/danmo/tests";
 
 (async () => {

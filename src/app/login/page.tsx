@@ -108,7 +108,9 @@ function LoginConteudo() {
   const { resolvedTheme, setTheme } = useTheme();
   const params = useSearchParams();
 
-  // Mensagens vindas do endereço (redireccionamentos do guard no servidor)
+  // Mensagens vindas do endereço (redireccionamentos do guard no
+  // servidor). Só avisos com informação real: o motivo genérico de
+  // redireccionamento não aparece (evita repetir o óbvio a todos).
   const motivo = params.get("motivo");
   const forcarTroca = params.get("trocar") === "1";
   const avisoDoUrl = forcarTroca
@@ -117,9 +119,7 @@ function LoginConteudo() {
       ? "A tua sessão expirou. Entra de novo, por favor."
       : motivo === "trocada"
         ? "Senha trocada com sucesso. Entra com a nova senha."
-        : motivo
-          ? "Entra para acederes ao portal."
-          : "";
+        : "";
 
   const [etapaManual, setEtapaManual] = useState<Etapa>("entrar");
   const etapa: Etapa = forcarTroca ? "trocar" : etapaManual;
@@ -422,7 +422,7 @@ function LoginConteudo() {
                     limparMensagens();
                     setEtapaManual("registo_codigo");
                   }}
-                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-info transition-colors hover:text-info/80"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-primario transition-colors hover:text-primario/80"
                 >
                   <UserRoundSearch className="size-4" aria-hidden />
                   É a primeira vez? Criar o meu acesso

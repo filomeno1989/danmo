@@ -13,7 +13,7 @@
  * Tudo validado de novo no servidor (sessão de admin + chave).
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ImagePlus,
@@ -81,6 +81,27 @@ export function GestorFundos() {
       setACarregar(false);
     }
   }
+
+  // CORRECÇÃO: sem esta carga inicial o estado "aCarregar" nascia activo
+  // e ninguém o desligava - o botão Recarregar ficava a girar para
+  // sempre, desligado, e as fotos já gravadas nunca apareciam.
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/portal/fundos")
+      .then((r) => r.json())
+      .then((d) => {
+        if (vivo && d?.ok) setFundos(d.fundos || []);
+      })
+      .catch(() => {
+        if (vivo) toast.error("Não foi possível carregar as fotos actuais.");
+      })
+      .finally(() => {
+        if (vivo) setACarregar(false);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   function fundoNaPosicao(p: number): FundoLogin | undefined {
     return fundos.find((f) => f.posicao === p);

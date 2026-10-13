@@ -77,13 +77,10 @@ export function HeroiSaudacao({ nome, quem, fundosIniciais }: Props) {
       <div className="relative z-10 flex min-h-[228px] flex-col justify-center p-5 sm:p-8">
         <p className="text-[0.95rem] text-muted-foreground">Olá,</p>
         <h1 className="mt-1 max-w-[22ch] text-[1.45rem] leading-tight font-bold tracking-tight sm:max-w-[26ch] sm:text-[1.9rem]">
-          {nome ? nome : "Bem-vindo ao portal Danmo"}
-          {nome && (
-            <span aria-hidden className="ml-1 inline-block size-2.5 rounded-full bg-sucesso align-baseline" />
-          )}
+          {nome ? nome : "Bem-vindo ao portal da Danmo S. S. Lda"}
         </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          {quem ? `${quem} · ` : ""}Bem-vindo ao novo portal Danmo.
+          {quem ? `${quem} · ` : ""}Bem-vindo ao portal da Danmo S. S. Lda.
         </p>
         <span aria-hidden className="mt-3.5 h-1 w-12 rounded-full bg-sucesso" />
 

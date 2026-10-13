@@ -39,7 +39,7 @@ export type Modulo = {
 export const MODULOS: Modulo[] = [
   {
     id: "inicio",
-    label: "Painel Principal",
+    label: "Início",
     icone: "Home",
     fase: 0
   },

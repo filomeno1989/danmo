@@ -1,0 +1,221 @@
+/**
+ * PainelInicio - Conteúdo do "Início" (herói + cartões de fase + sobre).
+ *
+ * Componente de servidor, sem acesso a sessão: quem o chama fornece
+ * nome e cargo/nível. Assim o mesmo bloco serve a página real e os
+ * testes visuais.
+ */
+
+import Link from "next/link";
+import { Card, CardContent } from "@/components/ui/card";
+import { HeroiSaudacao } from "@/components/heroi-saudacao";
+import {
+  CircleCheck,
+  Clock,
+  CalendarClock,
+  Shield,
+  Cog,
+  Layers,
+  ArrowRight,
+  type LucideIcon
+} from "lucide-react";
+
+type CartaoFaseProps = {
+  classeFundo: string;
+  icone: LucideIcon;
+  tile: string;
+  marcaAgua: LucideIcon;
+  titulo: string;
+  corTitulo: string;
+  texto: string;
+  corTexto: string;
+  pill: React.ReactNode;
+  seta: string;
+  href: string;
+  externo?: boolean;
+  rotulo: string;
+};
+
+function CartaoFase({
+  classeFundo,
+  icone: Icone,
+  tile,
+  marcaAgua: Marca,
+  titulo,
+  corTitulo,
+  texto,
+  corTexto,
+  pill,
+  seta,
+  href,
+  externo,
+  rotulo
+}: CartaoFaseProps) {
+  const corpo = (
+    <>
+      <Marca
+        aria-hidden
+        className="absolute -right-7 -bottom-9 size-36 text-current opacity-[0.06] dark:opacity-[0.09]"
+      />
+      <div className="relative z-10 flex h-full flex-col p-5">
+        <span
+          className={
+            "flex size-11 items-center justify-center rounded-xl shadow-sm " + tile
+          }
+        >
+          <Icone className="size-5.5" aria-hidden />
+        </span>
+        <h3 className={"mt-4 text-[1.05rem] font-bold " + corTitulo}>{titulo}</h3>
+        <p className={"mt-1.5 text-[0.84rem] leading-relaxed " + corTexto}>{texto}</p>
+        <div className="mt-auto flex items-end justify-between gap-3 pt-5">
+          {pill}
+          <span
+            className={
+              "flex size-9 shrink-0 items-center justify-center rounded-full border transition-colors " +
+              seta
+            }
+            aria-hidden
+          >
+            <ArrowRight className="size-4.5" />
+          </span>
+        </div>
+      </div>
+    </>
+  );
+
+  const classes = `cartao-fase card-sombra entrada-suave ${classeFundo} block h-full`;
+
+  if (externo || href.startsWith("#")) {
+    return (
+      <a href={href} aria-label={rotulo} className={classes}>
+        {corpo}
+      </a>
+    );
+  }
+  return (
+    <Link href={href} aria-label={rotulo} className={classes}>
+      {corpo}
+    </Link>
+  );
+}
+
+export function PainelInicio({
+  nome,
+  quem,
+  fundos
+}: {
+  nome: string;
+  quem: string;
+  fundos?: Parameters<typeof HeroiSaudacao>[0]["fundosIniciais"];
+}) {
+  return (
+    <div className="space-y-5">
+      {/* 1. Herói: saudação + foto da empresa (as fotos que carregas em
+          Personalizar portal aparecem aqui também, em crossfade suave) */}
+      <HeroiSaudacao nome={nome} quem={quem} fundosIniciais={fundos} />
+
+      {/* 2. Estado da migração (cartões de fase) */}
+      <section aria-label="Estado da migração" className="grid gap-4 md:grid-cols-3">
+        <CartaoFase
+          classeFundo="fase-verde text-emerald-950 dark:text-white"
+          icone={Shield}
+          tile="bg-emerald-600 text-white dark:bg-white/15 dark:text-white"
+          marcaAgua={Shield}
+          titulo="Fundação"
+          corTitulo="text-emerald-950 dark:text-white"
+          texto="Login protegido no servidor, menu por permissões, tema claro/escuro unificado e auto-registo dos colegas."
+          corTexto="text-emerald-900/75 dark:text-white/75"
+          pill={
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600/15 px-3 py-1 text-[0.72rem] font-bold text-emerald-700 dark:bg-white/15 dark:text-emerald-200">
+              <CircleCheck className="size-3.5" aria-hidden />
+              Concluída
+            </span>
+          }
+          seta="border-emerald-700/30 text-emerald-900 hover:bg-emerald-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
+          href="#sobre"
+          rotulo="Fundação concluída: ver detalhes em Sobre este painel"
+        />
+
+        <CartaoFase
+          classeFundo="fase-azul text-slate-900 dark:text-white"
+          icone={Cog}
+          tile="bg-blue-600 text-white dark:bg-white/15 dark:text-white"
+          marcaAgua={Cog}
+          titulo="Oficina & Manutenção"
+          corTitulo="text-slate-900 dark:text-white"
+          texto="A próxima a entrar: Ordens de Serviço, Checklist, Equipamentos e Relatórios, tal como estão no hub actual."
+          corTexto="text-slate-700/80 dark:text-white/75"
+          pill={
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-200/80 px-3 py-1 text-[0.72rem] font-bold text-amber-900 dark:bg-amber-400 dark:text-amber-950">
+              <Clock className="size-3.5" aria-hidden />
+              A seguir
+            </span>
+          }
+          seta="border-blue-700/30 text-slate-900 hover:bg-blue-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
+          href="/em-migracao?mod=oficina"
+          externo
+          rotulo="Oficina e Manutenção: ver o plano da Fase 3"
+        />
+
+        <CartaoFase
+          classeFundo="fase-violeta text-violet-950 dark:text-white"
+          icone={Layers}
+          tile="bg-violet-600 text-white dark:bg-white/15 dark:text-white"
+          marcaAgua={Layers}
+          titulo="Restantes módulos"
+          corTitulo="text-violet-950 dark:text-white"
+          texto="Faturação, Stock, Ferramentaria, HST, RH, Férias e a matriz visual de permissões, módulo a módulo, com a tua aprovação."
+          corTexto="text-violet-900/75 dark:text-white/75"
+          pill={
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-600/12 px-3 py-1 text-[0.72rem] font-bold text-violet-700 dark:bg-white/15 dark:text-violet-200">
+              <CalendarClock className="size-3.5" aria-hidden />
+              Fases 2 e 4 a 7
+            </span>
+          }
+          seta="border-violet-700/30 text-violet-900 hover:bg-violet-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
+          href="/em-migracao"
+          externo
+          rotulo="Restantes módulos: ver o plano de migração"
+        />
+      </section>
+
+      {/* 3. Sobre este painel */}
+      <Card id="sobre" className="card-sombra overflow-hidden py-0">
+        <div className="grid md:grid-cols-[1.3fr,1fr]">
+          <CardContent className="py-6 sm:py-7">
+            <div className="flex items-center gap-3">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-info-bg text-info">
+                <Layers className="size-5.5" aria-hidden />
+              </span>
+              <h2 className="text-lg font-bold tracking-tight">Sobre este painel</h2>
+            </div>
+            <div className="mt-4 space-y-3 text-sm leading-relaxed text-muted-foreground">
+              <p>
+                O conteúdo aqui visível decidimos juntos no final da migração: os
+                atalhos, avisos e números que realmente interessa à Danmo terem
+                logo à vista. Por agora serve de ponto de partida e mostra o
+                estado do caminho.
+              </p>
+              <p>
+                O menu lateral já está a funcionar com as permissões da base de
+                dados: cada colega vê apenas o que pode usar. Os módulos que
+                ainda não migraram aparecem marcados com a fase em que chegam.
+              </p>
+            </div>
+          </CardContent>
+          <div
+            aria-hidden
+            className="painel-sobre relative hidden flex-col items-center justify-center gap-3 p-8 text-center md:flex"
+          >
+            <p className="script-danmo text-[1.7rem] leading-snug text-white/90">
+              Tecnologia que impulsiona
+              <br />
+              o nosso trabalho.
+            </p>
+            <span className="h-1 w-10 rounded-full bg-sucesso" />
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}

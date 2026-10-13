@@ -21,18 +21,27 @@ const MAX_FOTO_BASE64 = 700_000; // ~700 KB por foto depois de comprimida
 const POSICOES = [1, 2, 3, 4];
 
 export async function GET() {
+  // As fotos mudam raramente (só quando a administração grava): deixar o
+  // navegador guardá-las 5 minutos e revalidar em segundo plano. O login
+  // e o painel partilham a mesma resposta, sem pesar na rede.
+  const cabecalhos = {
+    "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
+  };
   if (modoEstrutura()) {
-    return NextResponse.json({ ok: true, fundos: [] as FundoLogin[] });
+    return NextResponse.json({ ok: true, fundos: [] as FundoLogin[] }, { headers: cabecalhos });
   }
   try {
     const lista = await rpc<FundoLogin[]>("fundos_login");
-    return NextResponse.json({
-      ok: true,
-      fundos: Array.isArray(lista) ? lista : []
-    });
+    return NextResponse.json(
+      {
+        ok: true,
+        fundos: Array.isArray(lista) ? lista : []
+      },
+      { headers: cabecalhos }
+    );
   } catch {
     // Função ausente ou base indisponível: login segue com o gradiente
-    return NextResponse.json({ ok: true, fundos: [] as FundoLogin[] });
+    return NextResponse.json({ ok: true, fundos: [] as FundoLogin[] }, { headers: cabecalhos });
   }
 }
 

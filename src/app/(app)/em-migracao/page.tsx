@@ -42,7 +42,7 @@ export default async function PaginaEmMigracao({
         <Button asChild className="mt-6">
           <Link href="/">
             <ArrowLeft aria-hidden />
-            Voltar ao Painel Principal
+            Voltar ao Início
           </Link>
         </Button>
       </CardContent>

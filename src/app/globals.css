@@ -18,6 +18,11 @@
 :root {
   color-scheme: light;
 
+  /* Acento do tema claro: AZUL da marca (como no mockup claro).
+     O verde fica nas confirmações; o ambar é a assinatura do perfil. */
+  --primario: #2563eb;
+  --primario-forte: #1d4ed8;
+
   /* Superfícies (modo claro) */
   --background: #f4f6fa;
   --foreground: #1e293b;
@@ -39,7 +44,7 @@
   --destructive-foreground: #ffffff;
   --border: #e3e9f1;
   --input: #d8e0ea;
-  --ring: #f59e0b;
+  --ring: #3b82f6;
 
   /* Cores de estado (iguais ao hub) */
   --sucesso: #059669;
@@ -64,8 +69,8 @@
   --sidebar-accent: #f1f5f9;
   --sidebar-accent-foreground: #1e293b;
   --sidebar-border: #e8edf4;
-  --sidebar-activo: rgba(245, 158, 11, 0.14);
-  --sidebar-activo-texto: #b45309;
+  --sidebar-activo: rgba(37, 99, 235, 0.09);
+  --sidebar-activo-texto: #1e40af;
 
   --topbar: #ffffff;
   --topbar-foreground: #1e293b;
@@ -82,6 +87,10 @@
 
 .dark {
   color-scheme: dark;
+
+  /* Acento do tema escuro: VERDE da marca (como no mockup escuro) */
+  --primario: #34d399;
+  --primario-forte: #6ee7b7;
 
   --background: #0b0f19;
   --foreground: #e6ebf4;
@@ -102,7 +111,7 @@
   --destructive-foreground: #ffffff;
   --border: #202c42;
   --input: #2a3a54;
-  --ring: #f59e0b;
+  --ring: #34d399;
 
   --sucesso: #34d399;
   --sucesso-bg: #064e3b;
@@ -124,8 +133,8 @@
   --sidebar-accent: #182234;
   --sidebar-accent-foreground: #e6ebf4;
   --sidebar-border: #1a2334;
-  --sidebar-activo: rgba(245, 158, 11, 0.16);
-  --sidebar-activo-texto: #fbbf24;
+  --sidebar-activo: rgba(52, 211, 153, 0.12);
+  --sidebar-activo-texto: #6ee7b7;
 
   --topbar: #0d1320;
   --topbar-foreground: #e6ebf4;
@@ -170,6 +179,10 @@
   --color-ambar-hover: var(--ambar-hover);
   --color-ambar-claro: var(--ambar-claro);
   --color-ambar-texto: var(--ambar-texto);
+
+  --color-primario: var(--primario);
+  --color-primario-forte: var(--primario-forte);
+  --color-sidebar-activo-texto: var(--sidebar-activo-texto);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -243,6 +256,112 @@
   ::-webkit-scrollbar-track {
     background: transparent;
   }
+}
+
+/* ============ Fonte manuscrita (acentos decorativos) ============ */
+
+/* Caveat, servida pelo próprio portal (sem rede externa no carregamento).
+   Usada só nas frases decorativas dos mockups do Filomeno. */
+.script-danmo {
+  font-family: var(--font-script), "Segoe Script", cursive;
+  letter-spacing: 0.01em;
+}
+
+/* ============ Herói da entrada (saudação com foto) ============ */
+
+.heroi-foto {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transition: opacity 1.6s ease;
+  will-change: opacity;
+}
+.heroi-foto.visivel {
+  opacity: 1;
+}
+
+/* O texto fica à esquerda sobre a cor do cartão; a foto respira à direita */
+.heroi-veu {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    92deg,
+    var(--card) 0%,
+    color-mix(in srgb, var(--card) 92%, transparent) 34%,
+    color-mix(in srgb, var(--card) 55%, transparent) 60%,
+    color-mix(in srgb, var(--card) 22%, transparent) 100%
+  );
+}
+
+/* Sem fotos carregadas: brilho suave da marca, nada de vazio */
+.heroi-fallback {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      120% 170% at 88% 8%,
+      color-mix(in srgb, var(--primario) 20%, transparent) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      90% 140% at 100% 100%,
+      color-mix(in srgb, var(--ambar) 12%, transparent) 0%,
+      transparent 52%
+    );
+}
+
+/* ============ Cartões de fase (gradientes da marca) ============ */
+
+.cartao-fase {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid transparent;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.cartao-fase:hover {
+  transform: translateY(-2px);
+}
+
+.fase-verde {
+  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdfa 100%);
+  border-color: color-mix(in srgb, #10b981 28%, transparent);
+}
+.dark .fase-verde {
+  background: linear-gradient(135deg, #0a4a34 0%, #07553b 52%, #0b5f45 100%);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+.fase-azul {
+  background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+  border-color: color-mix(in srgb, #3b82f6 25%, transparent);
+}
+.dark .fase-azul {
+  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 55%, #1a2f66 100%);
+  border-color: rgba(96, 165, 250, 0.32);
+}
+
+.fase-violeta {
+  background: linear-gradient(135deg, #f5f3ff 0%, #faf5ff 100%);
+  border-color: color-mix(in srgb, #8b5cf6 25%, transparent);
+}
+.dark .fase-violeta {
+  background: linear-gradient(135deg, #6d28d9 0%, #5b21b6 55%, #4c1d95 100%);
+  border-color: rgba(167, 139, 250, 0.32);
+}
+
+/* ============ Painel lateral do cartão "Sobre este painel" ============ */
+
+.painel-sobre {
+  background:
+    radial-gradient(
+      110% 150% at 85% 15%,
+      rgba(52, 211, 153, 0.22) 0%,
+      transparent 55%
+    ),
+    linear-gradient(160deg, #0f2a3a 0%, #0c1c30 60%, #0a1524 100%);
 }
 
 /* ============ Slideshow do fundo do login ============ */

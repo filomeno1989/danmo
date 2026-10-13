@@ -1,7 +1,20 @@
 import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
+
+/**
+ * Fonte manuscrita (Caveat) servida pelo próprio portal: usada só nas
+ * frases decorativas do painel. Ficheiro local (75 KB, latim), sem
+ * chamadas externas no carregamento.
+ */
+const manuscrita = localFont({
+  src: "./fonts/caveat-latin.woff2",
+  weight: "400 700",
+  display: "swap",
+  variable: "--font-script"
+});
 
 export const metadata: Metadata = {
   title: "Portal Danmo Service System, Lda",
@@ -27,7 +40,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt" suppressHydrationWarning>
-      <body className="antialiased">
+      <body className={`${manuscrita.variable} antialiased`}>
         {/* Sem disableTransitionOnChange: a mudança de tema faz-se com a
             transição suave definida no CSS (0.25s), sem salto seco. */}
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>

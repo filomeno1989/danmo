@@ -3,17 +3,17 @@
 /**
  * GestorFundos - Gestão das 4 fotos do slideshow do login (client).
  *
- * Fluxo por posição:
- * 1. Escolher a imagem no aparelho (ou arrastar para a zona);
- * 2. O navegador comprime (máx. 1920px, JPEG) e mostra a pré-visualização;
- * 3. A administração escreve a chave de administração e grava;
- * 4. A foto passa a aparecer no login de todos, sem mexer no código.
+ * Fluxo pensado para quem usa uma vez por mês (sem treino):
+ * 1. A CHAVE DE ADMINISTRAÇÃO fica no TOPO, bem explicada (a mesma
+ *    chave de gestão do hub; não é a senha de entrada);
+ * 2. Escolher a imagem (clicar ou ARRASTAR para a zona);
+ * 3. O navegador comprime (máx. 1920px, JPEG) e mostra a pré-visualização;
+ * 4. Gravar: se faltar a chave, a página leva-te direitinho ao campo.
  *
  * Tudo validado de novo no servidor (sessão de admin + chave).
  */
 
-import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   ImagePlus,
@@ -21,7 +21,8 @@ import {
   Save,
   Trash2,
   RefreshCcw,
-  Info
+  Info,
+  KeyRound
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -61,6 +62,12 @@ export function GestorFundos() {
   const [aGravar, setAGravar] = useState(false);
   const [aCarregar, setACarregar] = useState(true);
   const refsInput = useRef<Record<number, HTMLInputElement | null>>({});
+  const refChave = useRef<HTMLDivElement | null>(null);
+
+  function focarChave() {
+    refChave.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    refChave.current?.querySelector("input")?.focus();
+  }
 
   async function carregar() {
     setACarregar(true);
@@ -75,24 +82,6 @@ export function GestorFundos() {
     }
   }
 
-  // Carga inicial: estado inicial já é "a carregar", por isso o efeito
-  // só busca os dados e actualiza quando o servidor responde.
-  useEffect(() => {
-    let vivo = true;
-    fetch("/api/portal/fundos")
-      .then((r) => r.json())
-      .then((d) => {
-        if (vivo && d?.ok) setFundos(d.fundos || []);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (vivo) setACarregar(false);
-      });
-    return () => {
-      vivo = false;
-    };
-  }, []);
-
   function fundoNaPosicao(p: number): FundoLogin | undefined {
     return fundos.find((f) => f.posicao === p);
   }
@@ -102,7 +91,9 @@ export function GestorFundos() {
     try {
       const { dataUrl, nome } = await comprimir(ficheiro);
       setNovas((n) => ({ ...n, [p]: { foto: dataUrl, nome } }));
-      toast.info(`Foto pronta na posição ${p}. Escreve a chave e grava.`);
+      if (!chave) {
+        toast.info("Foto pronta. Escreve a chave de administração no topo e clica Gravar.");
+      }
     } catch (e) {
       toast.error((e as Error).message || "Não foi possível processar a imagem.");
     }
@@ -112,7 +103,8 @@ export function GestorFundos() {
     const nova = novas[p];
     if (!nova) return;
     if (!chave) {
-      toast.error("Escreve a chave de administração para gravar.");
+      toast.error("Falta a chave de administração. Olha para o topo desta página.");
+      focarChave();
       return;
     }
     setAGravar(true);
@@ -149,7 +141,8 @@ export function GestorFundos() {
 
   async function apagar(p: number) {
     if (!chave) {
-      toast.error("Escreve a chave de administração para apagar.");
+      toast.error("Falta a chave de administração. Olha para o topo desta página.");
+      focarChave();
       return;
     }
     setAGravar(true);
@@ -175,21 +168,33 @@ export function GestorFundos() {
 
   return (
     <div className="space-y-5">
-      <Card className="card-sombra">
-        <CardContent className="space-y-1.5">
-          <p className="flex items-center gap-2 text-sm font-semibold">
-            <Info className="size-4 text-info" aria-hidden />
-            Como funciona
-          </p>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Escolhe até 4 fotos (o sistema comprime-as automaticamente), vê a
-            pré-visualização e grava com a chave de administração - a mesma
-            chave que usas no hub. As fotos trocam sozinhas no login, cada 7
-            segundos, com transição suave.
+      {/* ===== CHAVE PRIMEIRO: sem ela nada grava, por isso vem à frente ===== */}
+      <Card className="card-sombra border-ambar/40" ref={refChave}>
+        <CardContent className="space-y-2">
+          <Label htmlFor="chave-admin" className="flex items-center gap-2 text-sm">
+            <KeyRound className="size-4 text-ambar" aria-hidden />
+            Chave de administração <span className="text-erro">*</span>
+          </Label>
+          <div className="max-w-sm">
+            <PasswordInput
+              id="chave-admin"
+              value={chave}
+              onChange={setChave}
+              placeholder="Chave de gestão do portal"
+              autoComplete="current-password"
+            />
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            A mesma chave de gestão usada nas acções sensíveis do hub.{" "}
+            <span className="font-semibold text-foreground/80">
+              Não é a tua senha de entrada.
+            </span>{" "}
+            Precisa dela para gravar ou apagar fotos; não fica guardada no navegador.
           </p>
         </CardContent>
       </Card>
 
+      {/* ===== As 4 posições ===== */}
       <div className="grid gap-4 sm:grid-cols-2">
         {POSICOES.map((p) => {
           const actual = fundoNaPosicao(p);
@@ -216,6 +221,11 @@ export function GestorFundos() {
                 <div
                   className="relative flex aspect-[16/9] cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-input bg-muted/50 transition-colors hover:bg-muted"
                   onClick={() => refsInput.current[p]?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    escolherFicheiro(p, e.dataTransfer.files?.[0]);
+                  }}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
@@ -239,7 +249,7 @@ export function GestorFundos() {
                   ) : (
                     <span className="flex flex-col items-center gap-1.5 px-4 text-center text-muted-foreground">
                       <ImagePlus className="size-7" aria-hidden />
-                      <span className="text-sm font-medium">Escolher foto</span>
+                      <span className="text-sm font-medium">Clicar ou arrastar a foto</span>
                       <span className="text-xs">JPG, PNG ou WebP</span>
                     </span>
                   )}
@@ -265,7 +275,7 @@ export function GestorFundos() {
                     size="sm"
                     disabled={!nova || aGravar}
                     onClick={() => gravar(p)}
-                    className="flex-1 bg-ambar text-[#101b2d] font-bold hover:bg-ambar-hover"
+                    className="flex-1 bg-ambar font-bold text-[#101b2d] hover:bg-ambar-hover"
                   >
                     {aGravar ? (
                       <LoaderCircle className="animate-spin" aria-hidden />
@@ -292,20 +302,15 @@ export function GestorFundos() {
         })}
       </div>
 
+      {/* ===== Como funciona + recarregar ===== */}
       <Card className="card-sombra">
         <CardContent className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="chave-admin">Chave de administração</Label>
-            <PasswordInput
-              id="chave-admin"
-              value={chave}
-              onChange={setChave}
-              placeholder="A chave que usas no hub"
-              autoComplete="current-password"
-            />
-            <p className="text-xs text-muted-foreground">
-              Pedida em cada gravação, como no hub. Não fica guardada no
-              navegador.
+          <div className="flex items-start gap-2.5">
+            <Info className="mt-0.5 size-4 shrink-0 text-info" aria-hidden />
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              As fotos trocam sozinhas no login, cada 7 segundos, com transição
+              suave. O sistema comprime cada foto antes de a enviar, para o
+              portal continuar leve mesmo em redes fracas.
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={carregar} disabled={aCarregar}>

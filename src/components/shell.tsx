@@ -3,18 +3,17 @@
 /**
  * shell.tsx - Casca do portal: topbar + sidebar + area de conteudo.
  *
- * Tema unificado: topbar e sidebar acompanham o modo claro/escuro como
- * todo o resto (nada de ambiente dividido). A identidade da marca vive
- * nos acentos: item activo em ambar, logo e detalhes.
+ * Novo desenho (mockups do Filomeno, Outubro 2026):
+ * - Topbar: logo à esquerda, PÍLULA de data/hora ao vivo ao centro
+ *   (hora de Maputo), e à direita o alternador de tema, a campainha de
+ *   novidades reais do portal e o perfil com ponto verde de estado;
+ * - Sidebar: em computador nasce ABERTA com os nomes à vista (com botão
+ *   para recolher a ícones, guardado no navegador); item activo com
+ *   azulejo de ícone na cor da marca; no fundo, a citação da Danmo;
+ * - Telemóvel: sidebar escondida, abre em overlay com o hambúrguer.
  *
- * Comportamento igual ao do hub, que os colegas já conhecem:
- * - Desktop: sidebar compacta (só ícones); ao clicar num módulo com
- *   páginas, expande e abre o submenu; clicar fora recolhe;
- * - Telemóvel e tablet: sidebar escondida, abre em overlay com o
- *   hambúrguer da topbar;
- * - Topbar com data/hora ao vivo, alternador de tema e perfil do
- *   utilizador (com Terminar Sessão e, para administração, a
- *   Personalização do portal).
+ * Tema unificado: tudo muda junto no claro/escuro. Acento do tema claro
+ * é o azul da marca; no escuro é o verde (como nos mockups).
  *
  * A lista de módulos chega pronta do SERVIDOR (já filtrada pelas
  * permissões). Quem não tem permissão nem vê a opção no menu.
@@ -34,6 +33,7 @@ import {
   Wrench,
   KeyRound,
   ClipboardList,
+  Settings,
   ChevronRight,
   ChevronDown,
   Plus,
@@ -43,7 +43,13 @@ import {
   Sun,
   Moon,
   LogOut,
+  Bell,
+  CalendarDays,
   ImageIcon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  CircleCheck,
+  UserRoundPlus,
   type LucideIcon
 } from "lucide-react";
 import { toast } from "sonner";
@@ -70,18 +76,49 @@ const ICONES: Record<string, LucideIcon> = {
   AlertTriangle,
   Wrench,
   KeyRound,
-  ClipboardList
+  ClipboardList,
+  Settings
 };
 
-const DIAS_SEMANA = [
-  "Domingo",
-  "Segunda-feira",
-  "Terça-feira",
-  "Quarta-feira",
-  "Quinta-feira",
-  "Sexta-feira",
-  "Sábado"
-];
+type Novidade = {
+  id: string;
+  icone: LucideIcon;
+  cor: string;
+  fundo: string;
+  titulo: string;
+  texto: string;
+};
+
+type Props = {
+  utilizador: Utilizador;
+  modulos: Modulo[];
+  children: React.ReactNode;
+};
+
+/** Partes da data/hora na hora certa: sempre África/Maputo (UTC+2). */
+function partesMaputo(agora: Date) {
+  const fmt = new Intl.DateTimeFormat("pt-PT", {
+    timeZone: "Africa/Maputo",
+    weekday: "long",
+    day: "numeric",
+    month: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+  const partes = fmt.formatToParts(agora);
+  const p = (tipo: string) => partes.find((x) => x.type === tipo)?.value || "";
+  const capitalizar = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+  const mesNum = Number(p("month"));
+  return {
+    diaSemana: capitalizar(p("weekday")),
+    dia: p("day"),
+    mes: MESES[(mesNum || 1) - 1] || "",
+    hora: p("hour"),
+    minuto: p("minute")
+  };
+}
+
 const MESES = [
   "Janeiro",
   "Fevereiro",
@@ -97,31 +134,42 @@ const MESES = [
   "Dezembro"
 ];
 
-type Props = {
-  utilizador: Utilizador;
-  modulos: Modulo[];
-  children: React.ReactNode;
-};
-
 export function Shell({ utilizador, modulos, children }: Props) {
   const router = useRouter();
   const caminho = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
 
   const [mobileAberta, setMobileAberta] = useState(false);
-  const [expandida, setExpandida] = useState(false);
+  const [recolhida, setRecolhida] = useState(false); // só faz sentido em desktop
   const [moduloAberto, setModuloAberto] = useState<string | null>(null);
   const [grupoAberto, setGrupoAberto] = useState<string | null>(null);
   const [agora, setAgora] = useState<Date | null>(null);
+  const [novidadesVistas, setNovidadesVistas] = useState(true);
 
-  // Relógio ao vivo: primeiro tick em seguida, depois cada segundo
+  // Relógio: primeiro tick em seguida, depois cada 10 segundos (a pílula
+  // mostra hora e minuto; um segundo a segundo seria desperdício)
   useEffect(() => {
     const primeiro = setTimeout(() => setAgora(new Date()), 0);
-    const t = setInterval(() => setAgora(new Date()), 1000);
+    const t = setInterval(() => setAgora(new Date()), 10000);
     return () => {
       clearTimeout(primeiro);
       clearInterval(t);
     };
+  }, []);
+
+  // Preferência do menu guardada no navegador (só desktop). Lida num
+  // segundo tempo (depois do primeiro render) para não dessincronizar
+  // o React no hidratar.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        if (localStorage.getItem("danmo-menu") === "fechado") setRecolhida(true);
+        setNovidadesVistas(localStorage.getItem("danmo-novidades") === "vistas");
+      } catch {
+        // sem localStorage (navegação privada): usa os valores por defeito
+      }
+    }, 0);
+    return () => clearTimeout(t);
   }, []);
 
   // Ao mudar de página, fecha o menu do telemóvel (padrão "ajustar estado
@@ -132,15 +180,31 @@ export function Shell({ utilizador, modulos, children }: Props) {
     setMobileAberta(false);
   }
 
+  function alternarMenu() {
+    setRecolhida((v) => {
+      const novo = !v;
+      try {
+        localStorage.setItem("danmo-menu", novo ? "fechado" : "aberto");
+      } catch {
+        // sem localStorage: só muda para esta visita
+      }
+      return novo;
+    });
+  }
+
   function clicarModulo(m: Modulo) {
     const temDetalhe = Boolean(m.sub?.length || m.grupos?.length);
     if (m.fase > 0 || m.dev || !temDetalhe) return; // cartaz ou link directo
-    if (expandida && moduloAberto === m.id) {
-      setExpandida(false);
+    if (recolhida) {
+      // Recolhida: abre o menu e o submenu de uma vez
+      setRecolhida(false);
+      setModuloAberto(m.id);
+      return;
+    }
+    if (moduloAberto === m.id) {
       setModuloAberto(null);
       return;
     }
-    setExpandida(true);
     setModuloAberto(m.id);
     setGrupoAberto(null);
   }
@@ -165,20 +229,61 @@ export function Shell({ utilizador, modulos, children }: Props) {
   const nivelTexto = NIVEL_LABEL[utilizador.nivel] || utilizador.nivel || "";
   const eAdmin = utilizador.nivel === "admin";
 
-  const dataTexto =
-    agora &&
-    `${DIAS_SEMANA[agora.getDay()]}, ${agora.getDate()} de ${MESES[agora.getMonth()]}`;
-  const horaTexto =
-    agora &&
-    [agora.getHours(), agora.getMinutes()]
-      .map((n) => String(n).padStart(2, "0"))
-      .join(":");
+  // Novidades REAIS do portal (nada de dados inventados): o que mudou
+  // nesta fundação, o que a administração pode fazer e o auto-registo.
+  const novidades: Novidade[] = [
+    {
+      id: "fase1",
+      icone: CircleCheck,
+      cor: "text-sucesso",
+      fundo: "bg-sucesso-bg",
+      titulo: "Fase 1 concluída",
+      texto: "Fundação do portal no ar: login no servidor, menu por permissões e tema unificado."
+    },
+    ...(eAdmin
+      ? [
+          {
+            id: "personalizar",
+            icone: ImageIcon,
+            cor: "text-info",
+            fundo: "bg-info-bg",
+            titulo: "Personalizar portal",
+            texto: "Carrega fotos da empresa para o fundo do login e do painel, em Definições."
+          }
+        ]
+      : []),
+    {
+      id: "registo",
+      icone: UserRoundPlus,
+      cor: "text-aviso",
+      fundo: "bg-aviso-bg",
+      titulo: "Auto-registo activo",
+      texto: "Os colegas criam o acesso com o código de colaborador; depois a administração dá os restantes acessos."
+    }
+  ];
+  const novidadesCount = novidadesVistas ? 0 : novidades.length;
+
+  function verNovidades(aberto: boolean) {
+    if (!aberto) return;
+    setNovidadesVistas(true);
+    try {
+      localStorage.setItem("danmo-novidades", "vistas");
+    } catch {
+      // sem localStorage: só deixa de mostrar nesta visita
+    }
+  }
+
+  const partes = agora ? partesMaputo(agora) : null;
+  const dataTexto = partes && `${partes.diaSemana}, ${partes.dia} de ${partes.mes}`;
+  const horaTexto = partes && `${partes.hora}:${partes.minuto}`;
+
+  const comRotulos = mobileAberta || !recolhida;
 
   return (
     <div className="min-h-screen">
       {/* ============ Topbar ============ */}
       <header className="fixed inset-x-0 top-0 z-50 flex h-[60px] items-center justify-between gap-2 border-b border-sidebar-border bg-topbar px-3 text-topbar-foreground shadow-sm sm:px-5">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
           <Button
             variant="ghost"
             size="icon"
@@ -193,28 +298,34 @@ export function Shell({ utilizador, modulos, children }: Props) {
             <Image
               src="/logos/danmo-logo.png"
               alt="Logo Danmo Service System"
-              width={36}
-              height={36}
-              className="size-9 object-contain"
+              width={64}
+              height={38}
+              className="h-[34px] w-auto"
               priority
             />
-            <span className="min-w-0 truncate text-[0.95rem] font-bold whitespace-nowrap">
+            <span className="min-w-0 truncate text-[0.98rem] font-bold whitespace-nowrap">
               Portal Danmo{" "}
-              <span className="hidden font-medium text-topbar-foreground/65 sm:inline">
+              <span className="hidden font-medium text-topbar-foreground/60 sm:inline">
                 Service System, Lda
               </span>
             </span>
           </Link>
         </div>
 
-        <div className="hidden min-w-0 flex-col items-end text-[0.8rem] text-topbar-foreground/70 lg:flex">
-          <span>{dataTexto}</span>
-          <span className="font-semibold tabular-nums text-topbar-foreground/90">
-            {horaTexto}
+        {/* Pílula de data/hora ao vivo, ao centro (como no mockup) */}
+        <div
+          className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-2.5 rounded-full border border-border bg-card/80 px-4 py-1.5 text-[0.8rem] text-muted-foreground shadow-sm lg:flex"
+          suppressHydrationWarning
+        >
+          <CalendarDays className="size-4 text-primario" aria-hidden />
+          <span>{dataTexto || "\u00a0"}</span>
+          <span aria-hidden className="h-3.5 w-px bg-border" />
+          <span className="font-semibold tabular-nums text-foreground">
+            {horaTexto || "\u00a0"}
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon"
@@ -226,6 +337,53 @@ export function Shell({ utilizador, modulos, children }: Props) {
             {iconeTema}
           </Button>
 
+          {/* Campainha: novidades reais do portal */}
+          <DropdownMenu onOpenChange={verNovidades}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Novidades do portal${novidadesCount ? ` (${novidadesCount})` : ""}`}
+                title="Novidades do portal"
+                className="relative size-10 text-topbar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              >
+                <Bell className="size-5" aria-hidden />
+                {novidadesCount > 0 && (
+                  <span className="absolute top-1 right-1 flex size-4.5 items-center justify-center rounded-full bg-erro text-[0.6rem] font-bold text-white">
+                    {novidadesCount}
+                  </span>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80">
+              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                Novidades do portal
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <div className="space-y-1">
+                {novidades.map((n) => (
+                  <div key={n.id} className="flex items-start gap-2.5 rounded-lg px-2 py-2">
+                    <span
+                      className={
+                        "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg " +
+                        n.fundo
+                      }
+                    >
+                      <n.icone className={"size-4 " + n.cor} aria-hidden />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[0.84rem] font-semibold">{n.titulo}</p>
+                      <p className="text-[0.76rem] leading-relaxed text-muted-foreground">
+                        {n.texto}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Perfil */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -241,10 +399,12 @@ export function Shell({ utilizador, modulos, children }: Props) {
                   <span className="max-w-[160px] truncate text-[0.85rem] font-semibold">
                     {utilizador.nome}
                   </span>
-                  <span className="max-w-[160px] truncate text-[0.72rem] text-topbar-foreground/65">
+                  <span className="flex items-center gap-1.5 text-[0.72rem] text-topbar-foreground/65">
+                    <span aria-hidden className="size-1.5 rounded-full bg-sucesso" />
                     {nivelTexto}
                   </span>
                 </span>
+                <ChevronDown className="size-4 shrink-0 opacity-50" aria-hidden />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
@@ -268,8 +428,8 @@ export function Shell({ utilizador, modulos, children }: Props) {
               {eAdmin && (
                 <DropdownMenuItem asChild>
                   <Link href="/admin/personalizar" className="cursor-pointer">
-                    <ImageIcon aria-hidden />
-                    Personalizar portal
+                    <Settings aria-hidden />
+                    Definições (Personalizar portal)
                   </Link>
                 </DropdownMenuItem>
               )}
@@ -311,8 +471,8 @@ export function Shell({ utilizador, modulos, children }: Props) {
           "fixed top-0 left-0 bottom-0 z-50 flex flex-col border-r border-sidebar-border bg-sidebar transition-all duration-200 lg:top-[60px] lg:bottom-0 " +
           (mobileAberta
             ? "w-[264px] translate-x-0 shadow-2xl"
-            : "w-[264px] -translate-x-full lg:w-[68px] lg:translate-x-0 " +
-              (expandida ? "lg:w-[264px]" : ""))
+            : "w-[264px] -translate-x-full lg:translate-x-0 " +
+              (recolhida ? "lg:w-[68px]" : "lg:w-[264px]"))
         }
       >
         {/* Cabeçalho do menu no telemóvel (com o botão para fechar) */}
@@ -321,9 +481,9 @@ export function Shell({ utilizador, modulos, children }: Props) {
             <Image
               src="/logos/danmo-logo.png"
               alt=""
-              width={30}
-              height={30}
-              className="size-7.5 object-contain"
+              width={56}
+              height={34}
+              className="h-[30px] w-auto"
             />
             Portal Danmo
           </span>
@@ -336,6 +496,31 @@ export function Shell({ utilizador, modulos, children }: Props) {
             className="size-10 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           >
             <X className="size-5" aria-hidden />
+          </Button>
+        </div>
+
+        {/* Botão de recolher / abrir (só desktop) */}
+        <div
+          className={
+            "hidden shrink-0 pt-3 lg:block " + (recolhida ? "px-2" : "px-3")
+          }
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={alternarMenu}
+            aria-label={recolhida ? "Abrir o menu" : "Recolher o menu"}
+            title={recolhida ? "Abrir o menu" : "Recolher o menu"}
+            className={
+              "size-9 text-sidebar-secundario hover:bg-sidebar-accent hover:text-sidebar-accent-foreground " +
+              (recolhida ? "mx-auto" : "ml-auto")
+            }
+          >
+            {recolhida ? (
+              <PanelLeftOpen className="size-4.5" aria-hidden />
+            ) : (
+              <PanelLeftClose className="size-4.5" aria-hidden />
+            )}
           </Button>
         </div>
 
@@ -352,17 +537,24 @@ export function Shell({ utilizador, modulos, children }: Props) {
                 <div
                   key={m.id}
                   title={
-                    m.dev
-                      ? `${m.label} (em desenvolvimento)`
-                      : `${m.label} (chega na Fase ${m.fase})`
+                    comRotulos
+                      ? undefined
+                      : m.dev
+                        ? `${m.label} (em desenvolvimento)`
+                        : `${m.label} (chega na Fase ${m.fase})`
                   }
                   className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-sidebar-foreground/45"
                 >
                   <Icone className="size-5 shrink-0" aria-hidden />
-                  <span className="min-w-0 flex-1 truncate text-[0.88rem]">
+                  <span
+                    className={
+                      "min-w-0 flex-1 truncate text-[0.88rem] " +
+                      (!comRotulos ? "lg:hidden" : "")
+                    }
+                  >
                     {m.label}
                   </span>
-                  {(mobileAberta || expandida) &&
+                  {comRotulos &&
                     (m.dev ? (
                       <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.62rem] font-bold text-muted-foreground uppercase">
                         Dev
@@ -383,24 +575,28 @@ export function Shell({ utilizador, modulos, children }: Props) {
                   key={m.id}
                   href="/"
                   title={m.label}
+                  aria-current={activo ? "page" : undefined}
                   className={
-                    "relative flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors " +
+                    "relative flex items-center gap-3 rounded-lg px-3 py-2 transition-colors " +
+                    (!mobileAberta && recolhida ? "lg:justify-center lg:px-0 " : "") +
                     (activo
-                      ? "bg-sidebar-activo font-semibold text-sidebar-activo-texto"
+                      ? "bg-sidebar-activo"
                       : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground")
                   }
                 >
-                  {activo && (
-                    <span
-                      aria-hidden
-                      className="absolute top-1/2 left-0 h-6 w-1 -translate-y-1/2 rounded-r-full bg-ambar"
-                    />
+                  {activo ? (
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primario text-white shadow-sm">
+                      <Icone className="size-4.5" aria-hidden />
+                    </span>
+                  ) : (
+                    <Icone className="size-5 shrink-0 text-sidebar-foreground/80" aria-hidden />
                   )}
-                  <Icone className="size-5 shrink-0" aria-hidden />
                   <span
                     className={
                       "min-w-0 flex-1 truncate text-[0.88rem] " +
-                      (!mobileAberta && !expandida ? "lg:hidden" : "")
+                      (activo ? "font-semibold text-sidebar-activo-texto" : "") +
+                      " " +
+                      (!comRotulos ? "lg:hidden" : "")
                     }
                   >
                     {m.label}
@@ -409,8 +605,8 @@ export function Shell({ utilizador, modulos, children }: Props) {
               );
             }
 
-            /* Módulo com páginas (a Oficina chega na Fase 3) */
-            const esteAberto = expandida && moduloAberto === m.id;
+            /* Módulo com páginas (entra quando houver módulo activo com sub) */
+            const esteAberto = moduloAberto === m.id && comRotulos;
             const temGrupos = Boolean(m.grupos?.length);
             return (
               <div key={m.id}>
@@ -430,12 +626,12 @@ export function Shell({ utilizador, modulos, children }: Props) {
                   <span
                     className={
                       "min-w-0 flex-1 truncate text-left text-[0.88rem] " +
-                      (!mobileAberta && !expandida ? "lg:hidden" : "")
+                      (!comRotulos ? "lg:hidden" : "")
                     }
                   >
                     {m.label}
                   </span>
-                  {(mobileAberta || expandida) && (
+                  {comRotulos && (
                     <ChevronDown
                       className={
                         "size-4 shrink-0 transition-transform " +
@@ -446,7 +642,7 @@ export function Shell({ utilizador, modulos, children }: Props) {
                   )}
                 </button>
 
-                {(mobileAberta || esteAberto) && (
+                {esteAberto && (
                   <div className="mt-1 mb-1 ml-4 space-y-0.5 border-l border-sidebar-border pl-2">
                     {temGrupos
                       ? m.grupos?.map((grupo) => {
@@ -506,35 +702,63 @@ export function Shell({ utilizador, modulos, children }: Props) {
               </div>
             );
           })}
+
+          {/* Definições: só administração (leva à personalização do portal) */}
+          {eAdmin && (
+            <Link
+              href="/admin/personalizar"
+              title="Definições: personalizar o portal"
+              className={
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground " +
+                (!mobileAberta && recolhida ? "lg:justify-center lg:px-0" : "")
+              }
+            >
+              <Settings className="size-5 shrink-0 text-sidebar-foreground/80" aria-hidden />
+              <span
+                className={
+                  "min-w-0 flex-1 truncate text-[0.88rem] " +
+                  (!comRotulos ? "lg:hidden" : "")
+                }
+              >
+                Definições
+              </span>
+            </Link>
+          )}
         </div>
 
-        <div className="border-t border-sidebar-border px-4 py-3">
-          <p
-            className={
-              "text-[0.68rem] leading-relaxed text-sidebar-secundario " +
-              (!mobileAberta && !expandida ? "lg:hidden" : "")
-            }
-          >
-            danmo v3.0 - Danmo Service System, Lda
-          </p>
+        {/* Citação da marca no fundo da sidebar (quando há espaço para ela) */}
+        <div className={"shrink-0 border-t border-sidebar-border " + (comRotulos ? "px-4 py-4" : "hidden lg:block lg:py-3")}>
+          {comRotulos ? (
+            <>
+              <svg viewBox="0 0 120 40" className="h-8 w-full text-primario opacity-35" aria-hidden>
+                <path
+                  d="M0 40 L26 12 L42 28 L58 6 L78 32 L94 20 L120 40 Z"
+                  fill="currentColor"
+                />
+              </svg>
+              <p className="mt-2.5 text-[0.72rem] leading-relaxed text-sidebar-secundario italic">
+                "Juntos construímos um sistema mais forte."
+              </p>
+              <p className="mt-1 text-[0.68rem] font-bold tracking-wide text-sidebar-foreground/70">
+                Danmo
+              </p>
+            </>
+          ) : (
+            <p className="text-center text-[0.6rem] font-semibold text-sidebar-secundario">
+              v3.0
+            </p>
+          )}
         </div>
       </nav>
 
-      {/* Clique fora recolhe a sidebar expandida (desktop) */}
-      {expandida && (
-        <div
-          className="fixed inset-0 top-[60px] z-30 hidden lg:block"
-          onClick={() => {
-            setExpandida(false);
-            setModuloAberto(null);
-          }}
-          aria-hidden
-        />
-      )}
-
       {/* ============ Conteúdo ============ */}
-      <main className="min-h-screen pt-[60px] lg:pl-[68px]">
-        <div className="mx-auto w-full max-w-[1200px] p-4 pb-10 sm:p-6 lg:p-8">
+      <main
+        className={
+          "min-h-screen pt-[60px] transition-[padding] duration-200 " +
+          (recolhida ? "lg:pl-[68px]" : "lg:pl-[264px]")
+        }
+      >
+        <div className="mx-auto w-full max-w-[1240px] p-4 pb-10 sm:p-6 lg:p-8">
           {children}
         </div>
       </main>

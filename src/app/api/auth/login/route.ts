@@ -84,6 +84,17 @@ export async function POST(req: NextRequest) {
         { status: 503 }
       );
     }
+    // A função "autenticar" na base recusa credenciais com um erro 400 e a
+    // mensagem amigável vem da própria função SQL (ex.: "Codigo ou senha
+    // incorretos."). Nesse caso é credencial inválida (401), não erro do
+    // servidor, e conta para o limite de tentativas.
+    if (e.status === 400) {
+      registarFalha(codigo);
+      return NextResponse.json(
+        { ok: false, erro: e.message || "Codigo ou senha incorretos." },
+        { status: 401 }
+      );
+    }
     return NextResponse.json(
       { ok: false, erro: e.message || "Erro de ligação. Tenta novamente." },
       { status: 500 }
@@ -91,6 +102,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!res || !res.token) {
+    registarFalha(codigo);
     return NextResponse.json(
       { ok: false, erro: "Não foi possível entrar. Tenta de novo." },
       { status: 401 }

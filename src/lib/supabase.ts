@@ -159,3 +159,17 @@ export async function update<T = Record<string, unknown>>(
   }
   return (await r.json()) as T[];
 }
+
+/** Apaga o registo com o id indicado (usado pela Oficina e próximos módulos). */
+export async function del(tabela: string, id: number | string): Promise<void> {
+  exigirChaves();
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${tabela}?id=eq.${id}`, {
+    method: "DELETE",
+    headers: headers(),
+    cache: "no-store"
+  });
+  if (!r.ok && r.status !== 404) {
+    const erro = (await r.json().catch(() => ({}))) as { message?: string };
+    throw new Error(erro.message || `Erro a apagar em ${tabela} (${r.status})`);
+  }
+}

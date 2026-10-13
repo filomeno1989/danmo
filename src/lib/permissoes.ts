@@ -47,13 +47,14 @@ export const MODULOS: Modulo[] = [
     id: "oficina",
     label: "Oficina & Manutenção",
     icone: "Settings2",
-    fase: 3,
+    fase: 0,
     sub: [
-      { label: "Visão Geral", href: "/em-migracao?mod=oficina" },
-      { label: "Ordens de Serviço", href: "/em-migracao?mod=oficina" },
-      { label: "Checklist", href: "/em-migracao?mod=oficina" },
-      { label: "Equipamentos", href: "/em-migracao?mod=oficina" },
-      { label: "Relatórios", href: "/em-migracao?mod=oficina" }
+      { label: "Visão Geral", href: "/oficina" },
+      { label: "Ordens de Serviço", href: "/oficina/ordens" },
+      { label: "Checklist", href: "/oficina/checklist" },
+      { label: "Equipamentos", href: "/oficina/equipamentos" },
+      { label: "Relatórios", href: "/oficina/relatorios" },
+      { label: "Configurações", href: "/oficina/config" }
     ]
   },
   {

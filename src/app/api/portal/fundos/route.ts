@@ -21,12 +21,11 @@ const MAX_FOTO_BASE64 = 700_000; // ~700 KB por foto depois de comprimida
 const POSICOES = [1, 2, 3, 4];
 
 export async function GET() {
-  // As fotos mudam raramente (só quando a administração grava): deixar o
-  // navegador guardá-las 5 minutos e revalidar em segundo plano. O login
-  // e o painel partilham a mesma resposta, sem pesar na rede.
-  const cabecalhos = {
-    "Cache-Control": "public, max-age=300, stale-while-revalidate=3600"
-  };
+  // Sem cache no navegador: quando a administração grava uma foto, o
+  // login e o painel têm de a mostrar de imediato. Com cache, o painel
+  // e o ecrã de entrada podiam continuar a mostrar a lista antiga
+  // durante minutos, parecendo que "as fotos não carregam".
+  const cabecalhos = { "Cache-Control": "no-store" };
   if (modoEstrutura()) {
     return NextResponse.json({ ok: true, fundos: [] as FundoLogin[] }, { headers: cabecalhos });
   }

@@ -4,11 +4,16 @@
  * GestorFundos - Gestão das 4 fotos do slideshow do login (client).
  *
  * Fluxo pensado para quem usa uma vez por mês (sem treino):
- * 1. A CHAVE DE ADMINISTRAÇÃO fica no TOPO, bem explicada (a mesma
- *    chave de gestão do hub; não é a senha de entrada);
- * 2. Escolher a imagem (clicar ou ARRASTAR para a zona);
- * 3. O navegador comprime (máx. 1920px, JPEG) e mostra a pré-visualização;
- * 4. Gravar: se faltar a chave, a página leva-te direitinho ao campo.
+ * 1. Escrever a CHAVE DE ADMINISTRAÇÃO no campo do topo;
+ * 2. Clicar ou ARRASTAR as fotos para as posições (o navegador comprime);
+ * 3. Clicar no botão grande "Gravar alterações" que aparece FIXO no fundo
+ *    do ecrã - grava todas as fotos escolhidas de uma só vez.
+ *
+ * Lição da ronda anterior: havia um botão "Recarregar as fotos" que só
+ * refrescava a lista, e parecia (para qualquer pessoa) o passo final.
+ * Resultado: chave + foto + clicar nele = nada acontecia. Agora existe
+ * UM único botão de gravação, impossível de confundir, e o botão de
+ * refrescar saiu (a lista carrega sozinha e refresca após cada gravação).
  *
  * Tudo validado de novo no servidor (sessão de admin + chave).
  */
@@ -20,7 +25,7 @@ import {
   LoaderCircle,
   Save,
   Trash2,
-  RefreshCcw,
+  Undo2,
   Info,
   KeyRound
 } from "lucide-react";
@@ -32,27 +37,85 @@ import type { FundoLogin } from "@/lib/uso-comum";
 
 const POSICOES = [1, 2, 3, 4];
 
-/** Comprime a imagem no navegador: máx. 1920px no lado maior, JPEG 0.8. */
-async function comprimir(ficheiro: File): Promise<{ dataUrl: string; nome: string }> {
+/** Limite no cliente: o servidor recusa fotos acima de 700.000 caracteres. */
+const LIMITE_FOTO = 690_000;
+
+/**
+ * Compressão progressiva: tenta do melhor para o mais leve. Uma foto de
+ * telemóvel com muito detalhe pode passar do limite na primeira tentativa
+ * (1920px/0.8); em vez de a recusar, o sistema desce a qualidade até caber.
+ */
+const TENTATIVAS = [
+  { lado: 1920, qualidade: 0.8 },
+  { lado: 1600, qualidade: 0.7 },
+  { lado: 1280, qualidade: 0.6 },
+  { lado: 1024, qualidade: 0.5 },
+  { lado: 820, qualidade: 0.45 }
+];
+
+type FonteImagem = {
+  desenho: CanvasImageSource;
+  largura: number;
+  altura: number;
+  limpar: () => void;
+};
+
+/** Carrega a imagem com createImageBitmap; se o navegador não tiver, usa <img>. */
+async function carregarImagem(ficheiro: File): Promise<FonteImagem> {
+  try {
+    const bitmap = await createImageBitmap(ficheiro);
+    return {
+      desenho: bitmap,
+      largura: bitmap.width,
+      altura: bitmap.height,
+      limpar: () => bitmap.close()
+    };
+  } catch {
+    const url = URL.createObjectURL(ficheiro);
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => {
+        URL.revokeObjectURL(url);
+        rej(new Error("O navegador não conseguiu ler a imagem."));
+      };
+      i.src = url;
+    });
+    return {
+      desenho: img,
+      largura: img.naturalWidth,
+      altura: img.naturalHeight,
+      limpar: () => URL.revokeObjectURL(url)
+    };
+  }
+}
+
+/** Comprime no navegador (JPEG com fundo branco) e devolve o data URL. */
+async function comprimir(ficheiro: File): Promise<string> {
   if (!ficheiro.type.startsWith("image/")) {
     throw new Error("Escolhe um ficheiro de imagem (JPG, PNG, WebP).");
   }
-  const bitmap = await createImageBitmap(ficheiro);
-  const maxLado = 1920;
-  const escala = Math.min(1, maxLado / Math.max(bitmap.width, bitmap.height));
-  const largura = Math.round(bitmap.width * escala);
-  const altura = Math.round(bitmap.height * escala);
-
-  const tela = document.createElement("canvas");
-  tela.width = largura;
-  tela.height = altura;
-  const ctx = tela.getContext("2d");
-  if (!ctx) throw new Error("O navegador não conseguiu processar a imagem.");
-  ctx.drawImage(bitmap, 0, 0, largura, altura);
-  bitmap.close();
-
-  const dataUrl = tela.toDataURL("image/jpeg", 0.8);
-  return { dataUrl, nome: ficheiro.name };
+  const fonte = await carregarImagem(ficheiro);
+  try {
+    let ultimo = "";
+    for (const t of TENTATIVAS) {
+      const escala = Math.min(1, t.lado / Math.max(fonte.largura, fonte.altura));
+      const tela = document.createElement("canvas");
+      tela.width = Math.max(1, Math.round(fonte.largura * escala));
+      tela.height = Math.max(1, Math.round(fonte.altura * escala));
+      const ctx = tela.getContext("2d");
+      if (!ctx) throw new Error("O navegador não conseguiu processar a imagem.");
+      // Fundo branco: PNG transparente não fica preto ao virar JPEG
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, tela.width, tela.height);
+      ctx.drawImage(fonte.desenho, 0, 0, tela.width, tela.height);
+      ultimo = tela.toDataURL("image/jpeg", t.qualidade);
+      if (ultimo.length <= LIMITE_FOTO) return ultimo;
+    }
+    return ultimo;
+  } finally {
+    fonte.limpar();
+  }
 }
 
 export function GestorFundos() {
@@ -64,30 +127,18 @@ export function GestorFundos() {
   const refsInput = useRef<Record<number, HTMLInputElement | null>>({});
   const refChave = useRef<HTMLDivElement | null>(null);
 
+  const pendentes = POSICOES.filter((p) => novas[p]);
+
   function focarChave() {
     refChave.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     refChave.current?.querySelector("input")?.focus();
   }
 
-  async function carregar() {
-    setACarregar(true);
-    try {
-      const r = await fetch("/api/portal/fundos");
-      const d = await r.json();
-      if (d?.ok) setFundos(d.fundos || []);
-    } catch {
-      toast.error("Não foi possível carregar as fotos actuais.");
-    } finally {
-      setACarregar(false);
-    }
-  }
-
-  // CORRECÇÃO: sem esta carga inicial o estado "aCarregar" nascia activo
-  // e ninguém o desligava - o botão Recarregar ficava a girar para
-  // sempre, desligado, e as fotos já gravadas nunca apareciam.
+  // Sem cache do navegador: se a administração gravou há um segundo,
+  // a lista tem de mostrar já (era uma das causas de "não carregam").
   useEffect(() => {
     let vivo = true;
-    fetch("/api/portal/fundos")
+    fetch("/api/portal/fundos", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         if (vivo && d?.ok) setFundos(d.fundos || []);
@@ -103,6 +154,16 @@ export function GestorFundos() {
     };
   }, []);
 
+  async function carregar() {
+    try {
+      const r = await fetch("/api/portal/fundos", { cache: "no-store" });
+      const d = await r.json();
+      if (d?.ok) setFundos(d.fundos || []);
+    } catch {
+      toast.error("Não foi possível actualizar a lista.");
+    }
+  }
+
   function fundoNaPosicao(p: number): FundoLogin | undefined {
     return fundos.find((f) => f.posicao === p);
   }
@@ -110,53 +171,73 @@ export function GestorFundos() {
   async function escolherFicheiro(p: number, ficheiro: File | undefined) {
     if (!ficheiro) return;
     try {
-      const { dataUrl, nome } = await comprimir(ficheiro);
-      setNovas((n) => ({ ...n, [p]: { foto: dataUrl, nome } }));
+      const foto = await comprimir(ficheiro);
+      setNovas((n) => ({ ...n, [p]: { foto, nome: ficheiro.name } }));
       if (!chave) {
-        toast.info("Foto pronta. Escreve a chave de administração no topo e clica Gravar.");
+        toast.info("Foto pronta. Escreve a chave de administração no topo e clica em Gravar alterações.");
       }
     } catch (e) {
       toast.error((e as Error).message || "Não foi possível processar a imagem.");
     }
   }
 
-  async function gravar(p: number) {
-    const nova = novas[p];
-    if (!nova) return;
+  function desfazer(p: number) {
+    setNovas((n) => {
+      const copia = { ...n };
+      delete copia[p];
+      return copia;
+    });
+  }
+
+  /** Grava TODAS as fotos pendentes, uma a uma, com aviso por cada falha. */
+  async function gravarTudo() {
+    if (aGravar || pendentes.length === 0) return;
     if (!chave) {
       toast.error("Falta a chave de administração. Olha para o topo desta página.");
       focarChave();
       return;
     }
     setAGravar(true);
-    try {
-      const r = await fetch("/api/portal/fundos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "guardar",
-          posicao: p,
-          foto: nova.foto,
-          nome: nova.nome,
-          chave
-        })
-      });
-      const d = await r.json();
-      if (!r.ok || !d.ok) {
-        toast.error(d.erro || "Não foi possível gravar a foto.");
-        return;
+    const alvo = [...pendentes];
+    let gravadas = 0;
+    for (const p of alvo) {
+      const nova = novas[p];
+      if (!nova) continue;
+      try {
+        const r = await fetch("/api/portal/fundos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "guardar",
+            posicao: p,
+            foto: nova.foto,
+            nome: nova.nome,
+            chave
+          })
+        });
+        const d = await r.json();
+        if (!r.ok || !d.ok) {
+          toast.error(`Posição ${p}: ${d.erro || "não foi possível gravar."}`);
+          continue;
+        }
+        gravadas++;
+        setNovas((n) => {
+          const copia = { ...n };
+          delete copia[p];
+          return copia;
+        });
+      } catch {
+        toast.error(`Posição ${p}: sem ligação ao servidor.`);
       }
-      toast.success(`Foto da posição ${p} gravada. O login já a usa.`);
-      setNovas((n) => {
-        const copia = { ...n };
-        delete copia[p];
-        return copia;
-      });
+    }
+    setAGravar(false);
+    if (gravadas > 0) {
+      toast.success(
+        gravadas === 1
+          ? "Foto gravada. O ecrã de entrada já a usa."
+          : `${gravadas} fotos gravadas. O ecrã de entrada já as usa.`
+      );
       await carregar();
-    } catch {
-      toast.error("Sem ligação ao servidor. Tenta de novo.");
-    } finally {
-      setAGravar(false);
     }
   }
 
@@ -210,7 +291,9 @@ export function GestorFundos() {
             <span className="font-semibold text-foreground/80">
               Não é a tua senha de entrada.
             </span>{" "}
-            Precisa dela para gravar ou apagar fotos; não fica guardada no navegador.
+            Depois de escolher as fotos, clica no botão{" "}
+            <span className="font-semibold text-foreground/80">Gravar alterações</span> que
+            aparece no fundo do ecrã. Não fica guardada no navegador.
           </p>
         </CardContent>
       </Card>
@@ -234,7 +317,7 @@ export function GestorFundos() {
                   )}
                   {nova && (
                     <span className="rounded-full bg-ambar-claro px-2 py-0.5 text-[0.68rem] font-semibold text-ambar-texto">
-                      Nova (por gravar)
+                      Pronta a gravar
                     </span>
                   )}
                 </div>
@@ -292,30 +375,30 @@ export function GestorFundos() {
                 )}
 
                 <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    disabled={!nova || aGravar}
-                    onClick={() => gravar(p)}
-                    className="flex-1 bg-ambar font-bold text-[#101b2d] hover:bg-ambar-hover"
-                  >
-                    {aGravar ? (
-                      <LoaderCircle className="animate-spin" aria-hidden />
-                    ) : (
-                      <Save aria-hidden />
-                    )}
-                    Gravar
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={!actual || aGravar || Boolean(nova)}
-                    onClick={() => apagar(p)}
-                    className="text-erro hover:text-erro"
-                    title="Apagar a foto desta posição"
-                  >
-                    <Trash2 aria-hidden />
-                    Apagar
-                  </Button>
+                  {nova ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={aGravar}
+                      onClick={() => desfazer(p)}
+                      className="flex-1"
+                    >
+                      <Undo2 aria-hidden />
+                      Desfazer
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!actual || aGravar || aCarregar}
+                      onClick={() => apagar(p)}
+                      className="flex-1 text-erro hover:text-erro"
+                      title="Apagar a foto desta posição"
+                    >
+                      <Trash2 aria-hidden />
+                      Apagar
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -323,27 +406,62 @@ export function GestorFundos() {
         })}
       </div>
 
-      {/* ===== Como funciona + recarregar ===== */}
+      {/* ===== Como funciona ===== */}
       <Card className="card-sombra">
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3">
           <div className="flex items-start gap-2.5">
             <Info className="mt-0.5 size-4 shrink-0 text-info" aria-hidden />
             <p className="text-sm leading-relaxed text-muted-foreground">
-              As fotos trocam sozinhas no login, cada 7 segundos, com transição
-              suave. O sistema comprime cada foto antes de a enviar, para o
-              portal continuar leve mesmo em redes fracas.
+              As fotos trocam sozinhas no ecrã de entrada, cada 7 segundos, com
+              transição suave. O sistema comprime cada foto antes de a enviar,
+              para o portal continuar leve mesmo em redes fracas.
             </p>
           </div>
-          <Button variant="outline" size="sm" onClick={carregar} disabled={aCarregar}>
-            {aCarregar ? (
-              <LoaderCircle className="animate-spin" aria-hidden />
-            ) : (
-              <RefreshCcw aria-hidden />
-            )}
-            Recarregar as fotos
-          </Button>
+          <div className="flex items-start gap-2.5">
+            <Save className="mt-0.5 size-4 shrink-0 text-info" aria-hidden />
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Como gravar: escreve a chave no topo, escolhe as fotos nas
+              posições e clica em{" "}
+              <span className="font-semibold text-foreground/80">Gravar alterações</span>, o
+              botão fixo no fundo do ecrã. Podes gravar várias fotos de uma só
+              vez.
+            </p>
+          </div>
         </CardContent>
       </Card>
+
+      {/* ===== BARRA FIXA DE GRAVAÇÃO: aparece só quando há fotos por gravar ===== */}
+      {pendentes.length > 0 && (
+        <div className="sticky bottom-3 z-20 rounded-2xl border border-ambar/60 bg-card/95 p-3 shadow-xl shadow-black/10 backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-bold">
+                {pendentes.length === 1
+                  ? "1 foto pronta a gravar"
+                  : `${pendentes.length} fotos prontas a gravar`}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {chave
+                  ? `Posição ${pendentes.join(", posição ")} - clica no botão ao lado para guardar.`
+                  : "Falta escrever a chave de administração no topo."}
+              </p>
+            </div>
+            <Button
+              size="lg"
+              onClick={gravarTudo}
+              disabled={aGravar}
+              className="bg-ambar font-bold text-[#101b2d] hover:bg-ambar-hover"
+            >
+              {aGravar ? (
+                <LoaderCircle className="animate-spin" aria-hidden />
+              ) : (
+                <Save aria-hidden />
+              )}
+              Gravar alterações
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

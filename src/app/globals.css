@@ -1,0 +1,204 @@
+/**
+ * globals.css - Identidade visual do portal Danmo (nova geração).
+ *
+ * A mesma paleta do hub actual (Navy / Ambar / Clean), agora organizada
+ * em variaveis do Tailwind 4, com tema claro e escuro completos e bem
+ * visiveis nos dois modos. Fontes do proprio sistema (sem downloads):
+ * o portal abre rapido mesmo em redes fracas.
+ */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Superficie e texto (claro, igual ao hub) */
+  --background: #f4f6f9;
+  --foreground: #2c3e50;
+  --card: #ffffff;
+  --card-foreground: #2c3e50;
+  --popover: #ffffff;
+  --popover-foreground: #2c3e50;
+
+  /* Acoes principais: navy serio; Ambar fica como cor de marca */
+  --primary: #1e293b;
+  --primary-foreground: #ffffff;
+  --secondary: #eceff3;
+  --secondary-foreground: #1e293b;
+  --muted: #eceff3;
+  --muted-foreground: #7f8c8d;
+  --accent: #f1f5f9;
+  --accent-foreground: #1e293b;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #f59e0b;
+
+  /* Cores de estado (iguais ao hub) */
+  --sucesso: #10b981;
+  --sucesso-bg: #d1fae5;
+  --aviso: #f59e0b;
+  --aviso-bg: #fef3c7;
+  --erro: #ef4444;
+  --erro-bg: #fee2e2;
+  --info: #3b82f6;
+  --info-bg: #dbeafe;
+
+  /* Ambar da marca Danmo */
+  --ambar: #f59e0b;
+  --ambar-hover: #d97706;
+  --ambar-claro: #fef3c7;
+
+  /* Sidebar navy em ambos os temas (chrome fixo, conteudo muda) */
+  --sidebar: #101b2d;
+  --sidebar-foreground: #cbd5e1;
+  --sidebar-secundario: #8aa0bd;
+  --sidebar-accent: rgba(255, 255, 255, 0.08);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.09);
+  --sidebar-activo: rgba(245, 158, 11, 0.16);
+  --sidebar-activo-texto: #fbbf24;
+
+  /* Topbar acompanha a sidebar */
+  --topbar: #101b2d;
+  --topbar-foreground: #e2e8f0;
+
+  --radius: 10px;
+}
+
+.dark {
+  --background: #0b0f19;
+  --foreground: #f1f5f9;
+  --card: #131c2e;
+  --card-foreground: #f1f5f9;
+  --popover: #131c2e;
+  --popover-foreground: #f1f5f9;
+
+  --primary: #f1f5f9;
+  --primary-foreground: #0b0f19;
+  --secondary: #1e293b;
+  --secondary-foreground: #f1f5f9;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #1e293b;
+  --accent-foreground: #f1f5f9;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #1e293b;
+  --input: #1e293b;
+  --ring: #f59e0b;
+
+  --sucesso: #10b981;
+  --sucesso-bg: #064e3b;
+  --aviso: #f59e0b;
+  --aviso-bg: #78350f;
+  --erro: #ef4444;
+  --erro-bg: #7f1d1d;
+  --info: #3b82f6;
+  --info-bg: #1e3a8a;
+
+  --ambar: #f59e0b;
+  --ambar-hover: #fbbf24;
+  --ambar-claro: #332005;
+
+  --sidebar: #080c14;
+  --sidebar-foreground: #cbd5e1;
+  --sidebar-secundario: #8aa0bd;
+  --sidebar-accent: rgba(255, 255, 255, 0.07);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.07);
+  --sidebar-activo: rgba(245, 158, 11, 0.16);
+  --sidebar-activo-texto: #fbbf24;
+
+  --topbar: #080c14;
+  --topbar-foreground: #e2e8f0;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sucesso: var(--sucesso);
+  --color-sucesso-bg: var(--sucesso-bg);
+  --color-aviso: var(--aviso);
+  --color-aviso-bg: var(--aviso-bg);
+  --color-erro: var(--erro);
+  --color-erro-bg: var(--erro-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+
+  --color-ambar: var(--ambar);
+  --color-ambar-hover: var(--ambar-hover);
+  --color-ambar-claro: var(--ambar-claro);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-secundario: var(--sidebar-secundario);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-activo: var(--sidebar-activo);
+  --color-sidebar-activo-texto: var(--sidebar-activo-texto);
+
+  --color-topbar: var(--topbar);
+  --color-topbar-foreground: var(--topbar-foreground);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: "Segoe UI", system-ui, -apple-system, "Roboto", "Helvetica Neue",
+    Arial, sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    line-height: 1.55;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Barra de rolagem discreta (web) */
+@media (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

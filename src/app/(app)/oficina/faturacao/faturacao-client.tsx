@@ -9,8 +9,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Pencil, Plus, Printer, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,9 +20,12 @@ import { Modal } from "@/components/ui/modal";
 import { Cabeca, Rodar, enviar, pedir } from "@/components/oficina/ui-bits";
 import {
   MATERIAIS_FECHO,
+  UNIDADES_PRECO,
+  dataHojeISO,
   formatarData,
   type LinhaFaturacao,
   type MaterialFecho,
+  type PrecoCatalogo,
   type ResumoMes
 } from "@/lib/oficina";
 
@@ -73,7 +77,10 @@ export function FaturacaoClient({
   const [aCarregar, setACarregar] = useState(true);
   const [erro, setErro] = useState("");
   const [ano, setAno] = useState("");
+  const [mes, setMes] = useState("");
   const [expandida, setExpandida] = useState<number | null>(null);
+  // Tabela de Preços (para a edição do fecho assumir os valores registados)
+  const [precos, setPrecos] = useState<PrecoCatalogo[]>([]);
 
   // Edição de fecho
   const [fechoEdit, setFechoEdit] = useState<LinhaFaturacao | null>(null);
@@ -81,7 +88,7 @@ export function FaturacaoClient({
   const [editHoras, setEditHoras] = useState("");
   const [editValor, setEditValor] = useState("");
   const [editMats, setEditMats] = useState([
-    { material: "", quantidade: "", valor_unitario: "" }
+    { material: "", quantidade: "", valor_unitario: "", livre: false }
   ]);
   const [editObs, setEditObs] = useState("");
   const [aGravar, setAGravar] = useState(false);
@@ -130,9 +137,20 @@ export function FaturacaoClient({
   );
 
   const linhas = useMemo(() => {
-    const todas = dados?.linhas || [];
-    return ano ? todas.filter((l) => l.data_fecho.slice(0, 4) === ano) : todas;
-  }, [dados, ano]);
+    let lista = dados?.linhas || [];
+    if (ano) lista = lista.filter((l) => l.data_fecho.slice(0, 4) === ano);
+    if (mes) lista = lista.filter((l) => Number(l.data_fecho.slice(5, 7)) === Number(mes));
+    return lista;
+  }, [dados, ano, mes]);
+
+  const etiquetaPeriodo = useMemo(() => {
+    if (!ano && !mes) return "Todo o período";
+    if (!mes) return `Ano ${ano}`;
+    const nomeMes = MESES_PT[Number(mes) - 1] || `mês ${mes}`;
+    return ano ? `${nomeMes} de ${ano}` : `${nomeMes} (todos os anos)`;
+  }, [ano, mes]);
+
+  const sufixoPeriodo = ano && mes ? `${ano}-${mes.padStart(2, "0")}` : ano ? ano : mes ? `mes_${mes.padStart(2, "0")}` : "todo_o_periodo";
 
   const totais = useMemo<Totais>(() => {
     return {
@@ -167,16 +185,29 @@ export function FaturacaoClient({
     setEditData(l.data_fecho.slice(0, 10));
     setEditHoras(String(l.horas_cdm));
     setEditValor(String(l.valor_hora));
-    setEditMats(
-      l.materiais.length
-        ? l.materiais.map((m) => ({
-            material: m.material,
-            quantidade: String(m.quantidade),
-            valor_unitario: String(m.valor_unitario)
-          }))
-        : [{ material: "", quantidade: "", valor_unitario: "" }]
-    );
     setEditObs(l.observacao || "");
+    // Busca a Tabela de Preços para a lista de materiais vir com valores
+    (async () => {
+      let ps: PrecoCatalogo[] = [];
+      try {
+        const d = await pedir<{ ok: boolean; precos: PrecoCatalogo[] }>("/api/oficina/precos");
+        ps = d.precos || [];
+        setPrecos(ps);
+      } catch {
+        setPrecos([]);
+      }
+      const matsCatalogo = ps.filter((p) => p.tipo === "material");
+      setEditMats(
+        l.materiais.length
+          ? l.materiais.map((m) => ({
+              material: m.material,
+              quantidade: String(m.quantidade),
+              valor_unitario: String(m.valor_unitario),
+              livre: !matsCatalogo.some((p) => p.nome === m.material)
+            }))
+          : [{ material: "", quantidade: "", valor_unitario: "", livre: false }]
+      );
+    })();
   }
 
   async function guardarEdicao() {
@@ -244,8 +275,83 @@ export function FaturacaoClient({
     0
   );
 
+  /* ============ Exportações (Excel e PDF) ============ */
+
+  function exportarExcel() {
+    if (!linhas.length) {
+      toast.error("Não há fechos para exportar com este filtro.");
+      return;
+    }
+    const wb = XLSX.utils.book_new();
+
+    // Folha 1: resumo por mês, com linha TOTAL no fim
+    const resumoRows: Record<string, string | number>[] = porMes.map((m) => ({
+      "Mês": etiquetaMes(m.mes),
+      "Obras": m.obras,
+      "Horas CdM": m.horas_cdm,
+      "Horas nossas": m.horas_nossas,
+      "Diferença (h)": arred2(m.horas_cdm - m.horas_nossas),
+      "Material (MT)": m.total_material,
+      "Total geral (MT)": m.total_geral
+    }));
+    resumoRows.push({
+      "Mês": "TOTAL",
+      "Obras": totais.obras,
+      "Horas CdM": totais.horas_cdm,
+      "Horas nossas": totais.horas_nossas,
+      "Diferença (h)": arred2(totais.horas_cdm - totais.horas_nossas),
+      "Material (MT)": totais.total_material,
+      "Total geral (MT)": totais.total_geral
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumoRows), "Resumo por mês");
+
+    // Folha 2: detalhe de cada obra fechada, com linha TOTAL no fim
+    const detRows: Record<string, string | number>[] = linhas.map((l) => ({
+      "Nº Obra": l.numero_obra || "S/Nº",
+      "Máquina": l.equip_code || "-",
+      "Sector": l.sector || "-",
+      "Abertura": l.data_abertura ? formatarData(l.data_abertura) : "-",
+      "Fecho": formatarData(l.data_fecho),
+      "Dias até fecho": l.dias_ate_fecho,
+      "Dias pós-trabalho": l.dias_apos_trabalho,
+      "Horas CdM": l.horas_cdm,
+      "Horas nossas": l.horas_nossas,
+      "Diferença (h)": l.diferenca_horas,
+      "Valor/hora (MT)": l.valor_hora,
+      "Mão de obra (MT)": l.total_mao_obra,
+      "Material (MT)": l.total_material,
+      "Total geral (MT)": l.total_geral,
+      "Materiais":
+        l.materiais
+          .map((m) => `${m.material}: ${m.quantidade} x ${m.valor_unitario} = ${m.total} MT`)
+          .join(" | ") || "-",
+      "Responsável": l.responsavel || "-",
+      "Observação": l.observacao || ""
+    }));
+    detRows.push({
+      "Nº Obra": `TOTAL (${linhas.length} obras)`,
+      "Mão de obra (MT)": totais.total_mao_obra,
+      "Material (MT)": totais.total_material,
+      "Total geral (MT)": totais.total_geral
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detRows), "Detalhe das obras");
+
+    XLSX.writeFile(wb, `Faturacao_CdM_${sufixoPeriodo}.xlsx`);
+    toast.success(
+      `Excel exportado: ${linhas.length} obras (${etiquetaPeriodo}) com o total do período.`
+    );
+  }
+
+  function exportarPdf() {
+    if (!linhas.length) {
+      toast.error("Não há fechos para exportar com este filtro.");
+      return;
+    }
+    window.print();
+  }
+
   return (
-    <div className="space-y-5">
+    <div className="nao-imprimir space-y-5">
       <Cabeca
         titulo="Faturação CdM"
         subtitulo="Obras fechadas que vão a facturação: tempos, materiais e totais."
@@ -253,6 +359,12 @@ export function FaturacaoClient({
         <Button variant="outline" size="sm" onClick={carregar} disabled={aCarregar}>
           {aCarregar ? <Rodar /> : <RotateCcw aria-hidden />}
           Actualizar
+        </Button>
+        <Button variant="outline" size="sm" onClick={exportarExcel} disabled={!linhas.length}>
+          <Download aria-hidden /> Excel
+        </Button>
+        <Button variant="outline" size="sm" onClick={exportarPdf} disabled={!linhas.length}>
+          <Printer aria-hidden /> PDF
         </Button>
       </Cabeca>
 
@@ -269,7 +381,7 @@ export function FaturacaoClient({
 
       {/* KPIs */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KPI titulo="Obras fechadas" valor={String(totais.obras)} nota={ano ? `Ano ${ano}` : "Todo o período"} />
+        <KPI titulo="Obras fechadas" valor={String(totais.obras)} nota={etiquetaPeriodo} />
         <KPI titulo="Mão de obra" valor={fmtMt(totais.total_mao_obra)} nota={`${totais.horas_cdm} h (CdM)`} />
         <KPI titulo="Material" valor={fmtMt(totais.total_material)} nota={`${totais.horas_nossas} h do nosso pessoal`} />
         <KPI titulo="TOTAL GERAL" valor={fmtMt(totais.total_geral)} nota="Mão de obra + material" destaque />
@@ -280,7 +392,20 @@ export function FaturacaoClient({
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <p className="font-semibold">Resumo por mês</p>
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Label className="text-xs">Mês</Label>
+              <select
+                className="border-input bg-transparent h-8 rounded-md border px-2 text-sm outline-none dark:bg-input/30"
+                value={mes}
+                onChange={(e) => setMes(e.target.value)}
+              >
+                <option value="">Todos</option>
+                {MESES_PT.map((nome, i) => (
+                  <option key={nome} value={String(i + 1)}>
+                    {nome}
+                  </option>
+                ))}
+              </select>
               <Label className="text-xs">Ano</Label>
               <select
                 className="border-input bg-transparent h-8 rounded-md border px-2 text-sm outline-none dark:bg-input/30"
@@ -338,7 +463,14 @@ export function FaturacaoClient({
       {/* Lista detalhada */}
       <Card className="card-sombra">
         <CardContent className="space-y-3">
-          <p className="font-semibold">Obras fechadas ({linhas.length})</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-semibold">Obras fechadas ({linhas.length})</p>
+            <p className="text-muted-foreground text-xs max-w-xl">
+              <b>Dias até fecho</b> = dias desde a abertura da obra até ao fecho pela CdM.
+              <b> Dias pós-trabalho</b> = dias desde a última intervenção do nosso pessoal até ao
+              fecho (quanto tempo a obra ficou à espera de ser fechada).
+            </p>
+          </div>
           {linhas.length ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[860px] text-sm">
@@ -348,8 +480,18 @@ export function FaturacaoClient({
                     <th className="py-2 pr-2">Nº Obra</th>
                     <th className="py-2 pr-2">Máquina</th>
                     <th className="py-2 pr-2">Fecho</th>
-                    <th className="py-2 pr-2 text-right">Dias até</th>
-                    <th className="py-2 pr-2 text-right">Dias pós</th>
+                    <th
+                      className="py-2 pr-2 text-right"
+                      title="Dias desde a abertura da obra até ao fecho pela CdM"
+                    >
+                      Dias até fecho
+                    </th>
+                    <th
+                      className="py-2 pr-2 text-right"
+                      title="Dias desde a última intervenção do nosso pessoal até ao fecho"
+                    >
+                      Dias pós-trab.
+                    </th>
                     <th className="py-2 pr-2 text-right">H. CdM</th>
                     <th className="py-2 pr-2 text-right">H. nossas</th>
                     <th className="py-2 pr-2 text-right">Dif.</th>
@@ -432,7 +574,10 @@ export function FaturacaoClient({
                 variant="outline"
                 size="sm"
                 onClick={() =>
-                  setEditMats((atual) => [...atual, { material: "", quantidade: "", valor_unitario: "" }])
+                  setEditMats((atual) => [
+                    ...atual,
+                    { material: "", quantidade: "", valor_unitario: "", livre: false }
+                  ])
                 }
               >
                 <Plus aria-hidden /> Adicionar material
@@ -440,20 +585,58 @@ export function FaturacaoClient({
             </div>
             {editMats.map((m, i) => {
               const totalLinha = (Number(m.quantidade) || 0) * (Number(m.valor_unitario) || 0);
+              const matsCatalogo = precos.filter((p) => p.tipo === "material");
               return (
                 <div key={i} className="grid grid-cols-[1fr_5rem_6.5rem_6rem_2rem] items-end gap-2">
                   <div className="space-y-1">
                     {i === 0 && <Label className="text-xs">Material</Label>}
-                    <Input
-                      list="lista-gases-edit"
-                      value={m.material}
-                      onChange={(e) =>
-                        setEditMats((atual) =>
-                          atual.map((x, j) => (j === i ? { ...x, material: e.target.value } : x))
-                        )
-                      }
-                      placeholder="Ex: Oxigênio"
-                    />
+                    {!m.livre && matsCatalogo.length > 0 ? (
+                      <select
+                        className="border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                        value={matsCatalogo.some((p) => p.nome === m.material) ? m.material : ""}
+                        onChange={(e) => {
+                          if (e.target.value === "__livre__") {
+                            setEditMats((atual) =>
+                              atual.map((x, j) =>
+                                j === i ? { ...x, material: "", livre: true } : x
+                              )
+                            );
+                            return;
+                          }
+                          const p = matsCatalogo.find((x) => x.nome === e.target.value);
+                          setEditMats((atual) =>
+                            atual.map((x, j) =>
+                              j === i
+                                ? {
+                                    ...x,
+                                    material: p?.nome || "",
+                                    valor_unitario: p ? String(p.valor) : x.valor_unitario
+                                  }
+                                : x
+                            )
+                          );
+                        }}
+                      >
+                        <option value="">- Selecionar material -</option>
+                        {matsCatalogo.map((p) => (
+                          <option key={p.id} value={p.nome}>
+                            {p.nome} - {fmtMt(p.valor)}/{UNIDADES_PRECO[p.unidade] || p.unidade}
+                          </option>
+                        ))}
+                        <option value="__livre__">Outro material (escrever)...</option>
+                      </select>
+                    ) : (
+                      <Input
+                        list="lista-gases-edit"
+                        value={m.material}
+                        onChange={(e) =>
+                          setEditMats((atual) =>
+                            atual.map((x, j) => (j === i ? { ...x, material: e.target.value } : x))
+                          )
+                        }
+                        placeholder="Ex: Oxigênio"
+                      />
+                    )}
                   </div>
                   <div className="space-y-1">
                     {i === 0 && <Label className="text-xs">Qtd</Label>}
@@ -533,6 +716,182 @@ export function FaturacaoClient({
           </div>
         </div>
       </Modal>
+
+      {/* Vista de impressão / PDF: só aparece ao imprimir ou guardar como PDF.
+          Respeita o filtro actual (mês/ano) e acaba sempre com o TOTAL GERAL. */}
+      <div className="so-imprimir">
+        <header className="imp-cabeca">
+          <h1>Faturação CdM - Obras Fechadas</h1>
+          <p>
+            Período: {etiquetaPeriodo} · Emitido em {formatarData(dataHojeISO())} · Portal Danmo
+            Service System
+          </p>
+        </header>
+
+        <h2>Resumo por mês</h2>
+        <table className="imp-tab">
+          <thead>
+            <tr>
+              <th>Mês</th>
+              <th>Obras</th>
+              <th>Horas CdM</th>
+              <th>Horas nossas</th>
+              <th>Diferença (h)</th>
+              <th>Material</th>
+              <th>Total geral</th>
+            </tr>
+          </thead>
+          <tbody>
+            {porMes.map((m) => (
+              <tr key={m.mes}>
+                <td>{etiquetaMes(m.mes)}</td>
+                <td>{m.obras}</td>
+                <td>{m.horas_cdm} h</td>
+                <td>{m.horas_nossas} h</td>
+                <td>{arred2(m.horas_cdm - m.horas_nossas)} h</td>
+                <td>{fmtMt(m.total_material)}</td>
+                <td>{fmtMt(m.total_geral)}</td>
+              </tr>
+            ))}
+            <tr className="imp-total">
+              <td>TOTAL</td>
+              <td>{totais.obras}</td>
+              <td>{totais.horas_cdm} h</td>
+              <td>{totais.horas_nossas} h</td>
+              <td>{arred2(totais.horas_cdm - totais.horas_nossas)} h</td>
+              <td>{fmtMt(totais.total_material)}</td>
+              <td>{fmtMt(totais.total_geral)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Detalhe das obras ({linhas.length})</h2>
+        <table className="imp-tab">
+          <thead>
+            <tr>
+              <th>Nº Obra</th>
+              <th>Máquina</th>
+              <th>Fecho</th>
+              <th>Dias até fecho</th>
+              <th>Dias pós-trab.</th>
+              <th>H. CdM</th>
+              <th>H. nossas</th>
+              <th>Dif. (h)</th>
+              <th>Mão de obra</th>
+              <th>Material</th>
+              <th>Total geral</th>
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.map((l) => (
+              <tr key={l.id}>
+                <td>
+                  {l.numero_obra || "S/Nº"}
+                  {l.materiais.length > 0 && (
+                    <div className="imp-mat">
+                      {l.materiais
+                        .map((m) => `${m.material} ${m.quantidade} x ${m.valor_unitario}`)
+                        .join("; ")}
+                    </div>
+                  )}
+                </td>
+                <td>{l.equip_code || "-"}</td>
+                <td>{formatarData(l.data_fecho)}</td>
+                <td>{l.dias_ate_fecho}</td>
+                <td>{l.dias_apos_trabalho}</td>
+                <td>{l.horas_cdm} h</td>
+                <td>{l.horas_nossas} h</td>
+                <td>{l.diferenca_horas} h</td>
+                <td>{fmtMt(l.total_mao_obra)}</td>
+                <td>{fmtMt(l.total_material)}</td>
+                <td>{fmtMt(l.total_geral)}</td>
+              </tr>
+            ))}
+            <tr className="imp-total">
+              <td colSpan={8}>TOTAL GERAL ({linhas.length} obras)</td>
+              <td>{fmtMt(totais.total_mao_obra)}</td>
+              <td>{fmtMt(totais.total_material)}</td>
+              <td>{fmtMt(totais.total_geral)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p className="imp-nota">
+          Dias até fecho: da abertura da obra ao fecho pela CdM. Dias pós-trabalho: da última
+          intervenção do nosso pessoal ao fecho. Diferença (h): horas consideradas pela CdM menos as
+          horas registadas pelo nosso pessoal.
+        </p>
+      </div>
+
+      <style jsx global>{`
+        .so-imprimir {
+          display: none;
+        }
+        @media print {
+          @page {
+            size: A4 landscape;
+            margin: 12mm;
+          }
+          .nao-imprimir {
+            display: none !important;
+          }
+          .so-imprimir {
+            display: block !important;
+            color: #000;
+            background: #fff;
+            font-family: Arial, sans-serif;
+            font-size: 11px;
+          }
+          .imp-cabeca {
+            border-bottom: 2px solid #009639;
+            padding-bottom: 6px;
+            margin-bottom: 10px;
+          }
+          .imp-cabeca h1 {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 0;
+          }
+          .imp-cabeca p {
+            margin: 2px 0 0;
+            font-size: 10px;
+            color: #444;
+          }
+          .so-imprimir h2 {
+            font-size: 12px;
+            font-weight: bold;
+            margin: 12px 0 4px;
+          }
+          .imp-tab {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+          }
+          .imp-tab th,
+          .imp-tab td {
+            border: 1px solid #999;
+            padding: 3px 5px;
+            text-align: left;
+          }
+          .imp-tab th {
+            background: #eee;
+          }
+          .imp-mat {
+            color: #444;
+            font-size: 9px;
+            margin-top: 2px;
+          }
+          .imp-total td {
+            font-weight: bold;
+            background: #f2f2f2;
+          }
+          .imp-nota {
+            margin-top: 10px;
+            font-size: 9px;
+            color: #555;
+          }
+        }
+      `}</style>
     </div>
   );
 }

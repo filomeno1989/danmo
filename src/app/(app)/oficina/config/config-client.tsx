@@ -1,21 +1,42 @@
 "use client";
 
 /**
- * ConfigClient - Categorias e Grupos de equipamento (client).
+ * ConfigClient - Categorias, Grupos e Tabela de Preços da Oficina (client).
  *
- * Mesma lógica do config.html do hub: duas colunas com as listas e um
- * modal para criar/editar cada uma. O grupo liga-se a uma categoria.
+ * Categorias e grupos: mesma lógica do config.html do hub (duas colunas
+ * com as listas e um modal para criar/editar cada uma).
+ * Tabela de Preços: catálogo que a Faturação CdM usa no fecho das obras
+ * (mão de obra por hora e materiais por unidade/kg/litro). Editar um
+ * preço NÃO altera as obras já fechadas: cada fecho gravou os seus
+ * valores no momento.
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Pencil, Plus, RotateCcw, TriangleAlert } from "lucide-react";
+import { Pencil, Plus, RotateCcw, Trash2, TriangleAlert } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/ui/modal";
 import { Cabeca, Etiqueta, Rodar, enviar, pedir } from "@/components/oficina/ui-bits";
-import type { CategoriaEquip, GrupoEquip } from "@/lib/oficina";
+import {
+  MATERIAIS_FECHO,
+  TIPOS_PRECO,
+  UNIDADES_PRECO,
+  type CategoriaEquip,
+  type GrupoEquip,
+  type PrecoCatalogo
+} from "@/lib/oficina";
+
+function fmtMt(n: number): string {
+  return (
+    new Intl.NumberFormat("pt-PT", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(n || 0) + " MT"
+  );
+}
 
 type Dados = {
   ok: boolean;
@@ -25,10 +46,12 @@ type Dados = {
 
 export function ConfigClient({
   podeCriar,
-  podeEditar
+  podeEditar,
+  podeApagar
 }: {
   podeCriar: boolean;
   podeEditar: boolean;
+  podeApagar: boolean;
 }) {
   const [dados, setDados] = useState<Dados | null>(null);
   const [erro, setErro] = useState("");
@@ -47,6 +70,17 @@ export function ConfigClient({
   const [grpCategoria, setGrpCategoria] = useState("");
   const [grpAtiva, setGrpAtiva] = useState(true);
 
+  /* ---- Tabela de Preços ---- */
+  const [precos, setPrecos] = useState<PrecoCatalogo[]>([]);
+  const [erroPrecos, setErroPrecos] = useState("");
+  const [modalPreco, setModalPreco] = useState(false);
+  const [precoId, setPrecoId] = useState<number | null>(null);
+  const [precoTipo, setPrecoTipo] = useState("material");
+  const [precoNome, setPrecoNome] = useState("");
+  const [precoUnidade, setPrecoUnidade] = useState("un");
+  const [precoValor, setPrecoValor] = useState("");
+  const [aGravarPreco, setAGravarPreco] = useState(false);
+
   const carregar = useCallback(async () => {
     setACarregar(true);
     setErro("");
@@ -57,6 +91,17 @@ export function ConfigClient({
       setErro(e instanceof Error ? e.message : "Erro inesperado");
     } finally {
       setACarregar(false);
+    }
+  }, []);
+
+  const carregarPrecos = useCallback(async () => {
+    setErroPrecos("");
+    try {
+      const d = await pedir<{ ok: boolean; precos: PrecoCatalogo[] }>("/api/oficina/precos");
+      setPrecos(d.precos || []);
+    } catch (e) {
+      setPrecos([]);
+      setErroPrecos(e instanceof Error ? e.message : "Erro ao carregar a Tabela de Preços");
     }
   }, []);
 
@@ -75,6 +120,23 @@ export function ConfigClient({
       })
       .finally(() => {
         if (vivo) setACarregar(false);
+      });
+    // A Tabela de Preços carrega à parte (se ainda não existir na base,
+    // o cartão mostra a mensagem e o resto da página continua normal)
+    fetch("/api/oficina/precos", { cache: "no-store" })
+      .then(async (r) => {
+        const d = await r.json();
+        if (!vivo) return;
+        if (r.ok && d?.ok) {
+          setPrecos(d.precos || []);
+          setErroPrecos("");
+        } else {
+          setPrecos([]);
+          setErroPrecos(d?.erro || "Erro ao carregar a Tabela de Preços");
+        }
+      })
+      .catch(() => {
+        if (vivo) setErroPrecos("Erro ao carregar a Tabela de Preços");
       });
     return () => {
       vivo = false;
@@ -129,6 +191,80 @@ export function ConfigClient({
       setAGravar(false);
     }
   }
+
+  /* ---- Tabela de Preços: gravar / apagar ---- */
+
+  function abrirNovoPreco(tipo: "mao_obra" | "material") {
+    setPrecoId(null);
+    setPrecoTipo(tipo);
+    setPrecoNome("");
+    setPrecoUnidade(tipo === "mao_obra" ? "hora" : "kg");
+    setPrecoValor("");
+    setModalPreco(true);
+  }
+
+  function abrirEdicaoPreco(p: PrecoCatalogo) {
+    setPrecoId(p.id);
+    setPrecoTipo(p.tipo);
+    setPrecoNome(p.nome);
+    setPrecoUnidade(p.unidade);
+    setPrecoValor(String(p.valor));
+    setModalPreco(true);
+  }
+
+  async function gravarPreco(ev: React.FormEvent) {
+    ev.preventDefault();
+    if (aGravarPreco) return;
+    const valor = Number(precoValor);
+    if (!precoNome.trim()) {
+      toast.error("Escreve o nome do item.");
+      return;
+    }
+    if (precoValor === "" || !Number.isFinite(valor) || valor < 0) {
+      toast.error("Escreve um valor válido (0 ou mais).");
+      return;
+    }
+    setAGravarPreco(true);
+    try {
+      await enviar(
+        "/api/oficina/precos",
+        {
+          action: precoId ? "editar-preco" : "criar-preco",
+          id: precoId || undefined,
+          tipo: precoTipo,
+          nome: precoNome,
+          unidade: precoUnidade,
+          valor
+        },
+        precoId
+          ? "Preço actualizado. As obras já fechadas mantêm os valores com que foram fechadas."
+          : "Preço adicionado à Tabela de Preços."
+      );
+      setModalPreco(false);
+      await carregarPrecos();
+    } catch {
+      // aviso já mostrado
+    } finally {
+      setAGravarPreco(false);
+    }
+  }
+
+  async function apagarPreco(p: PrecoCatalogo) {
+    if (!podeApagar) return;
+    const ok = window.confirm(
+      `Apagar "${p.nome}" da Tabela de Preços? As obras já fechadas mantêm os valores com que foram fechadas.`
+    );
+    if (!ok) return;
+    try {
+      await enviar("/api/oficina/precos", { action: "apagar-preco", id: p.id }, "Preço removido.");
+      await carregarPrecos();
+    } catch {
+      // aviso já mostrado
+    }
+  }
+
+  const precosMaoObra = precos.filter((p) => p.tipo === "mao_obra");
+  const precosMaterial = precos.filter((p) => p.tipo === "material");
 
   return (
     <div className="space-y-5">
@@ -272,6 +408,140 @@ export function ConfigClient({
         </Card>
       </div>
 
+      {/* Tabela de Preços (Faturação CdM) */}
+      <Card className="card-sombra">
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="font-semibold">Tabela de Preços (Faturação CdM)</p>
+              <p className="text-muted-foreground text-xs">
+                Valores unitários que o fecho da obra assume automaticamente. Se a CdM mudar um
+                preço, edita aqui: as obras já fechadas mantêm os valores com que foram fechadas.
+              </p>
+            </div>
+            {podeCriar && (
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => abrirNovoPreco("mao_obra")}>
+                  <Plus aria-hidden /> Mão de obra
+                </Button>
+                <Button size="sm" onClick={() => abrirNovoPreco("material")}>
+                  <Plus aria-hidden /> Material
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {erroPrecos && (
+            <p className="flex items-center gap-2 text-sm text-erro">
+              <TriangleAlert className="size-4 shrink-0" aria-hidden />
+              {erroPrecos}
+            </p>
+          )}
+
+          {!erroPrecos && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1">
+                <p className="text-muted-foreground text-xs font-semibold uppercase">
+                  Mão de obra (valor por hora)
+                </p>
+                {precosMaoObra.length === 0 ? (
+                  <p className="py-2 text-sm text-muted-foreground">
+                    Nada registado. Ex: "Mão de Obra CdM" - 850 MT / hora.
+                  </p>
+                ) : (
+                  <ul className="divide-y">
+                    {precosMaoObra.map((p) => (
+                      <li key={p.id} className="flex items-center justify-between gap-2 py-2">
+                        <span className="text-sm">
+                          {p.nome}{" "}
+                          <span className="text-muted-foreground">
+                            ({UNIDADES_PRECO[p.unidade] || p.unidade})
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="text-sm font-semibold">{fmtMt(p.valor)}</span>
+                          {podeEditar && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-8"
+                              aria-label={`Editar ${p.nome}`}
+                              onClick={() => abrirEdicaoPreco(p)}
+                            >
+                              <Pencil className="size-4" aria-hidden />
+                            </Button>
+                          )}
+                          {podeApagar && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-8 text-erro"
+                              aria-label={`Apagar ${p.nome}`}
+                              onClick={() => apagarPreco(p)}
+                            >
+                              <Trash2 className="size-4" aria-hidden />
+                            </Button>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-muted-foreground text-xs font-semibold uppercase">
+                  Materiais (valor por unidade / kg / litro)
+                </p>
+                {precosMaterial.length === 0 ? (
+                  <p className="py-2 text-sm text-muted-foreground">
+                    Nada registado. Ex: "Oxigênio" - 120 MT / kg.
+                  </p>
+                ) : (
+                  <ul className="divide-y">
+                    {precosMaterial.map((p) => (
+                      <li key={p.id} className="flex items-center justify-between gap-2 py-2">
+                        <span className="text-sm">
+                          {p.nome}{" "}
+                          <span className="text-muted-foreground">
+                            ({UNIDADES_PRECO[p.unidade] || p.unidade})
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="text-sm font-semibold">{fmtMt(p.valor)}</span>
+                          {podeEditar && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-8"
+                              aria-label={`Editar ${p.nome}`}
+                              onClick={() => abrirEdicaoPreco(p)}
+                            >
+                              <Pencil className="size-4" aria-hidden />
+                            </Button>
+                          )}
+                          {podeApagar && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-8 text-erro"
+                              aria-label={`Apagar ${p.nome}`}
+                              onClick={() => apagarPreco(p)}
+                            >
+                              <Trash2 className="size-4" aria-hidden />
+                            </Button>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Modal categoria */}
       <Modal
         aberto={modalCat}
@@ -354,6 +624,106 @@ export function ConfigClient({
             </Button>
             <Button type="submit" disabled={aGravar}>
               {aGravar && <Rodar />}
+              Guardar
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal preço (criar / editar) */}
+      <Modal
+        aberto={modalPreco}
+        fechar={() => setModalPreco(false)}
+        titulo={
+          precoId
+            ? "Editar Preço"
+            : `Novo Preço - ${precoTipo === "mao_obra" ? "Mão de obra" : "Material"}`
+        }
+        subtitulo={
+          precoId
+            ? "As obras já fechadas mantêm os valores com que foram fechadas."
+            : undefined
+        }
+      >
+        <form onSubmit={gravarPreco} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>
+                Tipo <span className="text-erro">*</span>
+              </Label>
+              <select
+                className="border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                value={precoTipo}
+                onChange={(e) => {
+                  const t = e.target.value;
+                  setPrecoTipo(t);
+                  if (!precoId) setPrecoUnidade(t === "mao_obra" ? "hora" : "kg");
+                }}
+              >
+                <option value="mao_obra">{TIPOS_PRECO.mao_obra}</option>
+                <option value="material">{TIPOS_PRECO.material}</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>
+                Nome <span className="text-erro">*</span>
+              </Label>
+              <Input
+                required
+                value={precoNome}
+                onChange={(e) => setPrecoNome(e.target.value)}
+                placeholder={precoTipo === "mao_obra" ? "Ex: Mão de Obra CdM" : "Ex: Oxigênio"}
+                list={precoTipo === "material" ? "sugestoes-materiais-preco" : undefined}
+              />
+              {precoTipo === "material" && (
+                <datalist id="sugestoes-materiais-preco">
+                  {MATERIAIS_FECHO.map((g) => (
+                    <option key={g} value={g} />
+                  ))}
+                </datalist>
+              )}
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Unidade</Label>
+              <select
+                className="border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                value={precoUnidade}
+                onChange={(e) => setPrecoUnidade(e.target.value)}
+              >
+                {precoTipo === "mao_obra" ? (
+                  <option value="hora">hora</option>
+                ) : (
+                  <>
+                    <option value="kg">kg</option>
+                    <option value="lt">litro</option>
+                    <option value="un">unidade</option>
+                  </>
+                )}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>
+                Valor (MT) <span className="text-erro">*</span>
+              </Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                required
+                value={precoValor}
+                onChange={(e) => setPrecoValor(e.target.value)}
+                placeholder="Ex: 850"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setModalPreco(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={aGravarPreco}>
+              {aGravarPreco && <Rodar />}
               Guardar
             </Button>
           </div>

@@ -42,6 +42,7 @@ import {
   MATERIAIS_FECHO,
   TIPOS_INTERVENCAO,
   UNIDADES_PECA,
+  UNIDADES_PRECO,
   arredondarHoras,
   calcularHorasExcluindoAlmoco,
   dataHojeISO,
@@ -56,6 +57,7 @@ import {
   type LogFisico,
   type OrdemServico,
   type PecaOS,
+  type PrecoCatalogo,
   type TrocaRevisao
 } from "@/lib/oficina";
 
@@ -755,8 +757,7 @@ function AtualizarEstado({
     }
     // Fecho da obra: abre o formulário de faturação CdM antes de gravar
     if (novoEstado === "Fechada") {
-      fecharFormFecho();
-      setModalFecho(true);
+      await abrirFecho();
       return;
     }
     setAGravarEstado(true);
@@ -781,15 +782,33 @@ function AtualizarEstado({
   const [fechoHoras, setFechoHoras] = useState("");
   const [fechoValor, setFechoValor] = useState("");
   const [fechoMats, setFechoMats] = useState([
-    { material: "", quantidade: "", valor_unitario: "" }
+    { material: "", quantidade: "", valor_unitario: "", livre: false }
   ]);
   const [fechoObs, setFechoObs] = useState("");
+  // Tabela de Preços: o fecho assume daqui os valores (mão de obra e materiais)
+  const [precos, setPrecos] = useState<PrecoCatalogo[]>([]);
+
+  async function abrirFecho() {
+    // Busca a Tabela de Preços ao abrir o pop-up; se falhar (ex: tabela
+    // ainda não criada), o fecho continua a funcionar com campos manuais
+    try {
+      const d = await pedir<{ ok: boolean; precos: PrecoCatalogo[] }>("/api/oficina/precos");
+      setPrecos(d.precos || []);
+    } catch {
+      setPrecos([]);
+    }
+    fecharFormFecho();
+    setModalFecho(true);
+  }
+
+  const precosMaoObra = precos.filter((p) => p.tipo === "mao_obra");
+  const precosMaterial = precos.filter((p) => p.tipo === "material");
 
   function fecharFormFecho() {
     setFechoData(dataHojeISO());
     setFechoHoras("");
     setFechoValor("");
-    setFechoMats([{ material: "", quantidade: "", valor_unitario: "" }]);
+    setFechoMats([{ material: "", quantidade: "", valor_unitario: "", livre: false }]);
     setFechoObs("");
   }
 
@@ -964,6 +983,26 @@ function AtualizarEstado({
               />
             </div>
             <div className="space-y-1.5">
+              {precosMaoObra.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Da Tabela de Preços</Label>
+                  <select
+                    className="border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                    value=""
+                    onChange={(e) => {
+                      const p = precosMaoObra.find((x) => String(x.id) === e.target.value);
+                      if (p) setFechoValor(String(p.valor));
+                    }}
+                  >
+                    <option value="">- Escolher da Tabela -</option>
+                    {precosMaoObra.map((p) => (
+                      <option key={p.id} value={String(p.id)}>
+                        {p.nome} - {p.valor} MT/{UNIDADES_PRECO[p.unidade] || p.unidade}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <Label>Valor por hora (MT) *</Label>
               <Input
                 type="number"
@@ -996,13 +1035,19 @@ function AtualizarEstado({
                 onClick={() =>
                   setFechoMats((atual) => [
                     ...atual,
-                    { material: "", quantidade: "", valor_unitario: "" }
+                    { material: "", quantidade: "", valor_unitario: "", livre: false }
                   ])
                 }
               >
                 <Plus aria-hidden /> Adicionar material
               </Button>
             </div>
+            {precosMaterial.length > 0 && (
+              <p className="text-muted-foreground text-xs">
+                Os materiais vêm da Tabela de Preços com o valor registado - podes ajustar o valor
+                neste fecho, se a CdM acordar outro preço.
+              </p>
+            )}
             {fechoMats.map((m, i) => {
               const totalLinha =
                 (Number(m.quantidade) || 0) * (Number(m.valor_unitario) || 0);
@@ -1010,16 +1055,53 @@ function AtualizarEstado({
                 <div key={i} className="grid grid-cols-[1fr_5rem_6.5rem_6rem_2rem] items-end gap-2">
                   <div className="space-y-1">
                     {i === 0 && <Label className="text-xs">Material</Label>}
-                    <Input
-                      list="lista-gases-fecho"
-                      value={m.material}
-                      onChange={(e) =>
-                        setFechoMats((atual) =>
-                          atual.map((x, j) => (j === i ? { ...x, material: e.target.value } : x))
-                        )
-                      }
-                      placeholder="Ex: Oxigênio"
-                    />
+                    {!m.livre && precosMaterial.length > 0 ? (
+                      <select
+                        className="border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                        value={m.material}
+                        onChange={(e) => {
+                          if (e.target.value === "__livre__") {
+                            setFechoMats((atual) =>
+                              atual.map((x, j) =>
+                                j === i ? { ...x, material: "", livre: true } : x
+                              )
+                            );
+                            return;
+                          }
+                          const p = precosMaterial.find((x) => x.nome === e.target.value);
+                          setFechoMats((atual) =>
+                            atual.map((x, j) =>
+                              j === i
+                                ? {
+                                    ...x,
+                                    material: p?.nome || "",
+                                    valor_unitario: p ? String(p.valor) : x.valor_unitario
+                                  }
+                                : x
+                            )
+                          );
+                        }}
+                      >
+                        <option value="">- Selecionar material -</option>
+                        {precosMaterial.map((p) => (
+                          <option key={p.id} value={p.nome}>
+                            {p.nome} - {fmtMt(p.valor)}/{UNIDADES_PRECO[p.unidade] || p.unidade}
+                          </option>
+                        ))}
+                        <option value="__livre__">Outro material (escrever)...</option>
+                      </select>
+                    ) : (
+                      <Input
+                        list="lista-gases-fecho"
+                        value={m.material}
+                        onChange={(e) =>
+                          setFechoMats((atual) =>
+                            atual.map((x, j) => (j === i ? { ...x, material: e.target.value } : x))
+                          )
+                        }
+                        placeholder="Ex: Oxigênio"
+                      />
+                    )}
                   </div>
                   <div className="space-y-1">
                     {i === 0 && <Label className="text-xs">Qtd</Label>}

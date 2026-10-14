@@ -1,5 +1,5 @@
 /**
- * Oficina - Configurações (categorias e grupos de equipamento).
+ * Oficina - Configurações (categorias, grupos e Tabela de Preços).
  *
  * Servidor: sessão + permissão "ver" (oficina).
  */
@@ -19,6 +19,7 @@ export default async function PaginaConfig() {
     <ConfigClient
       podeCriar={pode(sessao, "oficina", "criar")}
       podeEditar={pode(sessao, "oficina", "editar")}
+      podeApagar={pode(sessao, "oficina", "apagar")}
     />
   );
 }

@@ -229,6 +229,33 @@ export const MATERIAIS_FECHO = [
   "Gas Acetileno"
 ] as const;
 
+/* ============ Tabela de Preços (catálogo da faturação) ============ */
+
+/** Um preço unitário registado nas Configurações da Oficina. */
+export type PrecoCatalogo = {
+  id: number;
+  tipo: "mao_obra" | "material";
+  nome: string;
+  unidade: "hora" | "un" | "kg" | "lt" | string;
+  valor: number;
+  criado_em?: string;
+  actualizado_em?: string;
+};
+
+/** Rótulos dos tipos de preço. */
+export const TIPOS_PRECO = {
+  mao_obra: "Mão de obra",
+  material: "Material"
+} as const;
+
+/** Rótulos das unidades de preço (aceita qualquer valor vindo da base). */
+export const UNIDADES_PRECO: Record<string, string> = {
+  hora: "hora",
+  un: "unidade",
+  kg: "kg",
+  lt: "litro"
+};
+
 /* ============ Constantes de negócio (iguais ao hub) ============ */
 
 export const ESTADOS_FISICO = [

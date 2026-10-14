@@ -29,6 +29,7 @@ import {
   type ItemPreenchido,
   type LogEstado,
   type LogFisico,
+  type MaterialFecho,
   type OrdemServico,
   type PecaOS,
   type SecaoTemplate,
@@ -223,6 +224,14 @@ type Corpo = {
   templateId?: number;
   novoTemplateId?: number;
   motivoTroca?: string;
+  // fecho com faturação CdM (quando o estado novo é "Fechada")
+  fecho?: {
+    data_fecho: string;
+    horas_cdm: number;
+    valor_hora: number;
+    materiais: { material: string; quantidade: number; valor_unitario: number }[];
+    observacao?: string | null;
+  };
   // logs
   logId?: number;
   novoResponsavel?: string;
@@ -327,6 +336,34 @@ export async function POST(req: NextRequest, ctx: Contexto) {
             { ok: false, erro: "Escolhe o responsável da mudança." },
             { status: 400 }
           );
+        }
+        // Fecho com faturação CdM: grava ANTES de mudar o estado, para
+        // nunca ficar obra fechada sem o registo de faturação (se o SQL
+        // do módulo ainda não correu, avisa com instrução clara).
+        if (novo === "Fechada" && corpo.fecho) {
+          try {
+            await gravarFechoCdM(osId, corpo.fecho, responsavel);
+          } catch (e) {
+            if (e instanceof ErroValidacao) {
+              return NextResponse.json({ ok: false, erro: e.message }, { status: 400 });
+            }
+            const msg = String((e as { message?: string })?.message || "");
+            if (
+              msg.includes("does not exist") ||
+              msg.includes("Could not find the table") ||
+              msg.includes("schema cache")
+            ) {
+              return NextResponse.json(
+                {
+                  ok: false,
+                  erro:
+                    "O módulo de Faturação CdM ainda não está activo na base. Corre o ficheiro sql/fase3b-faturacao-cdm.sql no Supabase (SQL Editor) e tenta de novo."
+                },
+                { status: 400 }
+              );
+            }
+            throw e;
+          }
         }
         const upd: Record<string, unknown> = {
           status_atual: novo,
@@ -633,4 +670,82 @@ async function copiarItensTemplate(checklistId: number, templateId: number) {
     "checklist_preenchidos_itens",
     itens.map((it) => ({ checklist_id: checklistId, template_item_id: it.id }))
   );
+}
+
+/* ============ Fecho com faturação CdM ============ */
+
+/** Erro que se pode mostrar ao utilizador tal e qual. */
+class ErroValidacao extends Error {}
+
+const arred2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Grava o fecho de uma obra na CdM: data de fecho, horas que a CdM
+ * considerou, valor/hora (total = horas x valor) e os materiais usados
+ * (Oxigênio, Gas Propano, Gas Acetileno, ...). Os totais são SEMPRE
+ * recalculados aqui no servidor - nunca se confia nos que vêm do browser.
+ */
+async function gravarFechoCdM(
+  osId: number,
+  fecho: NonNullable<Corpo["fecho"]>,
+  responsavel: string
+) {
+  const dataFecho = (fecho.data_fecho || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataFecho)) {
+    throw new ErroValidacao("Data de fecho inválida.");
+  }
+  const horas = Number(fecho.horas_cdm);
+  if (!Number.isFinite(horas) || horas < 0) {
+    throw new ErroValidacao("Horas consideradas pela CdM: escreve um número maior ou igual a 0.");
+  }
+  const valor = Number(fecho.valor_hora);
+  if (!Number.isFinite(valor) || valor < 0) {
+    throw new ErroValidacao("Valor por hora: escreve um número maior ou igual a 0.");
+  }
+
+  const totalMao = arred2(horas * valor);
+  const matsLimpos = (fecho.materiais || [])
+    .map((m) => ({
+      material: (m.material || "").trim(),
+      quantidade: Number(m.quantidade),
+      valor_unitario: Number(m.valor_unitario)
+    }))
+    .filter(
+      (m) =>
+        m.material &&
+        Number.isFinite(m.quantidade) &&
+        m.quantidade > 0 &&
+        Number.isFinite(m.valor_unitario) &&
+        m.valor_unitario >= 0
+    );
+  const totalMat = arred2(
+    matsLimpos.reduce((s, m) => s + m.quantidade * m.valor_unitario, 0)
+  );
+
+  const criado = await insert<{ id: number }>("obras_fechadas_cdm", {
+    os_id: osId,
+    data_fecho: dataFecho,
+    horas_cdm: horas,
+    valor_hora: valor,
+    total_mao_obra: totalMao,
+    total_material: totalMat,
+    total_geral: arred2(totalMao + totalMat),
+    responsavel: responsavel || null,
+    observacao: (fecho.observacao || "").trim() || null
+  });
+  const fechoId = criado[0]?.id;
+  if (!fechoId) throw new Error("obras_fechadas_cdm sem id de retorno");
+
+  if (matsLimpos.length) {
+    await insert(
+      "obras_fechadas_cdm_material",
+      matsLimpos.map((m) => ({
+        fecho_id: fechoId,
+        material: m.material,
+        quantidade: m.quantidade,
+        valor_unitario: m.valor_unitario,
+        total: arred2(m.quantidade * m.valor_unitario)
+      }))
+    );
+  }
 }

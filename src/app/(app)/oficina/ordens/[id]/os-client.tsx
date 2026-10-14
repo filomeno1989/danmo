@@ -14,7 +14,7 @@
  * - peças aplicadas, com opção de retirar material do Stock.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -35,9 +35,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/ui/modal";
 import { Cabeca, EtiquetaEstado, EtiquetaFisico, Rodar, enviar, pedir } from "@/components/oficina/ui-bits";
+import { SelecionarColaborador } from "@/components/oficina/selecionar-colaborador";
 import {
   ESTADOS_FISICO,
   ESTADOS_WORKFLOW,
+  MATERIAIS_FECHO,
   TIPOS_INTERVENCAO,
   UNIDADES_PECA,
   arredondarHoras,
@@ -56,6 +58,16 @@ import {
   type PecaOS,
   type TrocaRevisao
 } from "@/lib/oficina";
+
+/** Mostra um valor em Meticais: "1 234,56 MT" */
+function fmtMt(n: number): string {
+  return (
+    new Intl.NumberFormat("pt-PT", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(n || 0) + " MT"
+  );
+}
 
 type DadosObra = {
   ok: boolean;
@@ -684,17 +696,13 @@ function ChecklistDigital({
           </div>
           <div className="space-y-1.5">
             <Label>Responsável</Label>
-            <Input
-              list="lista-colabs-troca"
+            {/* Pesquisa por nome OU código (ex: Filomeno ou 69) */}
+            <SelecionarColaborador
+              colaboradores={dados.colaboradores}
               value={responsavel}
-              onChange={(e) => setResponsavel(e.target.value)}
+              onChange={setResponsavel}
               placeholder="Nome do responsável (opcional)"
             />
-            <datalist id="lista-colabs-troca">
-              {dados.colaboradores.map((c) => (
-                <option key={c.id} value={c.name} />
-              ))}
-            </datalist>
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setModalTroca(false)}>
@@ -745,6 +753,12 @@ function AtualizarEstado({
       toast.error("Escolhe o responsável antes de actualizar o estado da obra.");
       return;
     }
+    // Fecho da obra: abre o formulário de faturação CdM antes de gravar
+    if (novoEstado === "Fechada") {
+      fecharFormFecho();
+      setModalFecho(true);
+      return;
+    }
     setAGravarEstado(true);
     try {
       await enviar(
@@ -752,6 +766,78 @@ function AtualizarEstado({
         { action: "mudar-status", status_atual: novoEstado, responsavel },
         "Estado da obra actualizado."
       );
+      setResponsavel("");
+      await recarregar();
+    } catch {
+      // aviso já mostrado
+    } finally {
+      setAGravarEstado(false);
+    }
+  }
+
+  /* ---- Fecho com faturação CdM (abre ao escolher "Fechada") ---- */
+  const [modalFecho, setModalFecho] = useState(false);
+  const [fechoData, setFechoData] = useState(dataHojeISO());
+  const [fechoHoras, setFechoHoras] = useState("");
+  const [fechoValor, setFechoValor] = useState("");
+  const [fechoMats, setFechoMats] = useState([
+    { material: "", quantidade: "", valor_unitario: "" }
+  ]);
+  const [fechoObs, setFechoObs] = useState("");
+
+  function fecharFormFecho() {
+    setFechoData(dataHojeISO());
+    setFechoHoras("");
+    setFechoValor("");
+    setFechoMats([{ material: "", quantidade: "", valor_unitario: "" }]);
+    setFechoObs("");
+  }
+
+  const totalMao =
+    (Number(fechoHoras) || 0) * (Number(fechoValor) || 0);
+  const totalMat = fechoMats.reduce(
+    (s, m) => s + (Number(m.quantidade) || 0) * (Number(m.valor_unitario) || 0),
+    0
+  );
+
+  async function confirmarFecho() {
+    if (aGravarEstado) return;
+    const horas = Number(fechoHoras);
+    const valor = Number(fechoValor);
+    if (fechoHoras === "" || !Number.isFinite(horas) || horas < 0) {
+      toast.error("Escreve as horas que a CdM considerou para o trabalho.");
+      return;
+    }
+    if (fechoValor === "" || !Number.isFinite(valor) || valor < 0) {
+      toast.error("Escreve o valor que a CdM paga por hora.");
+      return;
+    }
+    const mats = fechoMats
+      .map((m) => ({
+        material: m.material.trim(),
+        quantidade: Number(m.quantidade) || 0,
+        valor_unitario: Number(m.valor_unitario) || 0
+      }))
+      .filter((m) => m.material && m.quantidade > 0);
+    setAGravarEstado(true);
+    try {
+      await enviar(
+        `/api/oficina/ordens/${os.id}`,
+        {
+          action: "mudar-status",
+          status_atual: "Fechada",
+          responsavel,
+          fecho: {
+            data_fecho: fechoData,
+            horas_cdm: horas,
+            valor_hora: valor,
+            materiais: mats,
+            observacao: fechoObs.trim() || null
+          }
+        },
+        "Obra fechada e registada na Faturação CdM."
+      );
+      setModalFecho(false);
       setResponsavel("");
       await recarregar();
     } catch {
@@ -805,17 +891,12 @@ function AtualizarEstado({
           </div>
           <div className="space-y-1.5">
             <Label>Responsável *</Label>
-            <Input
-              list="lista-colabs-estado"
+            {/* Pesquisa por nome OU código (ex: Filomeno ou 69) */}
+            <SelecionarColaborador
+              colaboradores={dados.colaboradores}
               value={responsavel}
-              onChange={(e) => setResponsavel(e.target.value)}
-              placeholder="Pesquisar por nome..."
+              onChange={setResponsavel}
             />
-            <datalist id="lista-colabs-estado">
-              {dados.colaboradores.map((c) => (
-                <option key={c.id} value={c.name} />
-              ))}
-            </datalist>
           </div>
           <Button onClick={mudarStatus} disabled={aGravarEstado}>
             {aGravarEstado && <Rodar />}
@@ -852,7 +933,179 @@ function AtualizarEstado({
           </Button>
         </div>
       </CardContent>
-    </Card>
+
+      {/* ---- Pop-up de Fecho: faturação CdM (abre ao escolher "Fechada") ---- */}
+      <Modal
+        aberto={modalFecho}
+        fechar={() => setModalFecho(false)}
+        titulo="Fechar Obra - Faturação CdM"
+        subtitulo="A obra vai para o módulo Faturação CdM com estes valores."
+        largura="max-w-2xl"
+      >
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label>Data de Fecho</Label>
+              <Input
+                type="date"
+                value={fechoData}
+                onChange={(e) => setFechoData(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Horas consideradas pela CdM *</Label>
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                value={fechoHoras}
+                onChange={(e) => setFechoHoras(e.target.value)}
+                placeholder="Ex: 12"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Valor por hora (MT) *</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={fechoValor}
+                onChange={(e) => setFechoValor(e.target.value)}
+                placeholder="Ex: 850"
+              />
+            </div>
+          </div>
+
+          <div className="bg-accent/40 flex items-center justify-between rounded-md px-3 py-2 text-sm">
+            <span className="font-medium">Total de mão de obra</span>
+            <span className="font-semibold">
+              {fmtMt(totalMao)}
+              <span className="text-muted-foreground ml-2 font-normal">
+                ({fechoHoras || 0} h x {fechoValor || 0} MT)
+              </span>
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Material usado (do nosso stock)</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setFechoMats((atual) => [
+                    ...atual,
+                    { material: "", quantidade: "", valor_unitario: "" }
+                  ])
+                }
+              >
+                <Plus aria-hidden /> Adicionar material
+              </Button>
+            </div>
+            {fechoMats.map((m, i) => {
+              const totalLinha =
+                (Number(m.quantidade) || 0) * (Number(m.valor_unitario) || 0);
+              return (
+                <div key={i} className="grid grid-cols-[1fr_5rem_6.5rem_6rem_2rem] items-end gap-2">
+                  <div className="space-y-1">
+                    {i === 0 && <Label className="text-xs">Material</Label>}
+                    <Input
+                      list="lista-gases-fecho"
+                      value={m.material}
+                      onChange={(e) =>
+                        setFechoMats((atual) =>
+                          atual.map((x, j) => (j === i ? { ...x, material: e.target.value } : x))
+                        )
+                      }
+                      placeholder="Ex: Oxigênio"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    {i === 0 && <Label className="text-xs">Qtd</Label>}
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={m.quantidade}
+                      onChange={(e) =>
+                        setFechoMats((atual) =>
+                          atual.map((x, j) => (j === i ? { ...x, quantidade: e.target.value } : x))
+                        )
+                      }
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    {i === 0 && <Label className="text-xs">Valor/un. (MT)</Label>}
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={m.valor_unitario}
+                      onChange={(e) =>
+                        setFechoMats((atual) =>
+                          atual.map((x, j) =>
+                            j === i ? { ...x, valor_unitario: e.target.value } : x
+                          )
+                        )
+                      }
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="pb-2 text-right text-xs font-semibold">
+                    {totalLinha ? fmtMt(totalLinha) : ""}
+                  </div>
+                  <div className="pb-1">
+                    {fechoMats.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-erro"
+                        aria-label="Remover material"
+                        onClick={() => setFechoMats((atual) => atual.filter((_, j) => j !== i))}
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            <datalist id="lista-gases-fecho">
+              {MATERIAIS_FECHO.map((g) => (
+                <option key={g} value={g} />
+              ))}
+            </datalist>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Observação (opcional)</Label>
+            <Input
+              value={fechoObs}
+              onChange={(e) => setFechoObs(e.target.value)}
+              placeholder="Ex: obra autorizada pela CdM, folha 23..."
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border-2 border-[var(--primario)] px-3 py-2.5">
+            <span className="font-semibold">TOTAL GERAL A FACTURAR</span>
+            <span className="text-lg font-bold">{fmtMt(totalMao + totalMat)}</span>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setModalFecho(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmarFecho} disabled={aGravarEstado}>
+              {aGravarEstado && <Rodar />}
+              Fechar e Registar na Faturação
+            </Button>
+          </div>
+        </div>
+      </Modal>
+      </Card>
   );
 }
 
@@ -1653,17 +1906,13 @@ function Pecas({
             </div>
             <div className="space-y-1.5">
               <Label>Colaborador que Aplicou</Label>
-              <Input
-                list="lista-colabs-pecas"
+              {/* Pesquisa por nome OU código */}
+              <SelecionarColaborador
+                colaboradores={dados.colaboradores}
                 value={colaborador}
-                onChange={(e) => setColaborador(e.target.value)}
+                onChange={setColaborador}
                 placeholder="Nome do colaborador"
               />
-              <datalist id="lista-colabs-pecas">
-                {dados.colaboradores.map((c) => (
-                  <option key={c.id} value={c.name} />
-                ))}
-              </datalist>
             </div>
           </div>
 

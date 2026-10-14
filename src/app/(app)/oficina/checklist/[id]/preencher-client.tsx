@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Cabeca, Rodar, enviar, pedir } from "@/components/oficina/ui-bits";
+import { SelecionarColaborador } from "@/components/oficina/selecionar-colaborador";
 import { cn } from "@/lib/utils";
 import type {
   ChecklistPreenchido,
@@ -329,37 +330,25 @@ export function PreencherChecklist({
             </div>
             <div className="space-y-1.5">
               <Label>Executante</Label>
-              <select
-                className="border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-60 dark:bg-input/30"
-                disabled={!podeEditar}
+              {/* Pesquisa por nome OU código (ex: Filomeno ou 69) */}
+              <SelecionarColaborador
+                colaboradores={dados.colaboradores}
                 value={executante}
-                onChange={(e) => setExecutante(e.target.value)}
-              >
-                <option value="">- Selecionar -</option>
-                {dados.colaboradores.map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}
-                    {c.code ? ` (${c.code})` : ""}
-                  </option>
-                ))}
-              </select>
+                onChange={setExecutante}
+                disabled={!podeEditar}
+                placeholder="- Selecionar -"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Encarregado</Label>
-              <select
-                className="border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-60 dark:bg-input/30"
-                disabled={!podeEditar}
+              {/* Pesquisa por nome OU código */}
+              <SelecionarColaborador
+                colaboradores={dados.colaboradores}
                 value={encarregado}
-                onChange={(e) => setEncarregado(e.target.value)}
-              >
-                <option value="">- Selecionar -</option>
-                {dados.colaboradores.map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}
-                    {c.code ? ` (${c.code})` : ""}
-                  </option>
-                ))}
-              </select>
+                onChange={setEncarregado}
+                disabled={!podeEditar}
+                placeholder="- Selecionar -"
+              />
             </div>
             <div className="flex items-end">
               {podeEditar && (

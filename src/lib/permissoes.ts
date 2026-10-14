@@ -53,6 +53,7 @@ export const MODULOS: Modulo[] = [
       { label: "Ordens de Serviço", href: "/oficina/ordens" },
       { label: "Checklist", href: "/oficina/checklist" },
       { label: "Equipamentos", href: "/oficina/equipamentos" },
+      { label: "Faturação CdM", href: "/oficina/faturacao" },
       { label: "Relatórios", href: "/oficina/relatorios" },
       { label: "Configurações", href: "/oficina/config" }
     ]

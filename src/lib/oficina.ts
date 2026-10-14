@@ -169,6 +169,66 @@ export type TrocaRevisao = {
   criado_em?: string;
 };
 
+/* ============ Faturação CdM (obras fechadas) ============ */
+
+/** Um material usado no fecho (Oxigênio, Gas Propano, Gas Acetileno, ...). */
+export type MaterialFecho = {
+  id?: number;
+  fecho_id?: number;
+  material: string;
+  quantidade: number;
+  valor_unitario: number;
+  total: number;
+};
+
+/** O fecho de uma obra que foi facturada à CdM. */
+export type ObraFechada = {
+  id: number;
+  os_id: number;
+  data_fecho: string;
+  horas_cdm: number;
+  valor_hora: number;
+  total_mao_obra: number;
+  total_material: number;
+  total_geral: number;
+  responsavel?: string | null;
+  observacao?: string | null;
+  criado_em?: string;
+};
+
+/** Linha do módulo Faturação: o fecho + tudo o que o servidor calcula. */
+export type LinhaFaturacao = ObraFechada & {
+  // da obra / máquina
+  numero_obra?: string | null;
+  equipment_id?: number | null;
+  equip_code?: string | null;
+  sector?: string | null;
+  data_abertura?: string | null;
+  // calculado pelo servidor
+  horas_nossas: number; // soma das horas das intervenções (records)
+  data_ultima_intervencao?: string | null;
+  dias_ate_fecho: number; // data_fecho - data_abertura
+  dias_apos_trabalho: number; // data_fecho - última intervenção
+  diferenca_horas: number; // horas_cdm - horas_nossas
+  materiais: MaterialFecho[];
+};
+
+export type ResumoMes = {
+  mes: string; // "2026-01"
+  obras: number;
+  horas_cdm: number;
+  horas_nossas: number;
+  total_material: number;
+  total_geral: number;
+};
+
+/** Os materiais que a CdM factura mais vezes (sugestões do campo). */
+export const MATERIAIS_FECHO = [
+  "Oxigênio",
+  "Gas Propano",
+  "Gas Acetileno"
+] as const;
+
 /* ============ Constantes de negócio (iguais ao hub) ============ */
 
 export const ESTADOS_FISICO = [

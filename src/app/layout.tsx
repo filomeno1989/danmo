@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import BloqueioScrollNumeros from "@/components/bloqueio-scroll-numeros";
 import "./globals.css";
 
 /**
@@ -45,6 +46,7 @@ export default function RootLayout({
             transição suave definida no CSS (0.25s), sem salto seco. */}
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
           {children}
+          <BloqueioScrollNumeros />
           <Toaster position="top-center" richColors closeButton />
         </ThemeProvider>
       </body>

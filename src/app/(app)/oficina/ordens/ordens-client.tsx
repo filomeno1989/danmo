@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/ui/modal";
 import { Cabeca, EtiquetaEstado, EtiquetaFisico, Rodar, enviar } from "@/components/oficina/ui-bits";
+import { SelecionarEquipamento } from "@/components/oficina/selecionar-equipamento";
 import {
   ESTADOS_FISICO,
   ESTADOS_WORKFLOW,
@@ -165,6 +166,14 @@ export function OrdensClient({ podeCriar, podeApagar }: { podeCriar: boolean; po
   async function criarOS(e: React.FormEvent) {
     e.preventDefault();
     if (aCriar) return;
+    if (!fEquipamento) {
+      toast.error("Escolhe a máquina da obra (escreve o nº para encontrar depressa).");
+      return;
+    }
+    if (!fSectorNovo) {
+      toast.error("Escolhe o sector.");
+      return;
+    }
     setACriar(true);
     try {
       const r = await enviar<{ ok: boolean; id: number }>(
@@ -264,19 +273,15 @@ export function OrdensClient({ podeCriar, podeApagar }: { podeCriar: boolean; po
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="fil-equip">Equipamento</Label>
-            <select
+            {/* Campo com pesquisa: 200+ máquinas num select obrigavam a correr a lista toda */}
+            <SelecionarEquipamento
               id="fil-equip"
-              className="border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+              equipamentos={dados?.equipamentos || []}
               value={fEquip}
-              onChange={(e) => setFEquip(e.target.value)}
-            >
-              <option value="">Todos</option>
-              {(dados?.equipamentos || []).map((e) => (
-                <option key={e.id} value={String(e.id)}>
-                  {e.code} - {e.fleet_type || ""}
-                </option>
-              ))}
-            </select>
+              onChange={setFEquip}
+              placeholder="Todos"
+              todosLabel="Todas as máquinas"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="fil-fisico">Estado físico</Label>
@@ -459,20 +464,13 @@ export function OrdensClient({ podeCriar, podeApagar }: { podeCriar: boolean; po
               <Label htmlFor="n-equip">
                 Equipamento <span className="text-erro">*</span>
               </Label>
-              <select
+              {/* Campo com pesquisa: escreve o nº da máquina e a lista descarrega */}
+              <SelecionarEquipamento
                 id="n-equip"
-                required
-                className="border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                equipamentos={dados?.equipamentos || []}
                 value={fEquipamento}
-                onChange={(e) => setFEquipamento(e.target.value)}
-              >
-                <option value="">- Selecionar -</option>
-                {(dados?.equipamentos || []).map((e) => (
-                  <option key={e.id} value={String(e.id)}>
-                    {e.code} - {e.fleet_type || ""}
-                  </option>
-                ))}
-              </select>
+                onChange={setFEquipamento}
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="n-sector">

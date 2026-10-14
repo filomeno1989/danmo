@@ -216,11 +216,20 @@
     font-family: var(--font-sans);
     line-height: 1.55;
     -webkit-tap-highlight-color: transparent;
-    /* Transição suave do tema (desactivada durante a primeira carga) */
-    transition: background-color 0.25s ease, color 0.25s ease;
+    /* Sem transição de cor no body: a troca de tema tem de ser
+       INSTANTÂNEA (a animação antiga, somada às centenas de elementos
+       que repintam, fazia o telemóvel mudar "por partes"). */
   }
   html {
     scroll-behavior: smooth;
+  }
+  /* Troca de tema instantânea: durante o flip claro/escuro, NENHUM
+       elemento anima. O shell/login ligam esta classe no <html> na hora
+       da troca e desligam-na meio segundo depois. */
+  html.sem-transicoes *,
+  html.sem-transicoes *::before,
+  html.sem-transicoes *::after {
+    transition: none !important;
   }
   /* Foco visível e consistente em todo o portal */
   :focus-visible {

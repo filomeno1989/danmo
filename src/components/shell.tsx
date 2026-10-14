@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
+import { trocarTemaInstantaneo } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -329,7 +330,7 @@ export function Shell({ utilizador, modulos, children }: Props) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+            onClick={() => trocarTemaInstantaneo(resolvedTheme, setTheme)}
             aria-label="Alternar tema"
             title="Alternar modo claro / escuro"
             className="size-10 text-topbar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"

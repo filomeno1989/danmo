@@ -32,6 +32,7 @@ import {
   UserRoundSearch
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { trocarTemaInstantaneo } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -327,7 +328,7 @@ function LoginConteudo() {
       <Button
         variant="outline"
         size="icon"
-        onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+        onClick={() => trocarTemaInstantaneo(resolvedTheme, setTheme)}
         aria-label="Alternar tema"
         title="Alternar modo claro / escuro"
         className="absolute top-4 right-4 z-10 size-10 rounded-full border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"

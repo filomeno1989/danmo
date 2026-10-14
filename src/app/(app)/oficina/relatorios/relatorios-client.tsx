@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/ui/modal";
 import { Cabeca, EtiquetaEstado, EtiquetaFisico, Rodar, Etiqueta, pedir } from "@/components/oficina/ui-bits";
+import { SelecionarEquipamento } from "@/components/oficina/selecionar-equipamento";
 import {
   ESTADOS_FISICO,
   ESTADOS_WORKFLOW,
@@ -644,20 +645,15 @@ export function RelatoriosClient({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="r-maq">Máquina</Label>
-              <select
+              {/* Campo com pesquisa: escreve o nº e a lista descarrega (200+ máquinas) */}
+              <SelecionarEquipamento
                 id="r-maq"
-                className="border-input bg-transparent h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+                equipamentos={dados?.equipamentos || []}
                 value={fMaquina}
-                onChange={(e) => setFMaquina(e.target.value)}
-              >
-                <option value="">Todas as máquinas</option>
-                {(dados?.equipamentos || []).map((e) => (
-                  <option key={e.id} value={String(e.id)}>
-                    {e.code}
-                    {e.fleet_type ? ` · ${e.fleet_type}` : ""}
-                  </option>
-                ))}
-              </select>
+                onChange={setFMaquina}
+                placeholder="Todas as máquinas"
+                todosLabel="Todas as máquinas"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="r-sector">Sector</Label>

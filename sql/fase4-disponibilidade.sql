@@ -153,8 +153,19 @@ create table if not exists public.disp_semana_geral (
 -- 8) PERMISSOES do modulo (igual ao padrao da oficina) -------------
 -- A matriz de permissoes e lida por nivel; damos o modulo "disponibilidade"
 -- aos mesmos niveis que ja veem a Oficina (o admin ve sempre tudo).
-insert into public.permissoes (nivel, modulo, accao, permitido)
-select n.nivel, 'disponibilidade', a.accao, true
+-- ATENCAO: a coluna chama-se "acao" (com UM c), igual na fase 1.
+insert into public.permissoes (nivel, modulo, acao, permitido)
+select n.nivel, 'disponibilidade', a.acao, true
 from (select distinct nivel from public.permissoes where modulo = 'oficina') n
-cross join (values ('ver'), ('criar'), ('editar'), ('apagar')) as a(accao)
+cross join (values ('ver'), ('criar'), ('editar'), ('apagar')) as a(acao)
+on conflict do nothing;
+
+-- Rede de seguranca: se a matriz ainda nao tiver linhas da Oficina,
+-- damos o modulo aos niveis que ja existem nos utilizadores activos
+-- (em vez de nao dar a ninguem). O admin ve sempre tudo de qualquer forma.
+insert into public.permissoes (nivel, modulo, acao, permitido)
+select n.nivel, 'disponibilidade', a.acao, true
+from (select distinct nivel from public.utilizadores where coalesce(ativo, true)) n
+cross join (values ('ver'), ('criar'), ('editar'), ('apagar')) as a(acao)
+where not exists (select 1 from public.permissoes where modulo = 'oficina')
 on conflict do nothing;

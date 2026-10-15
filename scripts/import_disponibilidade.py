@@ -216,32 +216,46 @@ def ler_resumo(wb, aba):
     return saida
 
 def ler_horometro(wb):
-    """Le a aba WORKED HOURS: (ref, mes, inicial, final)."""
+    """Le a aba WORKED HOURS: (ref, mes, inicial, final).
+
+    Layout real (igual em 2022 a 2026):
+      4 linhas de titulo (HOURMETER INITIAL / HOURMETER FINAL / WORKED HOURS)
+      depois: MÁQUINA / EQUIPAMENTO + nomes dos meses (celulas fundidas sobre
+      os trios INITIAL / END / W.H.) e a linha ITEM | CODE | NAME | GROUP |
+      INITIAL | END | W.H. | ...; os dados vem a seguir.
+    """
     if "WORKED HOURS" not in wb.sheetnames:
         return []
     ws = wb["WORKED HOURS"]
     linhas = list(ws.iter_rows(values_only=True))
+    # a linha de sub-cabecalho e a que tem ITEM e CODE
     sub = None
-    for i, row in enumerate(linhas[:12]):
-        if "INITIAL" in [txt(v).upper() for v in row]:
+    for i, row in enumerate(linhas[:20]):
+        vals = [txt(v).upper() for v in row]
+        if "ITEM" in vals and "CODE" in vals:
             sub = i
             break
     if sub is None:
         return []
     cab_sub = linhas[sub]
+    col_ref = next((j for j, v in enumerate(cab_sub) if txt(v).upper() == "CODE"), None)
+    if col_ref is None:
+        return []
     nomes_mes = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY",
                  "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"]
+    # os meses vao na linha de CIMA, fundidos sobre cada trio; guardamos o
+    # mes corrente e ligamos cada coluna INITIAL do sub-cabecalho a esse mes
     meses = {}
     mes_actual = None
     if sub >= 1:
-        for j, v in enumerate(linhas[sub - 1]):
+        for j in range(len(cab_sub)):
+            v = linhas[sub - 1][j] if j < len(linhas[sub - 1]) else None
             t = txt(v).upper()
             if t in nomes_mes:
                 mes_actual = nomes_mes.index(t) + 1
-            if t == "INITIAL" and mes_actual:
+            if mes_actual and txt(cab_sub[j]).upper() == "INITIAL":
                 meses[j] = mes_actual
-    col_ref = next((j for j, v in enumerate(cab_sub) if txt(v).upper() == "CODE"), None)
-    if col_ref is None or not meses:
+    if not meses:
         return []
     saida = []
     for row in linhas[sub + 1:]:

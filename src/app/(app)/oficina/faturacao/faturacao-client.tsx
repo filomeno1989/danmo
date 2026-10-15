@@ -11,7 +11,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Download, Pencil, Plus, Printer, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -92,6 +91,8 @@ export function FaturacaoClient({
   ]);
   const [editObs, setEditObs] = useState("");
   const [aGravar, setAGravar] = useState(false);
+  const [aExcel, setAExcel] = useState(false);
+  const [aPdf, setAPdf] = useState(false);
 
   const carregar = useCallback(async () => {
     setACarregar(true);
@@ -277,81 +278,477 @@ export function FaturacaoClient({
 
   /* ============ Exportações (Excel e PDF) ============ */
 
-  function exportarExcel() {
+  async function exportarExcel() {
     if (!linhas.length) {
       toast.error("Não há fechos para exportar com este filtro.");
       return;
     }
-    const wb = XLSX.utils.book_new();
+    setAExcel(true);
+    try {
+      const XLSXS = await import("xlsx-js-style");
+      const wb = XLSXS.utils.book_new();
+      const emissao = agoraEmissao();
+      const borda = { style: "thin" as const, color: { rgb: "B7C4BC" } };
+      const bordas = { top: borda, bottom: borda, left: borda, right: borda };
 
-    // Folha 1: resumo por mês, com linha TOTAL no fim
-    const resumoRows: Record<string, string | number>[] = porMes.map((m) => ({
-      "Mês": etiquetaMes(m.mes),
-      "Obras": m.obras,
-      "Horas CdM": m.horas_cdm,
-      "Horas nossas": m.horas_nossas,
-      "Diferença (h)": arred2(m.horas_cdm - m.horas_nossas),
-      "Material (MT)": m.total_material,
-      "Total geral (MT)": m.total_geral
-    }));
-    resumoRows.push({
-      "Mês": "TOTAL",
-      "Obras": totais.obras,
-      "Horas CdM": totais.horas_cdm,
-      "Horas nossas": totais.horas_nossas,
-      "Diferença (h)": arred2(totais.horas_cdm - totais.horas_nossas),
-      "Material (MT)": totais.total_material,
-      "Total geral (MT)": totais.total_geral
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumoRows), "Resumo por mês");
+      /** Folha de relatório formatada: títulos da empresa, cabeçalho verde,
+       *  zebra nos dados, formatos de número e linha TOTAL destacada. */
+      function montarFolha(
+        nome: string,
+        cabecalhos: string[],
+        dadosAoa: (string | number)[][],
+        larguras: number[],
+        colsMoeda: number[],
+        colsHoras: number[],
+        colsWrap: number[],
+        linhaTotal?: (string | number)[],
+        comFiltro?: boolean
+      ) {
+        const aoa: (string | number)[][] = [
+          ["DANMO SERVICE SYSTEM, LDA"],
+          ["Relatório de Faturação CdM - Obras Fechadas"],
+          [`Período: ${etiquetaPeriodo}`],
+          [`Emitido em ${emissao} (Portal Interno Danmo)`],
+          [],
+          cabecalhos,
+          ...dadosAoa
+        ];
+        if (linhaTotal) aoa.push(linhaTotal);
+        const ws = XLSXS.utils.aoa_to_sheet(aoa);
+        const nCol = cabecalhos.length;
+        const nLin = aoa.length;
+        ws["!cols"] = larguras.map((w) => ({ wch: w }));
+        ws["!merges"] = [0, 1, 2, 3].map((l) => ({ s: { r: l, c: 0 }, e: { r: l, c: nCol - 1 } }));
+        if (comFiltro) {
+          ws["!autofilter"] = {
+            ref: XLSXS.utils.encode_range({
+              s: { r: 5, c: 0 },
+              e: { r: nLin - (linhaTotal ? 2 : 1), c: nCol - 1 }
+            })
+          };
+        }
+        for (let r = 0; r < nLin; r++) {
+          for (let c = 0; c < nCol; c++) {
+            const cel = ws[XLSXS.utils.encode_cell({ r, c })];
+            if (!cel) continue;
+            if (r === 0) {
+              cel.s = { font: { name: "Calibri", sz: 11, bold: true, color: { rgb: "009639" } } };
+              continue;
+            }
+            if (r === 1) {
+              cel.s = { font: { name: "Calibri", sz: 14, bold: true, color: { rgb: "1A1A1A" } } };
+              continue;
+            }
+            if (r === 2 || r === 3) {
+              cel.s = { font: { name: "Calibri", sz: 10, italic: true, color: { rgb: "555555" } } };
+              continue;
+            }
+            if (r === 5) {
+              cel.s = {
+                font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "FFFFFF" } },
+                fill: { patternType: "solid", fgColor: { rgb: "009639" } },
+                alignment: {
+                  vertical: "center",
+                  horizontal: colsMoeda.includes(c) || colsHoras.includes(c) ? "right" : "left",
+                  wrapText: true
+                },
+                border: bordas
+              };
+              continue;
+            }
+            if (r > 5) {
+              const eTotal = Boolean(linhaTotal) && r === nLin - 1;
+              const eMoeda = colsMoeda.includes(c);
+              const eHoras = colsHoras.includes(c);
+              if (typeof cel.v === "string" && (eMoeda || eHoras)) {
+                const n = Number(cel.v);
+                if (Number.isFinite(n)) {
+                  cel.v = n;
+                  cel.t = "n";
+                }
+              }
+              cel.s = {
+                font: {
+                  name: "Calibri",
+                  sz: 10,
+                  bold: eTotal,
+                  color: { rgb: eTotal ? "005A28" : "1A1A1A" }
+                },
+                fill: {
+                  patternType: "solid",
+                  fgColor: { rgb: eTotal ? "E6F4EC" : r % 2 === 0 ? "F4F9F6" : "FFFFFF" }
+                },
+                alignment: {
+                  vertical: "center",
+                  horizontal: eMoeda || eHoras ? "right" : "left",
+                  wrapText: colsWrap.includes(c)
+                },
+                border: bordas,
+                ...(eMoeda ? { numFmt: "#,##0.00" } : {}),
+                ...(eHoras ? { numFmt: "#,##0.0" } : {})
+              };
+            }
+          }
+        }
+        XLSXS.utils.book_append_sheet(wb, ws, nome);
+      }
 
-    // Folha 2: detalhe de cada obra fechada, com linha TOTAL no fim
-    const detRows: Record<string, string | number>[] = linhas.map((l) => ({
-      "Nº Obra": l.numero_obra || "S/Nº",
-      "Máquina": l.equip_code || "-",
-      "Sector": l.sector || "-",
-      "Abertura": l.data_abertura ? formatarData(l.data_abertura) : "-",
-      "Fecho": formatarData(l.data_fecho),
-      "Dias até fecho": l.dias_ate_fecho,
-      "Dias pós-trabalho": l.dias_apos_trabalho,
-      "Horas CdM": l.horas_cdm,
-      "Horas nossas": l.horas_nossas,
-      "Diferença (h)": l.diferenca_horas,
-      "Valor/hora (MT)": l.valor_hora,
-      "Mão de obra (MT)": l.total_mao_obra,
-      "Material (MT)": l.total_material,
-      "Total geral (MT)": l.total_geral,
-      "Materiais":
-        l.materiais
-          .map((m) => `${m.material}: ${m.quantidade} x ${m.valor_unitario} = ${m.total} MT`)
-          .join(" | ") || "-",
-      "Responsável": l.responsavel || "-",
-      "Observação": l.observacao || ""
-    }));
-    detRows.push({
-      "Nº Obra": `TOTAL (${linhas.length} obras)`,
-      "Mão de obra (MT)": totais.total_mao_obra,
-      "Material (MT)": totais.total_material,
-      "Total geral (MT)": totais.total_geral
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detRows), "Detalhe das obras");
+      // Folha 1: resumo por mês, com linha TOTAL no fim
+      montarFolha(
+        "Resumo por mês",
+        ["Mês", "Obras", "Horas CdM", "Horas nossas", "Diferença (h)", "Material (MT)", "Total geral (MT)"],
+        porMes.map((m) => [
+          etiquetaMes(m.mes),
+          m.obras,
+          m.horas_cdm,
+          m.horas_nossas,
+          arred2(m.horas_cdm - m.horas_nossas),
+          m.total_material,
+          m.total_geral
+        ]),
+        [12, 8, 11, 12, 12, 15, 17],
+        [5, 6],
+        [2, 3, 4],
+        [],
+        [
+          "TOTAL",
+          totais.obras,
+          totais.horas_cdm,
+          totais.horas_nossas,
+          arred2(totais.horas_cdm - totais.horas_nossas),
+          totais.total_material,
+          totais.total_geral
+        ]
+      );
 
-    XLSX.writeFile(wb, `Faturacao_CdM_${sufixoPeriodo}.xlsx`);
-    toast.success(
-      `Excel exportado: ${linhas.length} obras (${etiquetaPeriodo}) com o total do período.`
-    );
+      // Folha 2: detalhe de cada obra fechada, com TOTAL no fim e filtro na tabela
+      montarFolha(
+        "Detalhe das obras",
+        [
+          "Nº Obra",
+          "Máquina",
+          "Sector",
+          "Abertura",
+          "Fecho",
+          "Dias até fecho",
+          "Dias pós-trab.",
+          "Horas CdM",
+          "Horas nossas",
+          "Dif. (h)",
+          "Valor/hora (MT)",
+          "Mão de obra (MT)",
+          "Material (MT)",
+          "Total geral (MT)",
+          "Materiais",
+          "Responsável",
+          "Observação"
+        ],
+        linhas.map((l) => [
+          l.numero_obra || "S/Nº",
+          l.equip_code || "-",
+          l.sector || "-",
+          l.data_abertura ? formatarData(l.data_abertura) : "-",
+          formatarData(l.data_fecho),
+          l.dias_ate_fecho,
+          l.dias_apos_trabalho,
+          l.horas_cdm,
+          l.horas_nossas,
+          l.diferenca_horas,
+          l.valor_hora,
+          l.total_mao_obra,
+          l.total_material,
+          l.total_geral,
+          l.materiais
+            .map((m) => `${m.material}: ${m.quantidade} x ${m.valor_unitario} = ${m.total} MT`)
+            .join(" | ") || "-",
+          l.responsavel || "-",
+          l.observacao || ""
+        ]),
+        [10, 10, 10, 11, 11, 9, 9, 9, 9, 8, 10, 13, 13, 14, 36, 16, 26],
+        [10, 11, 12, 13],
+        [7, 8, 9],
+        [14, 16],
+        [
+          `TOTAL (${linhas.length} obras)`,
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          totais.horas_cdm,
+          totais.horas_nossas,
+          arred2(totais.horas_cdm - totais.horas_nossas),
+          "",
+          totais.total_mao_obra,
+          totais.total_material,
+          totais.total_geral,
+          "",
+          "",
+          ""
+        ],
+        true
+      );
+
+      XLSXS.writeFile(wb, `Faturacao_CdM_${sufixoPeriodo}.xlsx`);
+      toast.success(
+        `Excel exportado: relatório formatado com ${linhas.length} obras (${etiquetaPeriodo}).`
+      );
+    } catch {
+      toast.error("Não foi possível gerar o Excel.");
+    } finally {
+      setAExcel(false);
+    }
   }
 
-  function exportarPdf() {
+  async function exportarPdf() {
     if (!linhas.length) {
       toast.error("Não há fechos para exportar com este filtro.");
       return;
     }
-    window.print();
+    setAPdf(true);
+    try {
+      const { jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
+      type DocComTabela = import("jspdf").jsPDF & { lastAutoTable: { finalY: number } };
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const L = doc.internal.pageSize.getWidth();
+      const A = doc.internal.pageSize.getHeight();
+      const M = 14;
+      const VERDE: [number, number, number] = [0, 150, 57];
+
+      /* Cabeçalho do documento */
+      doc.setFillColor(VERDE[0], VERDE[1], VERDE[2]);
+      doc.roundedRect(M, 10, 46, 13, 1.5, 1.5, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      doc.text("DANMO", M + 23, 18.2, { align: "center" });
+      doc.setTextColor(25, 25, 25);
+      doc.setFontSize(16);
+      doc.text("Relatório de Faturação CdM", M + 53, 16.5);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(95, 95, 95);
+      doc.text("Obras fechadas entregues à facturação da CdM", M + 53, 21.5);
+      doc.text(`Período: ${etiquetaPeriodo}   ·   Emitido em ${agoraEmissao()}`, M + 53, 26);
+      doc.setDrawColor(VERDE[0], VERDE[1], VERDE[2]);
+      doc.setLineWidth(0.8);
+      doc.line(M, 29.5, L - M, 29.5);
+
+      /* KPIs do período */
+      const kpis: { t: string; v: string; sub: string; verde: boolean }[] = [
+        { t: "OBRAS FECHADAS", v: String(totais.obras), sub: etiquetaPeriodo, verde: false },
+        {
+          t: "MÃO DE OBRA",
+          v: fmtMt(totais.total_mao_obra),
+          sub: `${fmtNum(totais.horas_cdm)} h consideradas pela CdM`,
+          verde: false
+        },
+        {
+          t: "MATERIAL",
+          v: fmtMt(totais.total_material),
+          sub: `${fmtNum(totais.horas_nossas)} h do nosso pessoal`,
+          verde: false
+        },
+        { t: "TOTAL GERAL", v: fmtMt(totais.total_geral), sub: "Mão de obra + material", verde: true }
+      ];
+      const kw = (L - 2 * M - 3 * 4) / 4;
+      kpis.forEach((k, i) => {
+        const x = M + i * (kw + 4);
+        doc.setFillColor(k.verde ? 230 : 248, k.verde ? 244 : 249, k.verde ? 236 : 250);
+        doc.setDrawColor(k.verde ? 0 : 203, k.verde ? 150 : 208, k.verde ? 57 : 214);
+        doc.roundedRect(x, 33, kw, 17, 1.5, 1.5, "FD");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(6.5);
+        doc.setTextColor(110, 110, 110);
+        doc.text(k.t, x + 3, 38);
+        doc.setFontSize(11);
+        doc.setTextColor(k.verde ? 0 : 25, k.verde ? 120 : 25, k.verde ? 60 : 25);
+        doc.text(k.v, x + 3, 44);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6.5);
+        doc.setTextColor(125, 125, 125);
+        doc.text(k.sub, x + 3, 47.6);
+      });
+
+      /* Secção 1: resumo por mês */
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(25, 25, 25);
+      doc.text("Resumo por mês", M, 58);
+
+      autoTable(doc, {
+        startY: 60,
+        margin: { left: M, right: M },
+        head: [["Mês", "Obras", "Horas CdM", "Horas nossas", "Diferença (h)", "Material (MT)", "Total geral (MT)"]],
+        body: porMes.map((m) => [
+          etiquetaMes(m.mes),
+          String(m.obras),
+          `${fmtNum(m.horas_cdm)} h`,
+          `${fmtNum(m.horas_nossas)} h`,
+          `${fmtNum(m.horas_cdm - m.horas_nossas)} h`,
+          fmtMt(m.total_material),
+          fmtMt(m.total_geral)
+        ]),
+        foot: [
+          [
+            "TOTAL",
+            String(totais.obras),
+            `${fmtNum(totais.horas_cdm)} h`,
+            `${fmtNum(totais.horas_nossas)} h`,
+            `${fmtNum(totais.horas_cdm - totais.horas_nossas)} h`,
+            fmtMt(totais.total_material),
+            fmtMt(totais.total_geral)
+          ]
+        ],
+        styles: {
+          fontSize: 8.5,
+          cellPadding: 1.8,
+          lineColor: [180, 190, 184],
+          lineWidth: 0.1,
+          textColor: [30, 30, 30]
+        },
+        headStyles: { fillColor: VERDE, textColor: [255, 255, 255], fontStyle: "bold" },
+        footStyles: { fillColor: [230, 244, 236], textColor: [0, 90, 40], fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [246, 250, 248] },
+        columnStyles: {
+          1: { halign: "right" },
+          2: { halign: "right" },
+          3: { halign: "right" },
+          4: { halign: "right" },
+          5: { halign: "right" },
+          6: { halign: "right", fontStyle: "bold" }
+        }
+      });
+
+      /* Secção 2: detalhe das obras */
+      const fimResumo = (doc as DocComTabela).lastAutoTable.finalY;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(25, 25, 25);
+      doc.text(`Detalhe das obras (${linhas.length})`, M, fimResumo + 8);
+
+      autoTable(doc, {
+        startY: fimResumo + 10,
+        margin: { left: M, right: M, top: 16, bottom: 12 },
+        head: [
+          [
+            "Nº Obra",
+            "Máquina",
+            "Fecho",
+            "Dias até fecho",
+            "Dias pós-trab.",
+            "H. CdM",
+            "H. nossas",
+            "Dif. (h)",
+            "Mão de obra (MT)",
+            "Material (MT)",
+            "Total geral (MT)"
+          ]
+        ],
+        body: linhas.map((l) => [
+          (l.numero_obra || "S/Nº") +
+            (l.materiais.length
+              ? `\n${l.materiais.map((m) => `${m.material} ${m.quantidade} x ${fmtNum(m.valor_unitario)}`).join("; ")}`
+              : ""),
+          l.equip_code || "-",
+          formatarData(l.data_fecho),
+          String(l.dias_ate_fecho),
+          String(l.dias_apos_trabalho),
+          `${fmtNum(l.horas_cdm)} h`,
+          `${fmtNum(l.horas_nossas)} h`,
+          `${fmtNum(l.diferenca_horas)} h`,
+          fmtNum(l.total_mao_obra),
+          fmtNum(l.total_material),
+          fmtNum(l.total_geral)
+        ]),
+        foot: [
+          [
+            `TOTAL GERAL (${linhas.length} obras)`,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            fmtNum(totais.total_mao_obra),
+            fmtNum(totais.total_material),
+            fmtNum(totais.total_geral)
+          ]
+        ],
+        styles: {
+          fontSize: 7.5,
+          cellPadding: 1.6,
+          lineColor: [180, 190, 184],
+          lineWidth: 0.1,
+          textColor: [30, 30, 30]
+        },
+        headStyles: { fillColor: VERDE, textColor: [255, 255, 255], fontSize: 7.5, fontStyle: "bold" },
+        footStyles: {
+          fillColor: [230, 244, 236],
+          textColor: [0, 90, 40],
+          fontSize: 7.5,
+          fontStyle: "bold",
+          halign: "right"
+        },
+        alternateRowStyles: { fillColor: [246, 250, 248] },
+        columnStyles: {
+          0: { cellWidth: 42 },
+          3: { halign: "right" },
+          4: { halign: "right" },
+          5: { halign: "right" },
+          6: { halign: "right" },
+          7: { halign: "right" },
+          8: { halign: "right" },
+          9: { halign: "right" },
+          10: { halign: "right", fontStyle: "bold" }
+        },
+        didParseCell: (d) => {
+          if (
+            d.section === "body" &&
+            d.column.index === 0 &&
+            typeof d.cell.raw === "string" &&
+            d.cell.raw.includes("\n")
+          ) {
+            d.cell.styles.fontSize = 6.3;
+            d.cell.styles.textColor = [95, 95, 95];
+          }
+        }
+      });
+
+      /* Rodapé em todas as páginas */
+      const nPag = doc.getNumberOfPages();
+      for (let p = 1; p <= nPag; p++) {
+        doc.setPage(p);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6.5);
+        doc.setTextColor(125, 125, 125);
+        doc.text(
+          "Dias até fecho: abertura -> fecho CdM. Dias pós-trabalho: última intervenção -> fecho. Diferença: horas CdM menos horas do nosso pessoal.",
+          M,
+          A - 8
+        );
+        doc.text(
+          `Danmo Service System, Lda - Portal Interno - Página ${p} de ${nPag}`,
+          L - M,
+          A - 8,
+          { align: "right" }
+        );
+      }
+
+      doc.save(`Faturacao_CdM_${sufixoPeriodo}.pdf`);
+      toast.success(`PDF exportado: relatório de ${linhas.length} obras (${etiquetaPeriodo}).`);
+    } catch {
+      toast.error("Não foi possível gerar o PDF.");
+    } finally {
+      setAPdf(false);
+    }
   }
 
   return (
-    <div className="nao-imprimir space-y-5">
+    <div className="space-y-5">
       <Cabeca
         titulo="Faturação CdM"
         subtitulo="Obras fechadas que vão a facturação: tempos, materiais e totais."
@@ -360,11 +757,11 @@ export function FaturacaoClient({
           {aCarregar ? <Rodar /> : <RotateCcw aria-hidden />}
           Actualizar
         </Button>
-        <Button variant="outline" size="sm" onClick={exportarExcel} disabled={!linhas.length}>
-          <Download aria-hidden /> Excel
+        <Button variant="outline" size="sm" onClick={exportarExcel} disabled={!linhas.length || aExcel}>
+          {aExcel ? <Rodar /> : <Download aria-hidden />} Excel
         </Button>
-        <Button variant="outline" size="sm" onClick={exportarPdf} disabled={!linhas.length}>
-          <Printer aria-hidden /> PDF
+        <Button variant="outline" size="sm" onClick={exportarPdf} disabled={!linhas.length || aPdf}>
+          {aPdf ? <Rodar /> : <Printer aria-hidden />} PDF
         </Button>
       </Cabeca>
 
@@ -717,181 +1114,8 @@ export function FaturacaoClient({
         </div>
       </Modal>
 
-      {/* Vista de impressão / PDF: só aparece ao imprimir ou guardar como PDF.
-          Respeita o filtro actual (mês/ano) e acaba sempre com o TOTAL GERAL. */}
-      <div className="so-imprimir">
-        <header className="imp-cabeca">
-          <h1>Faturação CdM - Obras Fechadas</h1>
-          <p>
-            Período: {etiquetaPeriodo} · Emitido em {formatarData(dataHojeISO())} · Portal Danmo
-            Service System
-          </p>
-        </header>
-
-        <h2>Resumo por mês</h2>
-        <table className="imp-tab">
-          <thead>
-            <tr>
-              <th>Mês</th>
-              <th>Obras</th>
-              <th>Horas CdM</th>
-              <th>Horas nossas</th>
-              <th>Diferença (h)</th>
-              <th>Material</th>
-              <th>Total geral</th>
-            </tr>
-          </thead>
-          <tbody>
-            {porMes.map((m) => (
-              <tr key={m.mes}>
-                <td>{etiquetaMes(m.mes)}</td>
-                <td>{m.obras}</td>
-                <td>{m.horas_cdm} h</td>
-                <td>{m.horas_nossas} h</td>
-                <td>{arred2(m.horas_cdm - m.horas_nossas)} h</td>
-                <td>{fmtMt(m.total_material)}</td>
-                <td>{fmtMt(m.total_geral)}</td>
-              </tr>
-            ))}
-            <tr className="imp-total">
-              <td>TOTAL</td>
-              <td>{totais.obras}</td>
-              <td>{totais.horas_cdm} h</td>
-              <td>{totais.horas_nossas} h</td>
-              <td>{arred2(totais.horas_cdm - totais.horas_nossas)} h</td>
-              <td>{fmtMt(totais.total_material)}</td>
-              <td>{fmtMt(totais.total_geral)}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <h2>Detalhe das obras ({linhas.length})</h2>
-        <table className="imp-tab">
-          <thead>
-            <tr>
-              <th>Nº Obra</th>
-              <th>Máquina</th>
-              <th>Fecho</th>
-              <th>Dias até fecho</th>
-              <th>Dias pós-trab.</th>
-              <th>H. CdM</th>
-              <th>H. nossas</th>
-              <th>Dif. (h)</th>
-              <th>Mão de obra</th>
-              <th>Material</th>
-              <th>Total geral</th>
-            </tr>
-          </thead>
-          <tbody>
-            {linhas.map((l) => (
-              <tr key={l.id}>
-                <td>
-                  {l.numero_obra || "S/Nº"}
-                  {l.materiais.length > 0 && (
-                    <div className="imp-mat">
-                      {l.materiais
-                        .map((m) => `${m.material} ${m.quantidade} x ${m.valor_unitario}`)
-                        .join("; ")}
-                    </div>
-                  )}
-                </td>
-                <td>{l.equip_code || "-"}</td>
-                <td>{formatarData(l.data_fecho)}</td>
-                <td>{l.dias_ate_fecho}</td>
-                <td>{l.dias_apos_trabalho}</td>
-                <td>{l.horas_cdm} h</td>
-                <td>{l.horas_nossas} h</td>
-                <td>{l.diferenca_horas} h</td>
-                <td>{fmtMt(l.total_mao_obra)}</td>
-                <td>{fmtMt(l.total_material)}</td>
-                <td>{fmtMt(l.total_geral)}</td>
-              </tr>
-            ))}
-            <tr className="imp-total">
-              <td colSpan={8}>TOTAL GERAL ({linhas.length} obras)</td>
-              <td>{fmtMt(totais.total_mao_obra)}</td>
-              <td>{fmtMt(totais.total_material)}</td>
-              <td>{fmtMt(totais.total_geral)}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <p className="imp-nota">
-          Dias até fecho: da abertura da obra ao fecho pela CdM. Dias pós-trabalho: da última
-          intervenção do nosso pessoal ao fecho. Diferença (h): horas consideradas pela CdM menos as
-          horas registadas pelo nosso pessoal.
-        </p>
-      </div>
-
-      <style jsx global>{`
-        .so-imprimir {
-          display: none;
-        }
-        @media print {
-          @page {
-            size: A4 landscape;
-            margin: 12mm;
-          }
-          .nao-imprimir {
-            display: none !important;
-          }
-          .so-imprimir {
-            display: block !important;
-            color: #000;
-            background: #fff;
-            font-family: Arial, sans-serif;
-            font-size: 11px;
-          }
-          .imp-cabeca {
-            border-bottom: 2px solid #009639;
-            padding-bottom: 6px;
-            margin-bottom: 10px;
-          }
-          .imp-cabeca h1 {
-            font-size: 16px;
-            font-weight: bold;
-            margin: 0;
-          }
-          .imp-cabeca p {
-            margin: 2px 0 0;
-            font-size: 10px;
-            color: #444;
-          }
-          .so-imprimir h2 {
-            font-size: 12px;
-            font-weight: bold;
-            margin: 12px 0 4px;
-          }
-          .imp-tab {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 10px;
-          }
-          .imp-tab th,
-          .imp-tab td {
-            border: 1px solid #999;
-            padding: 3px 5px;
-            text-align: left;
-          }
-          .imp-tab th {
-            background: #eee;
-          }
-          .imp-mat {
-            color: #444;
-            font-size: 9px;
-            margin-top: 2px;
-          }
-          .imp-total td {
-            font-weight: bold;
-            background: #f2f2f2;
-          }
-          .imp-nota {
-            margin-top: 10px;
-            font-size: 9px;
-            color: #555;
-          }
-        }
-      `}</style>
+      {/* Gráfico: faturações mensais do período filtrado, no fim do módulo */}
+      <GraficoMensal porMes={porMes} etiquetaPeriodo={etiquetaPeriodo} totalGeral={totais.total_geral} />
     </div>
   );
 }
@@ -1030,5 +1254,107 @@ function FechoLinha({
         </tr>
       )}
     </>
+  );
+}
+
+/* ---- Helpers dos relatórios ---- */
+
+/** Data e hora da emissão: "15/10/2026 às 09:42". */
+function agoraEmissao(): string {
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${dd}/${mm}/${d.getFullYear()} às ${hh}:${mi}`;
+}
+
+/** Número pt-PT com 2 decimais (sem o sufixo MT). */
+function fmtNum(n: number): string {
+  return new Intl.NumberFormat("pt-PT", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(n || 0);
+}
+
+/** Número compacto para o eixo e as barras: "1,2 M". */
+function fmtCompacto(n: number): string {
+  return new Intl.NumberFormat("pt-PT", {
+    notation: "compact",
+    maximumFractionDigits: 1
+  }).format(n || 0);
+}
+
+/* ---- Gráfico de faturações mensais (barras) ---- */
+function GraficoMensal({
+  porMes,
+  etiquetaPeriodo,
+  totalGeral
+}: {
+  porMes: ResumoMes[];
+  etiquetaPeriodo: string;
+  totalGeral: number;
+}) {
+  // Ordem cronológica: mês mais antigo à esquerda
+  const dadosGrafico = useMemo(() => [...porMes].reverse(), [porMes]);
+  const maximo = useMemo(() => Math.max(1, ...dadosGrafico.map((m) => m.total_geral)), [dadosGrafico]);
+  const niveis = [1, 0.75, 0.5, 0.25, 0];
+
+  return (
+    <Card className="card-sombra">
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-semibold">Faturação mensal</p>
+          <p className="text-muted-foreground text-xs">
+            Total do período: <span className="font-semibold text-[var(--primario)]">{fmtMt(totalGeral)}</span> · {etiquetaPeriodo}
+          </p>
+        </div>
+        {dadosGrafico.length ? (
+          <div className="flex gap-2">
+            <div className="flex h-56 w-14 shrink-0 flex-col justify-between pb-6 pr-1 text-right text-[10px] tabular-nums text-muted-foreground">
+              {niveis.map((n) => (
+                <span key={n} className="leading-none">
+                  {fmtCompacto(maximo * n)}
+                </span>
+              ))}
+            </div>
+            <div className="relative h-56 flex-1">
+              <div className="absolute inset-x-0 top-0 bottom-6 flex flex-col justify-between">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div key={i} className="border-t border-border/50" />
+                ))}
+              </div>
+              <div className="absolute inset-x-0 top-0 bottom-6 flex items-end gap-2 overflow-x-auto pb-1">
+                {dadosGrafico.map((m) => {
+                  const pct = Math.max(1.5, (m.total_geral / maximo) * 80);
+                  return (
+                    <div
+                      key={m.mes}
+                      className="flex h-full min-w-[42px] flex-1 flex-col"
+                      title={`${etiquetaMes(m.mes)}: ${m.obras} obras, ${fmtNum(m.horas_cdm)} h CdM, material ${fmtMt(m.total_material)}, total ${fmtMt(m.total_geral)}`}
+                    >
+                      <div className="flex flex-1 flex-col items-stretch justify-end">
+                        <span className="mb-0.5 text-center text-[10px] font-semibold text-[var(--primario)]">
+                          {fmtCompacto(m.total_geral)}
+                        </span>
+                        <div
+                          className="w-full rounded-t bg-[var(--primario)] transition-opacity hover:opacity-75"
+                          style={{ height: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="mt-1 truncate text-center text-[10px] text-muted-foreground">
+                        {etiquetaMes(m.mes)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm">Ainda não há faturação para mostrar.</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }

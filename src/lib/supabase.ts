@@ -140,6 +140,47 @@ export async function insert<T = Record<string, unknown>>(
   return (await r.json()) as T[];
 }
 
+/**
+ * Insere ou atualiza (upsert) em conflito com as colunas indicadas -
+ * ex.: upsert("disp_dias", linhas, "equipment_id,data"). Nunca duplica:
+ * a linha existente é atualizada com os dados novos.
+ */
+export async function upsert<T = Record<string, unknown>>(
+  tabela: string,
+  dados: unknown,
+  conflito: string
+): Promise<T[]> {
+  exigirChaves();
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${tabela}?on_conflict=${conflito}`, {
+    method: "POST",
+    headers: {
+      ...headers(),
+      Prefer: "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify(dados),
+    cache: "no-store"
+  });
+  if (!r.ok) {
+    const erro = (await r.json().catch(() => ({}))) as { message?: string };
+    throw new Error(erro.message || `Erro a gravar em ${tabela} (${r.status})`);
+  }
+  return (await r.json()) as T[];
+}
+
+/** DELETE por filtro PostgREST arbitrário (ex.: "equipment_id=eq.5&os_id=is.null"). */
+export async function delFiltro(tabela: string, filtro: string): Promise<void> {
+  exigirChaves();
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${tabela}?${filtro}`, {
+    method: "DELETE",
+    headers: headers(),
+    cache: "no-store"
+  });
+  if (!r.ok && r.status !== 404) {
+    const erro = (await r.json().catch(() => ({}))) as { message?: string };
+    throw new Error(erro.message || `Erro a apagar em ${tabela} (${r.status})`);
+  }
+}
+
 /** Atualiza registos que cumpram o filtro (coluna=eq.valor) e devolve as linhas. */
 export async function update<T = Record<string, unknown>>(
   tabela: string,

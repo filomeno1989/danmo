@@ -55,3 +55,32 @@ export function erroBase(e: unknown, accao: string): NextResponse {
   console.error(`[api/oficina] falha em ${accao}:`, msg);
   return NextResponse.json({ ok: false, erro: msg }, { status: 500 });
 }
+
+/**
+ * Guarda das rotas /api/disponibilidade/* - igual ao autorizado da Oficina,
+ * mas contra o módulo "disponibilidade" (a matriz da base decide).
+ */
+export async function autorizadoDisp(
+  accao: AccaoOficina
+): Promise<Sessao | NextResponse> {
+  const sessao = await obterSessao();
+  if (!sessao) {
+    return NextResponse.json(
+      { ok: false, erro: "Sessão expirada. Entra de novo." },
+      { status: 401 }
+    );
+  }
+  if (!pode(sessao, "disponibilidade", accao)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        erro:
+          accao === "ver"
+            ? "Não tens permissão para ver a Disponibilidade."
+            : `Não tens permissão para ${accao} na Disponibilidade.`
+      },
+      { status: 403 }
+    );
+  }
+  return sessao;
+}

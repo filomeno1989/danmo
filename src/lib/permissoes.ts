@@ -63,7 +63,13 @@ export const MODULOS: Modulo[] = [
     label: "Disponibilidade Equip.",
     icone: "Truck",
     fase: 0,
-    dev: true
+    sub: [
+      { label: "Painel", href: "/disponibilidade" },
+      { label: "Grelha Diária", href: "/disponibilidade/grelha" },
+      { label: "Horómetro", href: "/disponibilidade/horometro" },
+      { label: "Resumo Semanal", href: "/disponibilidade/semana" },
+      { label: "Configurações", href: "/disponibilidade/config" }
+    ]
   },
   {
     id: "admin",

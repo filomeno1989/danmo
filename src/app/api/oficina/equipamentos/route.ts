@@ -69,6 +69,24 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    // Código único: dois equipamentos com o mesmo código confundem a
+    // frota inteira (obras, checklists e histórico ficam ambíguos).
+    const codeLimpo = corpo.code.trim();
+    const duplicados = await query<{ id: number }>(
+      "equipment",
+      `select=id&code=eq.${encodeURIComponent(codeLimpo)}${
+        corpo.action === "editar" && corpo.id ? `&id=neq.${corpo.id}` : ""
+      }`
+    );
+    if (duplicados.length) {
+      return NextResponse.json(
+        {
+          ok: false,
+          erro: `Já existe um equipamento com o código ${codeLimpo}. Escolhe outro código.`
+        },
+        { status: 409 }
+      );
+    }
     const payload = {
       code: corpo.code.trim(),
       name: (corpo.name || "").trim() || null,

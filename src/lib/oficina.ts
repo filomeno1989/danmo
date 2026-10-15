@@ -146,6 +146,9 @@ export type ChecklistPreenchido = {
   folha_numero?: string | null;
   executante?: string | null;
   encarregado?: string | null;
+  /** Datas de assinatura gravadas quando o nome é preenchido (impresso). */
+  executante_data?: string | null;
+  encarregado_data?: string | null;
   observacoes_gerais?: string | null;
   substituido?: boolean;
 };
@@ -340,6 +343,40 @@ export const COR_ESTADO: Record<string, string> = {
   CdM: "bg-ambar-claro text-ambar-texto",
   Fechada: "bg-sucesso-bg text-sucesso"
 };
+
+/* ============ Checklist: regras partilhadas (servidor e testes) ============ */
+
+/**
+ * Filtro PostgREST para linhas de resposta com conteúdo real.
+ *
+ * Quando alguém clica "Sim" e depois despista o botão, a linha da
+ * resposta fica com tudo NULL - e não conta como "respondido". Sem
+ * este filtro, essas linhas vazias bloqueavam para sempre a apagagem
+ * de itens e secções do template.
+ */
+export const FILTRO_ITEM_RESPONDIDO =
+  "or=(executado.neq.null,estado.neq.null,observacao.neq.null)";
+
+/**
+ * Data de assinatura do Executante / Encarregado do checklist.
+ *
+ * - Nome mudou e ficou preenchido -> data de hoje (gravada no impresso);
+ * - Nome mudou e ficou vazio -> sem data;
+ * - Nome igual ao que já estava -> mantém a data anterior.
+ *
+ * Pura: recebe "hoje" em AAAA-MM-DD (o chamador usa dataHojeISO()).
+ */
+export function proximaDataAssinatura(
+  nomeNovo: string | null | undefined,
+  nomeAntigo: string | null | undefined,
+  dataAnterior: string | null | undefined,
+  hoje: string
+): string | null {
+  const novo = (nomeNovo || "").trim();
+  const antigo = (nomeAntigo || "").trim();
+  if (novo === antigo) return dataAnterior || null;
+  return novo ? hoje : null;
+}
 
 /* ============ Helpers de data e cálculo (iguais ao hub) ============ */
 

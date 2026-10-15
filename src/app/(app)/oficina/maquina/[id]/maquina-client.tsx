@@ -13,34 +13,30 @@
  * uma única vez, para não haver chamadas impuras durante o render.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, TriangleAlert } from "lucide-react";
+import { ArrowLeft, FileSpreadsheet, Printer, TriangleAlert } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Cabeca, EtiquetaFisico, Rodar } from "@/components/oficina/ui-bits";
+import { formatarData, truncar } from "@/lib/oficina";
 import {
-  formatarData,
-  truncar,
-  type Equipamento,
-  type Intervencao,
-  type OrdemServico,
-  type PecaOS
-} from "@/lib/oficina";
-
-type Dados = {
-  ok: boolean;
-  equip: Equipamento;
-  ordens: OrdemServico[];
-  intervencoes: (Intervencao & { obra_numero: string | null })[];
-  pecas: (PecaOS & { obra_numero: string | null })[];
-  colaboradores: { id: number; name: string; code?: string | null; setor?: string | null }[];
-};
+  diasDesdeUltimaDe,
+  exportarHistoricoExcel,
+  exportarHistoricoPdf,
+  resumoPecasDe,
+  tecnicosDe,
+  totalHorasDe,
+  type DadosHistorico
+} from "./exportar-historico";
 
 export function MaquinaClient({ equipId }: { equipId: number }) {
-  const [dados, setDados] = useState<Dados | null>(null);
+  const [dados, setDados] = useState<DadosHistorico | null>(null);
   const [erro, setErro] = useState("");
   const [aCarregar, setACarregar] = useState(true);
+  const [aExcel, setAExcel] = useState(false);
+  const [aPdf, setAPdf] = useState(false);
   /** Momento "agora" capturado uma única vez (sem impureza no render). */
   const [agora] = useState(() => Date.now());
 
@@ -65,17 +61,6 @@ export function MaquinaClient({ equipId }: { equipId: number }) {
     };
   }, [equipId]);
 
-  const recarregar = useCallback(async () => {
-    try {
-      const d = await fetch(`/api/oficina/maquina/${equipId}`, { cache: "no-store" });
-      const j = await d.json();
-      if (d.ok && j?.ok !== false) setDados(j);
-    } catch {
-      // silencioso: é só um refrescar manual
-    }
-  }, [equipId]);
-  void recarregar;
-
   /* ============ Dados desembalados (com valores seguros) ============ */
   const equip = dados?.equip || null;
   const ordens = useMemo(() => dados?.ordens || [], [dados]);
@@ -85,13 +70,8 @@ export function MaquinaClient({ equipId }: { equipId: number }) {
 
   /* ============ Cálculos (sempre executados, antes dos returns) ============ */
 
-  const totalHoras = intervencoes.reduce((s, r) => s + (parseFloat(String(r.hours)) || 0), 0);
-  const diasNaOficina =
-    ordens.length > 0
-      ? Math.floor(
-          (agora - new Date(ordens[ordens.length - 1].data_abertura || agora).getTime()) / 86400000
-        )
-      : 0;
+  const totalHoras = totalHorasDe(intervencoes);
+  const diasDesdeUltima = diasDesdeUltimaDe(ordens, agora);
 
   const distribFisico = useMemo(() => {
     const mapa = new Map<string, { qtd: number; dias: number }>();
@@ -106,39 +86,12 @@ export function MaquinaClient({ equipId }: { equipId: number }) {
     return [...mapa.entries()].sort((a, b) => b[1].qtd - a[1].qtd);
   }, [ordens, agora]);
 
-  const resumoPecas = useMemo(() => {
-    const mapa = new Map<string, { qtd: number; ultima: string | null }>();
-    pecas.forEach((p) => {
-      const atual = mapa.get(p.peca) || { qtd: 0, ultima: null };
-      const novaQtd = atual.qtd + (p.quantidade || 1);
-      const novaUltima =
-        !atual.ultima || (p.data || "") > atual.ultima ? p.data || null : atual.ultima;
-      mapa.set(p.peca, { qtd: novaQtd, ultima: novaUltima });
-    });
-    return [...mapa.entries()];
-  }, [pecas]);
+  const resumoPecas = useMemo(() => resumoPecasDe(pecas), [pecas]);
 
-  const tecnicos = useMemo(() => {
-    const mapa = new Map<
-      number,
-      { nome: string; code: string; setor: string; n: number; horas: number }
-    >();
-    intervencoes.forEach((r) => {
-      (r.tecnicos || []).forEach((t) => {
-        const atual = mapa.get(t.id) || {
-          nome: t.name,
-          code: t.code || "-",
-          setor: colaboradores.find((c) => c.id === t.id)?.setor || "-",
-          n: 0,
-          horas: 0
-        };
-        atual.n += 1;
-        atual.horas += parseFloat(String(r.hours)) || 0;
-        mapa.set(t.id, atual);
-      });
-    });
-    return [...mapa.values()].sort((a, b) => b.horas - a.horas);
-  }, [intervencoes, colaboradores]);
+  const tecnicos = useMemo(
+    () => tecnicosDe(intervencoes, colaboradores),
+    [intervencoes, colaboradores]
+  );
 
   const graficoHoras = useMemo(() => {
     const mapa = new Map<string, number>();
@@ -150,6 +103,34 @@ export function MaquinaClient({ equipId }: { equipId: number }) {
     const meses = [...mapa.keys()].sort().slice(-12);
     return { meses, valores: meses.map((m) => Math.round((mapa.get(m) || 0) * 100) / 100) };
   }, [intervencoes]);
+
+  /* ============ Exportações (PDF + Excel do histórico completo) ============ */
+
+  async function exportarExcel() {
+    if (!dados) return;
+    setAExcel(true);
+    try {
+      await exportarHistoricoExcel(dados);
+      toast.success("Excel do histórico exportado (5 folhas).");
+    } catch {
+      toast.error("Não foi possível gerar o Excel.");
+    } finally {
+      setAExcel(false);
+    }
+  }
+
+  async function exportarPdf() {
+    if (!dados) return;
+    setAPdf(true);
+    try {
+      await exportarHistoricoPdf(dados);
+      toast.success("PDF do histórico exportado.");
+    } catch {
+      toast.error("Não foi possível gerar o PDF.");
+    } finally {
+      setAPdf(false);
+    }
+  }
 
   /* ============ Estados de ecrã ============ */
 
@@ -181,6 +162,14 @@ export function MaquinaClient({ equipId }: { equipId: number }) {
         titulo={`Máquina ${equip.code}`}
         subtitulo={`${equip.fleet_type || "-"} - ${equip.group_name || "-"} - Adquirida em ${equip.year_acquired || "-"}`}
       >
+        <Button variant="outline" size="sm" onClick={exportarExcel} disabled={aExcel}>
+          {aExcel ? <Rodar /> : <FileSpreadsheet aria-hidden />}
+          Excel
+        </Button>
+        <Button variant="outline" size="sm" onClick={exportarPdf} disabled={aPdf}>
+          {aPdf ? <Rodar /> : <Printer aria-hidden />}
+          PDF
+        </Button>
         <Button variant="outline" size="sm" asChild>
           <Link href="/oficina/equipamentos">
             <ArrowLeft aria-hidden />
@@ -203,7 +192,7 @@ export function MaquinaClient({ equipId }: { equipId: number }) {
         <Kpi rotulo="Obras" valor={String(ordens.length)} />
         <Kpi rotulo="Intervenções" valor={String(intervencoes.length)} />
         <Kpi rotulo="Horas Totais" valor={`${Math.round(totalHoras * 100) / 100}h`} />
-        <Kpi rotulo="Dias desde a última obra" valor={String(Math.max(0, diasNaOficina))} />
+        <Kpi rotulo="Dias desde a última obra" valor={diasDesdeUltima == null ? "-" : String(diasDesdeUltima)} />
         <Kpi rotulo="Peças Registadas" valor={String(pecas.length)} />
       </div>
 

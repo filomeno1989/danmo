@@ -107,7 +107,9 @@ export function GestaoChecklist({
 
   // Carga automática: categoria E template escolhidos (antes o conteúdo
   // só chegava pelo botão Actualizar: escolher um checklist no dropdown
-  // não fazia NADA e a página parecia não funcionar).
+  // não fazia NADA e a página parecia não funcionar). Duplica o fetch do
+  // carregar() porque o lint proíbe chamá-lo directamente no efeito
+  // (setState síncrono dentro do efeito).
   useEffect(() => {
     let vivo = true;
     const params = new URLSearchParams();

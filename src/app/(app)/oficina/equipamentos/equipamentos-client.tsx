@@ -7,7 +7,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BarChart3, Pencil, Plus, RotateCcw, TriangleAlert } from "lucide-react";
+import {
+  BarChart3,
+  FileSpreadsheet,
+  Pencil,
+  Plus,
+  Printer,
+  RotateCcw,
+  TriangleAlert
+} from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Modal } from "@/components/ui/modal";
 import { Cabeca, Etiqueta, Rodar, enviar, pedir } from "@/components/oficina/ui-bits";
 import type { CategoriaEquip, Equipamento, GrupoEquip } from "@/lib/oficina";
+import { exportarEquipamentosExcel, exportarEquipamentosPdf } from "./exportar-lista";
 
 type Dados = {
   ok: boolean;
@@ -33,6 +43,8 @@ export function EquipamentosClient({
   const [dados, setDados] = useState<Dados | null>(null);
   const [erro, setErro] = useState("");
   const [aCarregar, setACarregar] = useState(true);
+  const [aExcel, setAExcel] = useState(false);
+  const [aPdf, setAPdf] = useState(false);
 
   const [fCategoria, setFCategoria] = useState("");
   const [fAtivo, setFAtivo] = useState("");
@@ -87,20 +99,31 @@ export function EquipamentosClient({
     };
   }, []);
 
+  /** lower-case sem acentos: "Pneumatico" encontra "Pneumático" (igual
+   *  à pesquisa do SelecionarEquipamento). */
+  function normalizar(s: string): string {
+    return s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  }
+
   const lista = useMemo(() => {
     if (!dados) return [];
-    const busca = fBusca.trim().toLowerCase();
+    const busca = normalizar(fBusca.trim());
     let l = [...dados.equipamentos];
     if (fCategoria) l = l.filter((e) => e.fleet_type === fCategoria);
     if (fAtivo) l = l.filter((e) => String(e.active) === fAtivo);
-    if (busca) l = l.filter((e) => (e.code || "").toLowerCase().includes(busca));
+    if (busca) {
+      // Acha pelo código, pelo nome, pelo modelo ou pela categoria
+      // (antes só achava pelo código exacto).
+      l = l.filter((e) =>
+        normalizar(`${e.code} ${e.name || ""} ${e.model || ""} ${e.fleet_type || ""}`).includes(busca)
+      );
+    }
     return l;
   }, [dados, fCategoria, fAtivo, fBusca]);
 
-  const gruposDaCategoria = useMemo(
-    () => (dados?.grupos || []).filter((g) => g.nome && (!form.fleet_type || true)),
-    [dados, form.fleet_type]
-  );
   const gruposFiltrados = useMemo(
     () =>
       (dados?.grupos || []).filter((g) => {
@@ -109,7 +132,47 @@ export function EquipamentosClient({
       }),
     [dados, form.fleet_type]
   );
-  void gruposDaCategoria;
+
+  /** Etiqueta dos filtros activos (subtítulo das exportações). */
+  function etiquetaFiltros(): string {
+    const partes: string[] = [];
+    partes.push(`Categoria: ${fCategoria || "todas"}`);
+    partes.push(`Estado: ${fAtivo === "true" ? "activos" : fAtivo === "false" ? "inactivos" : "todos"}`);
+    if (fBusca.trim()) partes.push(`Pesquisa: "${fBusca.trim()}"`);
+    return partes.join("  ·  ");
+  }
+
+  async function exportarExcel() {
+    if (!lista.length) {
+      toast.error("Não há equipamentos para exportar com estes filtros.");
+      return;
+    }
+    setAExcel(true);
+    try {
+      await exportarEquipamentosExcel(lista, etiquetaFiltros());
+      toast.success(`Excel exportado: ${lista.length} equipamentos.`);
+    } catch {
+      toast.error("Não foi possível gerar o Excel.");
+    } finally {
+      setAExcel(false);
+    }
+  }
+
+  async function exportarPdf() {
+    if (!lista.length) {
+      toast.error("Não há equipamentos para exportar com estes filtros.");
+      return;
+    }
+    setAPdf(true);
+    try {
+      await exportarEquipamentosPdf(lista, etiquetaFiltros());
+      toast.success(`PDF exportado: ${lista.length} equipamentos.`);
+    } catch {
+      toast.error("Não foi possível gerar o PDF.");
+    } finally {
+      setAPdf(false);
+    }
+  }
 
   function abrirNovo() {
     setEditId(null);
@@ -178,6 +241,14 @@ export function EquipamentosClient({
           {aCarregar ? <Rodar /> : <RotateCcw aria-hidden />}
           Actualizar
         </Button>
+        <Button variant="outline" size="sm" onClick={exportarExcel} disabled={aExcel}>
+          {aExcel ? <Rodar /> : <FileSpreadsheet aria-hidden />}
+          Excel
+        </Button>
+        <Button variant="outline" size="sm" onClick={exportarPdf} disabled={aPdf}>
+          {aPdf ? <Rodar /> : <Printer aria-hidden />}
+          PDF
+        </Button>
         {podeCriar && (
           <Button size="sm" onClick={abrirNovo}>
             <Plus aria-hidden />
@@ -227,8 +298,13 @@ export function EquipamentosClient({
             </select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="eq-busca">Buscar código</Label>
-            <Input id="eq-busca" value={fBusca} onChange={(e) => setFBusca(e.target.value)} placeholder="Ex: 45-30" />
+            <Label htmlFor="eq-busca">Buscar</Label>
+            <Input
+              id="eq-busca"
+              value={fBusca}
+              onChange={(e) => setFBusca(e.target.value)}
+              placeholder="Código, nome ou modelo (ex: 45-30)"
+            />
           </div>
         </CardContent>
       </Card>

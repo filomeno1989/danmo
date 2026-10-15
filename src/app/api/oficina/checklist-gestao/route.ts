@@ -15,6 +15,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { del, insert, query, update } from "@/lib/supabase";
 import { autorizado, eErro, erroBase, type AccaoOficina } from "@/lib/guarda-api";
+import { FILTRO_ITEM_RESPONDIDO } from "@/lib/oficina";
 import type {
   CategoriaEquip,
   ItemTemplate,
@@ -70,13 +71,14 @@ export async function GET(req: NextRequest) {
             )
           : [];
 
-        // Quantas vezes cada item já foi respondido (protecção contra apagar histórico)
+        // Quantas vezes cada item já foi respondido (protecção contra apagar histórico).
+        // Linhas vazias (clicou e despistou) NÃO contam como resposta.
         const usos: Record<number, number> = {};
         const itemIds = itensBrutos.map((i) => i.id);
         if (itemIds.length) {
           const respondidos = await query<{ template_item_id: number }>(
             "checklist_preenchidos_itens",
-            `select=template_item_id&template_item_id=in.(${itemIds.join(",")})`
+            `select=template_item_id&template_item_id=in.(${itemIds.join(",")})&${FILTRO_ITEM_RESPONDIDO}`
           );
           respondidos.forEach((r) => {
             usos[r.template_item_id] = (usos[r.template_item_id] || 0) + 1;
@@ -231,7 +233,9 @@ export async function POST(req: NextRequest) {
         if (itens.length) {
           const respondidos = await query<{ template_item_id: number }>(
             "checklist_preenchidos_itens",
-            `select=template_item_id&template_item_id=in.(${itens.map((i) => i.id).join(",")})`
+            `select=template_item_id&template_item_id=in.(${itens
+              .map((i) => i.id)
+              .join(",")})&${FILTRO_ITEM_RESPONDIDO}`
           );
           if (respondidos.length) {
             return NextResponse.json(
@@ -295,7 +299,7 @@ export async function POST(req: NextRequest) {
         }
         const respondidos = await query<{ id: number }>(
           "checklist_preenchidos_itens",
-          `select=id&template_item_id=eq.${corpo.itemId}`
+          `select=id&template_item_id=eq.${corpo.itemId}&${FILTRO_ITEM_RESPONDIDO}`
         );
         if (respondidos.length) {
           return NextResponse.json(

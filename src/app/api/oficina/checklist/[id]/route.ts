@@ -15,6 +15,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import { insert, query, update } from "@/lib/supabase";
 import { autorizado, eErro, erroBase } from "@/lib/guarda-api";
+import { dataHojeISO, proximaDataAssinatura } from "@/lib/oficina";
 import type {
   ChecklistPreenchido,
   ColaboradorLinha,
@@ -196,6 +197,31 @@ export async function POST(req: NextRequest, ctx: Contexto) {
         encarregado: (c.encarregado || "").trim() || null,
         observacoes_gerais: (c.observacoes_gerais || "").trim() || null
       });
+
+      // Datas de assinatura (aparecem no impresso por baixo do nome):
+      // gravadas num passo separado para o cabeçalho nunca falhar por
+      // causa delas - se a base ainda não tiver as colunas, o resto
+      // grava na mesma e o problema fica no log.
+      try {
+        const anterior = lista[0];
+        const hoje = dataHojeISO();
+        await update("checklist_preenchidos", `id=eq.${ckId}`, {
+          executante_data: proximaDataAssinatura(
+            c.executante,
+            anterior.executante,
+            anterior.executante_data,
+            hoje
+          ),
+          encarregado_data: proximaDataAssinatura(
+            c.encarregado,
+            anterior.encarregado,
+            anterior.encarregado_data,
+            hoje
+          )
+        });
+      } catch (eDatas) {
+        console.error("checklist/[id]: datas de assinatura não gravadas:", eDatas);
+      }
       return NextResponse.json({ ok: true });
     }
 

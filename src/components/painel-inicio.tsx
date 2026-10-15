@@ -12,9 +12,9 @@ import { HeroiSaudacao } from "@/components/heroi-saudacao";
 import {
   CircleCheck,
   Clock,
-  CalendarClock,
   Shield,
   Cog,
+  Package,
   Layers,
   ArrowRight,
   type LucideIcon
@@ -143,39 +143,38 @@ export function PainelInicio({
           marcaAgua={Cog}
           titulo="Oficina & Manutenção"
           corTitulo="text-amber-950 dark:text-white"
-          texto="A próxima a entrar: Ordens de Serviço, Checklist, Equipamentos e Relatórios, tal como estão no hub actual."
+          texto="Já está no ar: Ordens de Serviço, Checklist, Equipamentos, Faturação CdM e Relatórios, com exportações Excel e PDF ao padrão da marca."
           corTexto="text-amber-900/80 dark:text-white/75"
           pill={
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-[0.72rem] font-bold text-amber-900 shadow-sm dark:bg-white/15 dark:text-amber-200">
-              <Clock className="size-3.5" aria-hidden />
-              A seguir
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600/15 px-3 py-1 text-[0.72rem] font-bold text-emerald-700 dark:bg-white/15 dark:text-emerald-200">
+              <CircleCheck className="size-3.5" aria-hidden />
+              No ar
             </span>
           }
           seta="border-amber-700/40 text-amber-950 hover:bg-amber-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
-          href="/em-migracao?mod=oficina"
-          externo
-          rotulo="Oficina e Manutenção: ver o plano da Fase 3"
+          href="/oficina"
+          rotulo="Abrir a Oficina e Manutenção"
         />
 
         <CartaoFase
           classeFundo="fase-vermelha text-red-950 dark:text-white"
-          icone={Layers}
+          icone={Package}
           tile="bg-red-600 text-white dark:bg-white/15 dark:text-white"
-          marcaAgua={Layers}
-          titulo="Restantes módulos"
+          marcaAgua={Package}
+          titulo="Gestão de Stock"
           corTitulo="text-red-950 dark:text-white"
-          texto="Faturação, Stock, Ferramentaria, HST, RH, Férias e a matriz visual de permissões, módulo a módulo, com a tua aprovação."
+          texto="A próxima a entrar: Materiais, Entradas, Saídas, Painel e Relatórios, tal como estão no hub actual. Depois: Ferramentaria, HST, RH e a matriz de permissões."
           corTexto="text-red-900/75 dark:text-white/75"
           pill={
             <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-[0.72rem] font-bold text-red-800 shadow-sm dark:bg-white/15 dark:text-red-200">
-              <CalendarClock className="size-3.5" aria-hidden />
-              Fases 2 e 4 a 7
+              <Clock className="size-3.5" aria-hidden />
+              A seguir
             </span>
           }
           seta="border-red-700/30 text-red-900 hover:bg-red-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
-          href="/em-migracao"
+          href="/em-migracao?mod=stock"
           externo
-          rotulo="Restantes módulos: ver o plano de migração"
+          rotulo="Gestão de Stock: ver o plano da migração"
         />
       </section>
 

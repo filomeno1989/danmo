@@ -55,7 +55,7 @@ const FOTOS = "/home/z/my-project/danmo/tests";
   const activo = await page.locator('a[aria-current="page"]').textContent();
   ok("Item activo é 'Início'", (activo || "").includes("Início"));
   ok("Admin vê 'Definições' no menu", corpo.includes("Definições"));
-  ok("Fases marcadas no menu", corpo.includes("Fase 3") && corpo.includes("Fase 7"));
+  ok("Fases marcadas no menu", corpo.includes("Fase 4") && corpo.includes("Fase 7"));
 
   // 4. Herói: saudação + selos + cartões de fase (nas cores do logo)
   ok("Herói tem 'Olá,'", corpo.includes("Olá,"));
@@ -65,8 +65,8 @@ const FOTOS = "/home/z/my-project/danmo/tests";
   ok("Sem o texto antigo 'novo portal Danmo'", !corpo.includes("Bem-vindo ao novo portal Danmo"));
   ok("Sem ponto verde junto ao nome", (await page.locator("h1 span.bg-sucesso").count()) === 0);
   ok("Selos de confiança", corpo.includes("Sistema seguro") && corpo.includes("Acesso autorizado") && corpo.includes("Em funcionamento"));
-  ok("Cartões de fase", corpo.includes("Fundação") && corpo.includes("Oficina & Manutenção") && corpo.includes("Restantes módulos"));
-  ok("Pills de estado", corpo.includes("Concluída") && corpo.includes("A seguir") && corpo.includes("Fases 2 e 4 a 7"));
+  ok("Cartões de fase", corpo.includes("Fundação") && corpo.includes("Oficina & Manutenção") && corpo.includes("Gestão de Stock"));
+  ok("Pills de estado", corpo.includes("Concluída") && corpo.includes("No ar") && corpo.includes("A seguir"));
   ok("Cartões nas cores do logo (verde + ambar + vermelho)",
      (await page.locator(".fase-verde").count()) === 1 &&
      (await page.locator(".fase-ambar").count()) === 1 &&
@@ -131,10 +131,9 @@ const FOTOS = "/home/z/my-project/danmo/tests";
      corpoFotos.indexOf("Chave de administração") < corpoFotos.indexOf("Posição 1"));
   ok("Zona de clicar ou arrastar", corpoFotos.includes("Clicar ou arrastar a foto"));
   ok("Explica que não é a senha de entrada", corpoFotos.includes("Não é a tua senha de entrada"));
-  const recarregar = page.getByRole("button", { name: /Recarregar as fotos/ });
-  ok("Botão Recarregar EXISTE e termina de carregar (activo, sem girar)",
-     (await recarregar.count()) === 1 && (await recarregar.isEnabled()) &&
-     (await recarregar.locator(".animate-spin").count()) === 0);
+  ok("Lista de posições carrega sozinha (sem o botão Recarregar antigo)",
+     corpoFotos.includes("Posição 1") &&
+     (await page.getByRole("button", { name: /Recarregar as fotos/ }).count()) === 0);
   await page.screenshot({ path: `${FOTOS}/v2-real-fotos.png` });
 
   // 10. Mobile: menu overlay com citação no fundo

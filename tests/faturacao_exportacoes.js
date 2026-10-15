@@ -3,11 +3,14 @@
  *  A. Grafico "Faturacao mensal" no fim do modulo: 3 barras (mock com 3 meses),
  *     ordem cronologica antigo -> recente, altura proporcional ao total,
  *     valores compactos visiveis e total do periodo no cartao.
- *  B. Excel: download dispara, nome com o periodo, ficheiro e um xlsx (zip)
- *     valido e traz os estilos da marca (verde 009639 no styles.xml).
- *  C. PDF: download dispara, nome com o periodo, assinatura %PDF e tamanho real
- *     (documento gerado pelo jsPDF, nao captura de ecra).
+ *  B. Excel: download dispara, nome novo sem CdM, ficheiro e um xlsx (zip)
+ *     valido, estilos da marca (verde 009639), titulo "Obras fechadas entregues
+ *     a facturação" e coluna Diagnóstico na folha Detalhe.
+ *  C. PDF: download dispara, nome novo sem CdM, assinatura %PDF, tamanho real
+ *     (documento gerado pelo jsPDF, nao captura de ecra), titulo do documento
+ *     e texto "Obras fechadas entregues" no conteudo.
  *  D. Filtro mensal: o grafico acompanha o filtro (so a barra do mes escolhido).
+ *  E. Diagnostico: visivel no detalhe da obra na pagina (com e sem texto).
  *
  * Ambiente: servidor dev SEM chaves (modo estrutura) + mock de rede
  * com dados do estilo da base real (Playwright route).
@@ -39,6 +42,7 @@ const LINHAS = [
       { id: 11, material: "Oxigênio", quantidade: 2, valor_unitario: 1250, total: 2500 },
       { id: 12, material: "Gas Propano", quantidade: 10, valor_unitario: 100, total: 1000 }
     ],
+    diagnostico: "Falha no sistema de marcha, ruido no motor",
     responsavel: "Filomeno",
     observacao: null
   },
@@ -99,6 +103,7 @@ const LINHAS = [
     total_material: 12000,
     total_geral: 90000,
     materiais: [{ id: 41, material: "Oxigênio", quantidade: 6, valor_unitario: 2000, total: 12000 }],
+    diagnostico: "Reparacao completa do sistema hidraulico, fugas na bomba",
     responsavel: "Filomeno",
     observacao: "Reparacao completa"
   }
@@ -170,8 +175,8 @@ const CAMINHO_PDF = "/home/z/my-project/scripts/tmp_faturacao_teste.pdf";
   ]);
   ok("Excel descarrega", true);
   ok(
-    "Nome do Excel com o periodo",
-    descExcel.suggestedFilename() === "Faturacao_CdM_todo_o_periodo.xlsx",
+    "Nome do Excel novo (sem CdM) com o periodo",
+    descExcel.suggestedFilename() === "Obras_Fechadas_Facturacao_todo_o_periodo.xlsx",
     descExcel.suggestedFilename()
   );
   await descExcel.saveAs(CAMINHO_EXCEL);
@@ -186,6 +191,19 @@ const CAMINHO_PDF = "/home/z/my-project/scripts/tmp_faturacao_teste.pdf";
   }
   ok("Excel com estilos da marca (verde 009639)", estilosXml.includes("009639"), estilosXml ? "styles.xml lido" : "unzip indisponivel");
   ok("Excel com formatos de numero MT", estilosXml.includes("#,##0.00") || estilosXml.includes("numFmtId"), estilosXml ? "styles.xml lido" : "unzip indisponivel");
+  // O xlsx-js-style grava as strings inline nas folhas (nao ha sharedStrings.xml)
+  let folhas = "";
+  for (const f of ["xl/worksheets/sheet1.xml", "xl/worksheets/sheet2.xml"]) {
+    try {
+      folhas += require("child_process").execSync(`unzip -p ${CAMINHO_EXCEL} ${f}`).toString();
+    } catch {
+      // unzip indisponivel no ambiente
+    }
+  }
+  ok("Excel com titulo novo (Obras fechadas entregues a facturação)", folhas.includes("Obras fechadas entregues à facturação"), folhas ? "folhas lidas" : "unzip indisponivel");
+  ok("Excel com coluna Diagnóstico", folhas.includes("Diagnóstico"), folhas ? "folhas lidas" : "unzip indisponivel");
+  ok("Excel com o diagnostico da obra no detalhe", folhas.includes("Falha no sistema de marcha"), folhas ? "folhas lidas" : "unzip indisponivel");
+  ok("Excel sem a descricao antiga com CdM", !folhas.includes("Relatório de Faturação CdM"), folhas ? "folhas lidas" : "unzip indisponivel");
   let folha1 = "";
   try {
     folha1 = require("child_process").execSync(`unzip -p ${CAMINHO_EXCEL} xl/worksheets/sheet1.xml`).toString();
@@ -201,8 +219,8 @@ const CAMINHO_PDF = "/home/z/my-project/scripts/tmp_faturacao_teste.pdf";
   ]);
   ok("PDF descarrega", true);
   ok(
-    "Nome do PDF com o periodo",
-    descPdf.suggestedFilename() === "Faturacao_CdM_todo_o_periodo.pdf",
+    "Nome do PDF novo (sem CdM) com o periodo",
+    descPdf.suggestedFilename() === "Obras_Fechadas_Facturacao_todo_o_periodo.pdf",
     descPdf.suggestedFilename()
   );
   await descPdf.saveAs(CAMINHO_PDF);
@@ -211,16 +229,42 @@ const CAMINHO_PDF = "/home/z/my-project/scripts/tmp_faturacao_teste.pdf";
   ok("PDF com tamanho real de relatorio", bufP.length > 3000, `${bufP.length} bytes`);
   const metaPdf = bufP.toString("latin1");
   ok("PDF gerado pelo jsPDF (metadados)", metaPdf.includes("jsPDF"), "Producer");
+  ok("PDF com titulo do documento definido", metaPdf.includes("/Title"), "Info dict");
+  ok("PDF com o titulo novo no conteudo", metaPdf.includes("Obras fechadas entregues"), "texto do cabecalho");
+  ok("PDF com o diagnostico da obra no detalhe", metaPdf.includes("Falha no sistema de marcha"), "sub-linha do detalhe");
+  ok("PDF sem a descricao antiga com CdM", !metaPdf.includes("Relatório de Faturação CdM"), "cabecalho limpo");
 
-  // ===== E. Filtro mensal: grafico acompanha =====
+  // ===== E. Diagnostico no detalhe da pagina =====
+  await pagina.locator('button[aria-label="Ver detalhes"]').first().click();
+  await pagina.waitForTimeout(200);
+  let corpo2 = normalizar(await pagina.textContent("body"));
+  ok(
+    "Detalhe da obra mostra o Diagnóstico",
+    corpo2.includes("Diagnóstico / Avaria / Motivo de entrada") && corpo2.includes("Falha no sistema de marcha"),
+    "linha 70001"
+  );
+  await pagina.locator('button[aria-label="Fechar detalhes"]').first().click();
+  await pagina.waitForTimeout(200);
+  await pagina.locator('button[aria-label="Ver detalhes"]').nth(2).click();
+  await pagina.waitForTimeout(200);
+  corpo2 = normalizar(await pagina.textContent("body"));
+  ok(
+    "Obra sem diagnóstico mostra mensagem",
+    corpo2.includes("A obra não tem diagnóstico preenchido."),
+    "linha 70003"
+  );
+  await pagina.locator('button[aria-label="Fechar detalhes"]').first().click();
+  await pagina.waitForTimeout(200);
+
+  // ===== F. Filtro mensal: grafico acompanha =====
   await pagina.locator("select").first().selectOption("2");
   await pagina.waitForTimeout(400);
   const fevDepois = await pagina.locator('div[title^="Fev 2025"]').count();
   const marDepois = await pagina.locator('div[title^="Mar 2025"]').count();
   ok("Filtro Fevereiro: grafico mostra so a barra de Fev", fevDepois === 1 && marDepois === 0, `fev=${fevDepois} mar=${marDepois}`);
-  const corpo2 = normalizar(await pagina.textContent("body"));
-  ok("Etiqueta do periodo acompanha o filtro", corpo2.includes("Fev (todos os anos)"));
-  ok("KPI do periodo filtrado (36 300,00 MT)", corpo2.includes("36 300,00 MT"));
+  const corpo3 = normalizar(await pagina.textContent("body"));
+  ok("Etiqueta do periodo acompanha o filtro", corpo3.includes("Fev (todos os anos)"));
+  ok("KPI do periodo filtrado (36 300,00 MT)", corpo3.includes("36 300,00 MT"));
 
   fs.rmSync(CAMINHO_EXCEL, { force: true });
   fs.rmSync(CAMINHO_PDF, { force: true });

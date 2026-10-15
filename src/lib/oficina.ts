@@ -204,6 +204,7 @@ export type LinhaFaturacao = ObraFechada & {
   equip_code?: string | null;
   sector?: string | null;
   data_abertura?: string | null;
+  diagnostico?: string | null; // descricao_avaria da obra (Diagnóstico / Avaria / Motivo de Entrada)
   // calculado pelo servidor
   horas_nossas: number; // soma das horas das intervenções (records)
   data_ultima_intervencao?: string | null;

@@ -306,7 +306,7 @@ export function FaturacaoClient({
       ) {
         const aoa: (string | number)[][] = [
           ["DANMO SERVICE SYSTEM, LDA"],
-          ["Relatório de Faturação CdM - Obras Fechadas"],
+          ["Obras fechadas entregues à facturação"],
           [`Período: ${etiquetaPeriodo}`],
           [`Emitido em ${emissao} (Portal Interno Danmo)`],
           [],
@@ -439,6 +439,7 @@ export function FaturacaoClient({
           "Mão de obra (MT)",
           "Material (MT)",
           "Total geral (MT)",
+          "Diagnóstico",
           "Materiais",
           "Responsável",
           "Observação"
@@ -458,16 +459,17 @@ export function FaturacaoClient({
           l.total_mao_obra,
           l.total_material,
           l.total_geral,
+          l.diagnostico || "",
           l.materiais
             .map((m) => `${m.material}: ${m.quantidade} x ${m.valor_unitario} = ${m.total} MT`)
             .join(" | ") || "-",
           l.responsavel || "-",
           l.observacao || ""
         ]),
-        [10, 10, 10, 11, 11, 9, 9, 9, 9, 8, 10, 13, 13, 14, 36, 16, 26],
+        [10, 10, 10, 11, 11, 9, 9, 9, 9, 8, 10, 13, 13, 14, 32, 36, 16, 26],
         [10, 11, 12, 13],
         [7, 8, 9],
-        [14, 16],
+        [14, 15, 17],
         [
           `TOTAL (${linhas.length} obras)`,
           "",
@@ -485,12 +487,13 @@ export function FaturacaoClient({
           totais.total_geral,
           "",
           "",
+          "",
           ""
         ],
         true
       );
 
-      XLSXS.writeFile(wb, `Faturacao_CdM_${sufixoPeriodo}.xlsx`);
+      XLSXS.writeFile(wb, `Obras_Fechadas_Facturacao_${sufixoPeriodo}.xlsx`);
       toast.success(
         `Excel exportado: relatório formatado com ${linhas.length} obras (${etiquetaPeriodo}).`
       );
@@ -517,21 +520,30 @@ export function FaturacaoClient({
       const M = 14;
       const VERDE: [number, number, number] = [0, 150, 57];
 
-      /* Cabeçalho do documento */
-      doc.setFillColor(VERDE[0], VERDE[1], VERDE[2]);
-      doc.roundedRect(M, 10, 46, 13, 1.5, 1.5, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(15);
-      doc.text("DANMO", M + 23, 18.2, { align: "center" });
+      /* Cabeçalho do documento com o logotipo da marca (public/logos/DANMO.png).
+       * Se o logotipo não carregar, mantém a caixa verde como reserva. */
+      const logo = await carregarLogo("/logos/DANMO.png");
+      if (logo) {
+        // DANMO.png é 142x83 px -> proporção 1,71; desenha com 13 mm de altura
+        doc.addImage(logo, "PNG", M, 8.5, 22.2, 13);
+      } else {
+        doc.setFillColor(VERDE[0], VERDE[1], VERDE[2]);
+        doc.roundedRect(M, 10, 46, 13, 1.5, 1.5, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(15);
+        doc.text("DANMO", M + 23, 18.2, { align: "center" });
+      }
+      const xTexto = M + (logo ? 28 : 53);
       doc.setTextColor(25, 25, 25);
+      doc.setFont("helvetica", "bold");
       doc.setFontSize(16);
-      doc.text("Relatório de Faturação CdM", M + 53, 16.5);
+      doc.text("Obras fechadas entregues à facturação", xTexto, 16.5);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       doc.setTextColor(95, 95, 95);
-      doc.text("Obras fechadas entregues à facturação da CdM", M + 53, 21.5);
-      doc.text(`Período: ${etiquetaPeriodo}   ·   Emitido em ${agoraEmissao()}`, M + 53, 26);
+      doc.text(`Período: ${etiquetaPeriodo}   ·   Emitido em ${agoraEmissao()}`, xTexto, 22);
+      doc.setProperties({ title: `Obras fechadas entregues à facturação - ${etiquetaPeriodo}` });
       doc.setDrawColor(VERDE[0], VERDE[1], VERDE[2]);
       doc.setLineWidth(0.8);
       doc.line(M, 29.5, L - M, 29.5);
@@ -647,22 +659,27 @@ export function FaturacaoClient({
             "Total geral (MT)"
           ]
         ],
-        body: linhas.map((l) => [
-          (l.numero_obra || "S/Nº") +
-            (l.materiais.length
-              ? `\n${l.materiais.map((m) => `${m.material} ${m.quantidade} x ${fmtNum(m.valor_unitario)}`).join("; ")}`
-              : ""),
-          l.equip_code || "-",
-          formatarData(l.data_fecho),
-          String(l.dias_ate_fecho),
-          String(l.dias_apos_trabalho),
-          `${fmtNum(l.horas_cdm)} h`,
-          `${fmtNum(l.horas_nossas)} h`,
-          `${fmtNum(l.diferenca_horas)} h`,
-          fmtNum(l.total_mao_obra),
-          fmtNum(l.total_material),
-          fmtNum(l.total_geral)
-        ]),
+        body: linhas.map((l) => {
+          const diag = (l.diagnostico || "").trim().replace(/\s+/g, " ");
+          const diagCurto = diag.length > 130 ? `${diag.slice(0, 130).trim()}...` : diag;
+          return [
+            (l.numero_obra || "S/Nº") +
+              (diagCurto ? `\nDiag.: ${diagCurto}` : "") +
+              (l.materiais.length
+                ? `\n${l.materiais.map((m) => `${m.material} ${m.quantidade} x ${fmtNum(m.valor_unitario)}`).join("; ")}`
+                : ""),
+            l.equip_code || "-",
+            formatarData(l.data_fecho),
+            String(l.dias_ate_fecho),
+            String(l.dias_apos_trabalho),
+            `${fmtNum(l.horas_cdm)} h`,
+            `${fmtNum(l.horas_nossas)} h`,
+            `${fmtNum(l.diferenca_horas)} h`,
+            fmtNum(l.total_mao_obra),
+            fmtNum(l.total_material),
+            fmtNum(l.total_geral)
+          ];
+        }),
         foot: [
           [
             `TOTAL GERAL (${linhas.length} obras)`,
@@ -738,7 +755,7 @@ export function FaturacaoClient({
         );
       }
 
-      doc.save(`Faturacao_CdM_${sufixoPeriodo}.pdf`);
+      doc.save(`Obras_Fechadas_Facturacao_${sufixoPeriodo}.pdf`);
       toast.success(`PDF exportado: relatório de ${linhas.length} obras (${etiquetaPeriodo}).`);
     } catch {
       toast.error("Não foi possível gerar o PDF.");
@@ -1208,7 +1225,14 @@ function FechoLinha({
       {aberta && (
         <tr className="bg-accent/20">
           <td colSpan={11} className="px-4 py-3">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase">Diagnóstico / Avaria / Motivo de entrada</p>
+                <p className="text-sm">
+                  {linha.diagnostico || "A obra não tem diagnóstico preenchido."}
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <p className="text-xs font-semibold uppercase">Materiais aplicados</p>
                 {linha.materiais.length ? (
@@ -1249,6 +1273,7 @@ function FechoLinha({
                 </p>
                 {linha.observacao && <p className="text-sm">Obs.: {linha.observacao}</p>}
               </div>
+              </div>
             </div>
           </td>
         </tr>
@@ -1258,6 +1283,33 @@ function FechoLinha({
 }
 
 /* ---- Helpers dos relatórios ---- */
+
+/** Lê o logotipo da marca e devolve um data URL PNG (para o jsPDF).
+ *  Devolve "" se não conseguir carregar (o PDF segue com a caixa verde). */
+function carregarLogo(caminho: string): Promise<string> {
+  return new Promise((resolvida) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const cv = document.createElement("canvas");
+          cv.width = img.naturalWidth;
+          cv.height = img.naturalHeight;
+          const ctx = cv.getContext("2d");
+          if (!ctx) return resolvida("");
+          ctx.drawImage(img, 0, 0);
+          resolvida(cv.toDataURL("image/png"));
+        } catch {
+          resolvida("");
+        }
+      };
+      img.onerror = () => resolvida("");
+      img.src = caminho;
+    } catch {
+      resolvida("");
+    }
+  });
+}
 
 /** Data e hora da emissão: "15/10/2026 às 09:42". */
 function agoraEmissao(): string {

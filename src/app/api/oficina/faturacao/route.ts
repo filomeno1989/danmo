@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
       osIds.length
         ? query<OrdemServico>(
             "ordens_servico",
-            `select=id,numero_obra,equipment_id,sector,data_abertura,status_atual&id=in.(${osIds.join(",")})`
+            `select=id,numero_obra,equipment_id,sector,data_abertura,status_atual,descricao_avaria&id=in.(${osIds.join(",")})`
           )
         : Promise.resolve([] as OrdemServico[]),
       osIds.length
@@ -136,6 +136,7 @@ export async function GET(req: NextRequest) {
         equip_code: equip?.code || null,
         sector: obra?.sector || null,
         data_abertura: obra?.data_abertura || null,
+        diagnostico: obra?.descricao_avaria || null,
         horas_nossas: horasNossas,
         data_ultima_intervencao: ultima,
         dias_ate_fecho: diasEntre(obra?.data_abertura, f.data_fecho),

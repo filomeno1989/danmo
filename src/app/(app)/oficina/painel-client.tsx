@@ -38,6 +38,18 @@ import {
   type OrdemServico
 } from "@/lib/oficina";
 
+/** Cor do ponto de cada estado físico (igual ao dashboard do hub:
+ * verde, vermelho, laranja, azul, âmbar, roxo, cinza, ciano). */
+const COR_ESTADO: Record<string, string> = {
+  "Avariada": "bg-red-500",
+  "Acidentada": "bg-orange-500",
+  "Pneumático": "bg-blue-500",
+  "Revisão/Manutenção": "bg-amber-500",
+  "Inspeção": "bg-purple-500",
+  "Aguarda Acessório": "bg-slate-500",
+  "Concluído": "bg-cyan-400"
+};
+
 type DadosPainel = {
   ok: boolean;
   categorias: CategoriaEquip[];
@@ -436,7 +448,9 @@ export function PainelOficina({
             </CardContent>
           </Card>
 
-          {/* Legenda de estados físicos (clicável) */}
+          {/* Legenda de estados físicos (clicável) - SEMPRE visível com
+              os 8 estados, como no dashboard do hub: um estado sem
+              máquinas mostra (0%) em vez de desaparecer. */}
           <div className="flex flex-wrap gap-2">
             <button
               key="disp"
@@ -455,7 +469,6 @@ export function PainelOficina({
             </button>
             {ESTADOS_FISICO.map((est) => {
               const qtd = calc.contagemEstados[est] || 0;
-              if (!qtd) return null;
               return (
                 <button
                   key={est}
@@ -466,9 +479,9 @@ export function PainelOficina({
                       calc.equipsFiltrados.filter((e) => estadoDoEquip(e.id, calc.naOficina) === est)
                     )
                   }
-                  className="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent"
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent ${qtd ? "" : "opacity-60"}`}
                 >
-                  <span className="size-2.5 rounded-full bg-muted-foreground" />
+                  <span className={`size-2.5 rounded-full ${COR_ESTADO[est] || "bg-muted-foreground"}`} />
                   {est}
                   <span className="font-bold tabular-nums">({Math.round(qtd / (calc.totalEquip || 1) * 100)}%)</span>
                 </button>

@@ -62,6 +62,17 @@ export function GestaoChecklist({
   const [tplLabel, setTplLabel] = useState("");
   const [tplAtivo, setTplAtivo] = useState(true);
 
+  // Preenche os campos gerais com o template carregado (usado pela carga
+  // inicial e pelo botão Actualizar - os setters são estáveis).
+  const aplicarConteudo = useCallback((t?: TemplateChecklist | null) => {
+    setTplNome(t?.nome || "");
+    setTplRef(t?.ref_versao || "");
+    setTplTipo(t?.tipo || "mecanica");
+    setTplHoras(t?.intervalo_horas != null ? String(t.intervalo_horas) : "");
+    setTplLabel(t?.intervalo_label || "");
+    setTplAtivo(Boolean(t?.ativo));
+  }, []);
+
   const [modalNovo, setModalNovo] = useState(false);
   const [novoNome, setNovoNome] = useState("");
   const [novoTipo, setNovoTipo] = useState("mecanica");
@@ -86,26 +97,23 @@ export function GestaoChecklist({
       if (templateId) params.set("templateId", templateId);
       const d = await pedir<Dados>(`/api/oficina/checklist-gestao?${params.toString()}`);
       setDados(d);
-      if (d.conteudo.template) {
-        setTplNome(d.conteudo.template.nome || "");
-        setTplRef(d.conteudo.template.ref_versao || "");
-        setTplTipo(d.conteudo.template.tipo || "mecanica");
-        setTplHoras(d.conteudo.template.intervalo_horas != null ? String(d.conteudo.template.intervalo_horas) : "");
-        setTplLabel(d.conteudo.template.intervalo_label || "");
-        setTplAtivo(Boolean(d.conteudo.template.ativo));
-      }
+      aplicarConteudo(d.conteudo.template);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro inesperado");
     } finally {
       setACarregar(false);
     }
-  }, [categoria, inativos, templateId]);
+  }, [categoria, inativos, templateId, aplicarConteudo]);
 
+  // Carga automática: categoria E template escolhidos (antes o conteúdo
+  // só chegava pelo botão Actualizar: escolher um checklist no dropdown
+  // não fazia NADA e a página parecia não funcionar).
   useEffect(() => {
     let vivo = true;
     const params = new URLSearchParams();
     if (categoria) params.set("categoria", categoria);
     if (inativos) params.set("inativos", "1");
+    if (templateId) params.set("templateId", templateId);
     const url = `/api/oficina/checklist-gestao?${params.toString()}`;
     fetch(url, { cache: "no-store" })
       .then(async (r) => {
@@ -113,6 +121,7 @@ export function GestaoChecklist({
         if (!vivo) return;
         if (!r.ok || d?.ok === false) throw new Error(d?.erro || "Falha ao carregar");
         setDados(d);
+        aplicarConteudo(d.conteudo?.template);
         setErro("");
       })
       .catch((e) => {
@@ -124,7 +133,7 @@ export function GestaoChecklist({
     return () => {
       vivo = false;
     };
-  }, [categoria, inativos]);
+  }, [categoria, inativos, templateId, aplicarConteudo]);
 
   async function criarTemplate() {
     if (aCriar) return;

@@ -31,7 +31,15 @@ import {
   MESES_PT
 } from "@/lib/disponibilidade";
 
-type ResumoMes = { mes: number; horasA: number; parado: number; total: number; pct: number; maquinas: number };
+type ResumoMes = {
+  mes: number;
+  horasA: number;
+  parado: number;
+  total: number;
+  pct: number;
+  maquinas: number;
+  estados?: Record<string, number>;
+};
 type ComparacaoAno = { ano: number; pct: number; horasA: number; total: number };
 type FrotaLinha = { frota: string; maquinas: number; pctMes: number | null; pctAno: number; paradoMes: number };
 type MaquinaPainel = {
@@ -60,6 +68,17 @@ function corMeta(pct: number, meta: number): string {
   return pct >= meta ? "bg-sucesso" : pct >= meta - 10 ? "bg-ambar-texto" : "bg-erro";
 }
 
+/* Estados do gráfico detalhado, na ordem da legenda do Power BI
+   (A · AC · BD · PM · SP · TY), com uma cor viva para cada um. */
+const ESTADOS_GRAFICO: { estado: string; codigo: string; cor: string }[] = [
+  { estado: "Disponível", codigo: "A", cor: "bg-sucesso" },
+  { estado: "Acidentada", codigo: "AC", cor: "bg-aviso" },
+  { estado: "Avariada", codigo: "BD", cor: "bg-erro" },
+  { estado: "Revisão/Manutenção", codigo: "PM", cor: "bg-ambar" },
+  { estado: "Aguarda Acessório", codigo: "SP", cor: "bg-info" },
+  { estado: "Pneumático", codigo: "TY", cor: "bg-violet-500" }
+];
+
 function Kpi({
   titulo, valor, nota, cor, icone
 }: {
@@ -82,6 +101,7 @@ export function PainelDisponibilidade() {
   const [ano, setAno] = useState(agora.getFullYear());
   const [mes, setMes] = useState(agora.getMonth() + 1);
   const [frota, setFrota] = useState("todos");
+  const [modoGrafico, setModoGrafico] = useState<"disp" | "estados">("disp");
   const [dados, setDados] = useState<PainelDados | null>(null);
   const [aCarregar, setACarregar] = useState(true);
   const [falha, setFalha] = useState("");
@@ -270,63 +290,144 @@ export function PainelDisponibilidade() {
             </div>
           )}
 
-          {/* Gráfico dos 12 meses */}
+          {/* Gráfico dos 12 meses (global ou por estados físicos) */}
           <div className="card-sombra space-y-4 p-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-sm font-semibold">
-                <BarChart3 className="size-4" /> Disponibilidade por mês em {ano}
+                <BarChart3 className="size-4" /> {modoGrafico === "disp" ? `Disponibilidade por mês em ${ano}` : `Estados físicos por mês em ${ano}`}
               </h2>
-              <span className="text-xs text-muted-foreground">linha verde = meta {meta}%</span>
-            </div>
-            {/* A barra e um bloco absoluto dentro de uma coluna com altura
-                definida (items-stretch): assim a percentagem tem uma base de
-                calculo real e a linha da meta alinha com o topo das barras. */}
-            <div className="relative">
-              <div
-                className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-sucesso/70"
-                style={{ bottom: `${(meta / maxEscala) * 100}%` }}
-                aria-hidden
-              />
-              <div className="flex h-48 items-stretch gap-1.5 sm:gap-3">
-                {dados.resumoMensal.map((m) => {
-                  const altura = (m.pct / maxEscala) * 100;
-                  const temDados = m.maquinas > 0;
-                  const destacado = mes !== 0 && m.mes === mes;
-                  return (
-                    <button
-                      key={m.mes}
-                      type="button"
-                      onClick={() => escolherMes(mes === m.mes ? 0 : m.mes)}
-                      aria-label={`${MESES_PT[m.mes - 1]} de ${ano}: ${temDados ? `${m.pct}%` : "sem registos"}`}
-                      title={`${MESES_PT[m.mes - 1]} de ${ano}: ${temDados ? `${m.pct}% (${m.horasA.toLocaleString("pt-PT")} h disp. de ${(m.total / 24).toFixed(0)} dias-máquina)` : "sem registos"}`}
-                      className={cn(
-                        "relative min-w-0 flex-1 cursor-pointer rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primario",
-                        destacado && "bg-primario/10 ring-1 ring-primario/40"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "absolute inset-x-0 bottom-0 rounded-t-md transition-colors",
-                          !temDados ? "bg-muted" : corMeta(m.pct, meta)
-                        )}
-                        style={{ height: `${temDados ? Math.max(2, altura) : 2}%` }}
-                      />
-                      {temDados && (
-                        <span
-                          className={cn(
-                            "absolute inset-x-0 whitespace-nowrap text-center text-[0.6rem] font-semibold tabular-nums sm:text-[0.68rem]",
-                            destacado ? "text-primario" : "text-muted-foreground"
-                          )}
-                          style={{ bottom: `calc(${altura}% + 3px)` }}
-                        >
-                          {m.pct}%
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+              <div className="flex items-center gap-2">
+                <div className="flex rounded-md border border-input p-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setModoGrafico("disp")}
+                    aria-pressed={modoGrafico === "disp"}
+                    className={cn(
+                      "cursor-pointer rounded px-2 py-0.5 font-medium transition-colors",
+                      modoGrafico === "disp" ? "bg-primario text-white" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Disponibilidade
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModoGrafico("estados")}
+                    aria-pressed={modoGrafico === "estados"}
+                    className={cn(
+                      "cursor-pointer rounded px-2 py-0.5 font-medium transition-colors",
+                      modoGrafico === "estados" ? "bg-primario text-white" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Estados físicos
+                  </button>
+                </div>
+                <span className="hidden text-xs text-muted-foreground md:inline">linha verde = meta {meta}%</span>
               </div>
             </div>
+            {modoGrafico === "estados" ? (
+              <div className="relative">
+                <div
+                  className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-sucesso/70"
+                  style={{ bottom: `${(meta / maxEscala) * 100}%` }}
+                  aria-hidden
+                />
+                <div className="flex h-48 items-stretch gap-1.5 sm:gap-3">
+                  {dados.resumoMensal.map((m) => {
+                    const destacado = mes !== 0 && m.mes === mes;
+                    const totalM = m.total || 0;
+                    const resumoEstados = ESTADOS_GRAFICO.map((e) => {
+                      const horasE = m.estados?.[e.estado] || 0;
+                      return { ...e, pctE: totalM ? (horasE / totalM) * 100 : 0 };
+                    });
+                    const resumoTxt = resumoEstados
+                      .map((e) => `${e.codigo} ${Math.round(e.pctE * 10) / 10}%`)
+                      .join(" · ");
+                    return (
+                      <button
+                        key={m.mes}
+                        type="button"
+                        onClick={() => escolherMes(mes === m.mes ? 0 : m.mes)}
+                        aria-label={`${MESES_PT[m.mes - 1]} de ${ano} por estado físico`}
+                        title={m.maquinas > 0 ? `${MESES_PT[m.mes - 1]} de ${ano}: ${resumoTxt}` : `${MESES_PT[m.mes - 1]} de ${ano}: sem registos`}
+                        className={cn(
+                          "relative min-w-0 flex-1 cursor-pointer rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primario",
+                          destacado && "bg-primario/10 ring-1 ring-primario/40"
+                        )}
+                      >
+                        <span className="absolute inset-0 flex items-end justify-center gap-[2px] px-0.5">
+                          {resumoEstados.map((e) => (
+                            <span key={e.estado} className="relative h-full min-w-0 flex-1">
+                              <span
+                                className={cn(
+                                  "absolute inset-x-0 bottom-0 rounded-t-[2px]",
+                                  m.maquinas > 0 ? e.cor : "bg-muted"
+                                )}
+                                style={{ height: `${m.maquinas > 0 ? Math.max(0.8, e.pctE) : 2}%` }}
+                              />
+                              {e.pctE >= 1 && m.maquinas > 0 && (
+                                <span
+                                  className="absolute inset-x-0 hidden whitespace-nowrap text-center text-[0.5rem] font-medium tabular-nums text-muted-foreground sm:block"
+                                  style={{ bottom: `calc(${e.pctE}% + 2px)` }}
+                                >
+                                  {e.pctE >= 10 ? `${Math.round(e.pctE)}%` : `${Math.round(e.pctE * 10) / 10}%`}
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="relative">
+                <div
+                  className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-sucesso/70"
+                  style={{ bottom: `${(meta / maxEscala) * 100}%` }}
+                  aria-hidden
+                />
+                <div className="flex h-48 items-stretch gap-1.5 sm:gap-3">
+                  {dados.resumoMensal.map((m) => {
+                    const altura = (m.pct / maxEscala) * 100;
+                    const temDados = m.maquinas > 0;
+                    const destacado = mes !== 0 && m.mes === mes;
+                    return (
+                      <button
+                        key={m.mes}
+                        type="button"
+                        onClick={() => escolherMes(mes === m.mes ? 0 : m.mes)}
+                        aria-label={`${MESES_PT[m.mes - 1]} de ${ano}: ${temDados ? `${m.pct}%` : "sem registos"}`}
+                        title={`${MESES_PT[m.mes - 1]} de ${ano}: ${temDados ? `${m.pct}% (${m.horasA.toLocaleString("pt-PT")} h disp. de ${(m.total / 24).toFixed(0)} dias-máquina)` : "sem registos"}`}
+                        className={cn(
+                          "relative min-w-0 flex-1 cursor-pointer rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primario",
+                          destacado && "bg-primario/10 ring-1 ring-primario/40"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "absolute inset-x-0 bottom-0 rounded-t-md transition-colors",
+                            !temDados ? "bg-muted" : corMeta(m.pct, meta)
+                          )}
+                          style={{ height: `${temDados ? Math.max(2, altura) : 2}%` }}
+                        />
+                        {temDados && (
+                          <span
+                            className={cn(
+                              "absolute inset-x-0 whitespace-nowrap text-center text-[0.6rem] font-semibold tabular-nums sm:text-[0.68rem]",
+                              destacado ? "text-primario" : "text-muted-foreground"
+                            )}
+                            style={{ bottom: `calc(${altura}% + 3px)` }}
+                          >
+                            {m.pct}%
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="flex gap-1.5 sm:gap-3">
               {dados.resumoMensal.map((m) => {
                 const destacado = mes !== 0 && m.mes === mes;
@@ -346,6 +447,16 @@ export function PainelDisponibilidade() {
                 );
               })}
             </div>
+            {modoGrafico === "estados" && (
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {ESTADOS_GRAFICO.map((e) => (
+                  <span key={e.estado} className="flex items-center gap-1 text-[0.62rem] text-muted-foreground">
+                    <span className={cn("inline-block size-2 rounded-sm", e.cor)} />
+                    {e.codigo} · {e.estado}
+                  </span>
+                ))}
+              </div>
+            )}
             {maquinasNoAno > 0 ? (
               <p className="text-xs text-muted-foreground">{maquinasNoAno} máquinas com registo no ano</p>
             ) : (

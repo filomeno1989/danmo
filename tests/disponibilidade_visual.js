@@ -29,6 +29,21 @@ function ok(nome, cond, extra = "") {
 
 const META = 80;
 
+/* horas por estado físico em cada mês (o campo "estados" da API),
+   coerentes com o total do mês: Disponível = pct do mês, o resto
+   repartido pelos outros estados (perfil parecido com o Power BI) */
+const estadosDoMes = (pct, total) => {
+  const h = (p) => Math.round((p / 100) * total);
+  return {
+    Disponível: h(pct),
+    Acidentada: h(0.3),
+    Avariada: h(6.5),
+    "Revisão/Manutenção": h(8.2),
+    "Aguarda Acessório": h(1.4),
+    Pneumático: h(0.9)
+  };
+};
+
 const PAINEL = {
   ok: true,
   meta: META,
@@ -40,7 +55,8 @@ const PAINEL = {
     parado: 20000 - i * 500,
     total: 124000,
     pct: [82.5, 84.1, 79.9, 85.3, 83.2, 86.0, 81.7, 84.9, 83.5, 87.2, 0, 0][i],
-    maquinas: i < 10 ? 249 : 0
+    maquinas: i < 10 ? 249 : 0,
+    estados: estadosDoMes([82.5, 84.1, 79.9, 85.3, 83.2, 86.0, 81.7, 84.9, 83.5, 87.2, 0, 0][i], 124000)
   })),
   comparacaoAnos: [
     { ano: 2022, pct: 71.4, horasA: 1200000, total: 1680000 },
@@ -92,7 +108,8 @@ const PAINEL_2025 = {
     parado: 34000 - i * 200,
     total: 124000,
     pct,
-    maquinas: 236
+    maquinas: 236,
+    estados: estadosDoMes(pct, 124000)
   })),
   horometroMes: null,
   disponibilidade: 65.5
@@ -308,6 +325,26 @@ let postsSemana = [];
   await pagina.locator("button[aria-label='Abrir Outubro de 2025']").click();
   await pagina.waitForTimeout(600);
   ok("Painel 2025: tocar noutro mês muda para Outubro", (await pagina.locator("select[aria-label='Mês']").inputValue() === "10"));
+
+  // 2b'''. modo detalhado por estados físicos (pedido do Filomeno, formato
+  // do Power BI): alternador -> 12 grupos de 6 mini-barras com a % de cada
+  // estado no mês, legenda de cores e a linha da meta a atravessar
+  await pagina.locator("button:text-is('Estados físicos')").click();
+  await pagina.waitForTimeout(400);
+  ok("Painel estados: título muda para estados físicos", (await pagina.locator("text=Estados físicos por mês em 2025").count()) > 0);
+  ok("Painel estados: legenda A · Disponível", (await pagina.locator("text=A · Disponível").count()) > 0);
+  ok("Painel estados: legenda PM · Revisão/Manutenção", (await pagina.locator("text=PM · Revisão/Manutenção").count()) > 0);
+  ok("Painel estados: legenda TY · Pneumático", (await pagina.locator("text=TY · Pneumático").count()) > 0);
+  const barraDispEstados = await pagina
+    .locator("button[aria-label='Setembro de 2025 por estado físico'] > span > span > span")
+    .first()
+    .evaluate((el) => el.getBoundingClientRect().height);
+  ok("Painel estados: barra Disponível de Setembro desenhada", barraDispEstados > 50);
+  ok("Painel estados: 6.5% de Avariada visível", (await pagina.locator("span:text-is('6.5%')").count()) > 0);
+  ok("Painel estados: 8.2% de Revisão/Manutenção visível", (await pagina.locator("span:text-is('8.2%')").count()) > 0);
+  await pagina.locator("button:text-is('Disponibilidade')").click();
+  await pagina.waitForTimeout(400);
+  ok("Painel: regresso ao modo disponibilidade", (await pagina.locator("text=Disponibilidade por mês em 2025").count()) > 0);
 
   // 2c. drill-down da frota: escolher Reach-Stacker 45T -> lista de máquinas
   // com a percentagem de cada uma (pedido do Filomeno)

@@ -90,13 +90,26 @@ export async function GET(request: Request) {
       const linhas = mensal.filter((l) => l.ano === ano && l.mes === i + 1);
       const horasA = linhas.reduce((s, l) => s + n(l.horas_a), 0);
       const horasTotal = linhas.reduce((s, l) => s + n(l.horas_total), 0);
+      const horasBD = linhas.reduce((s, l) => s + n(l.horas_bd), 0);
+      const horasAC = linhas.reduce((s, l) => s + n(l.horas_ac), 0);
+      const horasTY = linhas.reduce((s, l) => s + n(l.horas_ty), 0);
+      const horasPM = linhas.reduce((s, l) => s + n(l.horas_pm), 0);
+      const horasSP = linhas.reduce((s, l) => s + n(l.horas_sp), 0);
       return {
         mes: i + 1,
         horasA: Math.round(horasA),
         parado: Math.round(horasTotal - horasA),
         total: Math.round(horasTotal),
         pct: pctDisponibilidade(horasA, horasTotal),
-        maquinas: linhas.length
+        maquinas: linhas.length,
+        estados: {
+          Disponível: Math.round(horasA),
+          Acidentada: Math.round(horasAC),
+          Avariada: Math.round(horasBD),
+          "Revisão/Manutenção": Math.round(horasPM),
+          "Aguarda Acessório": Math.round(horasSP),
+          Pneumático: Math.round(horasTY)
+        }
       };
     });
 

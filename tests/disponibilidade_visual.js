@@ -59,6 +59,7 @@ const PAINEL = {
     "Inspeção": 0
   },
   horometroMes: { trabalhadas: 12480, lancadas: 180, totalMaquinas: 233 },
+  maquinas: null,
   porFrota: [
     { frota: "Basculantes", maquinas: 8, pctMes: 88.1, pctAno: 85.0, paradoMes: 456 },
     { frota: "Escavadoras", maquinas: 15, pctMes: 82.4, pctAno: 81.2, paradoMes: 1200 },
@@ -78,6 +79,53 @@ const PAINEL = {
   ],
   disponibilidade: 84.2
 };
+
+/* Painel de 2025 (o ano real importado dos excels) - percentagens a
+   oscilar e maquinas nos 12 meses; reproduz o bug que o Filomeno
+   reportou: escolher 2025 tem de MUDAR o grafico */
+const PAINEL_2025 = {
+  ...PAINEL,
+  ano: 2025,
+  resumoMensal: [73.8, 73.7, 69.2, 68.7, 67.7, 68.4, 64.9, 65.7, 65.9, 66.0, 66.4, 37.0].map((pct, i) => ({
+    mes: i + 1,
+    horasA: 90000 + i * 500,
+    parado: 34000 - i * 200,
+    total: 124000,
+    pct,
+    maquinas: 236
+  })),
+  horometroMes: null,
+  disponibilidade: 65.5
+};
+
+/* Painel quando uma frota e escolhida: a API devolve CADA maquina com a
+   sua percentagem (drill-down pedido pelo Filomeno) */
+const PAINEL_FROTA = {
+  ...PAINEL,
+  maquinas: [
+    { id: 2, code: "45-17", nome: "Sany", pctMes: 55.2, pctAno: 78.4, horasMesA: 411, paradoMes: 333 },
+    { id: 9, code: "45-01", nome: "Kalmar", pctMes: 92.0, pctAno: 85.1, horasMesA: 684, paradoMes: 60 }
+  ],
+  porFrota: []
+};
+
+/* Painel de um ano sem dados (ex.: 2026 enquanto o excel esta a trabalhar) */
+const PAINEL_VAZIO = {
+  ...PAINEL,
+  resumoMensal: Array.from({ length: 12 }, (_, i) => ({
+    mes: i + 1,
+    horasA: 0,
+    parado: 0,
+    total: 0,
+    pct: 0,
+    maquinas: 0
+  })),
+  horometroMes: null,
+  topParadas: [],
+  disponibilidade: 0
+};
+
+let painelVazio = false;
 
 const EQUIPS = [
   { id: 1, code: "2.5-01", name: "Doosan", group_name: "FKL 2.5T", active: true },
@@ -157,7 +205,16 @@ let postsSemana = [];
   const contexto = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   await contexto.addCookies([{ name: "dss_token", value: "estrutura", url: BASE }]);
 
-  await contexto.route("**/api/disponibilidade/painel*", (rota) => rota.fulfill({ json: PAINEL }));
+  await contexto.route("**/api/disponibilidade/painel*", (rota) => {
+    if (painelVazio) return rota.fulfill({ json: PAINEL_VAZIO });
+    const u = new URL(rota.request().url());
+    const fr = u.searchParams.get("frota") || "todos";
+    if (fr !== "todos") {
+      return rota.fulfill({ json: { ...PAINEL_FROTA, ano: Number(u.searchParams.get("ano") || 2026) } });
+    }
+    if (u.searchParams.get("ano") === "2025") return rota.fulfill({ json: PAINEL_2025 });
+    return rota.fulfill({ json: PAINEL });
+  });
   await contexto.route("**/api/disponibilidade/dias*", (rota) => {
     if (rota.request().method() === "GET") return rota.fulfill({ json: DIAS_GET });
     if (rota.request().method() === "POST") {
@@ -221,6 +278,35 @@ let postsSemana = [];
   ok("Painel: ano inteiro mostra 4 KPIs sem horometro", (await pagina.locator("text=horas do mês").count()) === 0);
   await pagina.selectOption("select[aria-label='Mês']", "10");
   await pagina.waitForTimeout(400);
+
+  // 2b. escolher 2025: o gráfico TEM de mudar (bug do Filomeno, Out/2026:
+  // "escolhi o ano de 2025 e o grafico não mudou nada")
+  await pagina.selectOption("select[aria-label='Ano']", "2025");
+  await pagina.waitForTimeout(600);
+  ok("Painel 2025: título do gráfico muda para 2025", (await pagina.locator("text=Disponibilidade por mês em 2025").count()) > 0);
+  ok("Painel 2025: percentagem 65.9% visível na barra (sem passar o rato)", (await pagina.locator("span:text-is('65.9%')").count()) > 0);
+  ok("Painel 2025: KPI disponibilidade 65.5%", (await pagina.locator("text=65.5%").count()) > 0);
+
+  // 2c. drill-down da frota: escolher Reach-Stacker 45T -> lista de máquinas
+  // com a percentagem de cada uma (pedido do Filomeno)
+  await pagina.selectOption("select[aria-label='Frota']", "Reach-Stacker 45T");
+  await pagina.waitForTimeout(600);
+  ok("Painel frota: cartão das máquinas da frota abre", (await pagina.locator("h2:has-text('Máquinas da frota Reach-Stacker 45T')").count()) > 0);
+  ok("Painel frota: contagem 2 máquinas activas", (await pagina.locator("text=2 máquinas activas").count()) > 0);
+  ok("Painel frota: 45-17 listada com 55.2%", (await pagina.locator("td:has-text('45-17')").count()) > 0 && (await pagina.locator("text=55.2%").count()) > 0);
+  ok("Painel frota: 45-01 listada", (await pagina.locator("td:has-text('45-01')").count()) > 0);
+
+  // 2d. voltar a todas as frotas: o quadro das 12 frotas regressa
+  await pagina.selectOption("select[aria-label='Frota']", "todos");
+  await pagina.waitForTimeout(600);
+  ok("Painel frota: quadro por frota regressa", (await pagina.locator("h2:has-text('Quadro por frota')").count()) > 0);
+
+  // 2e. ano sem dados: aviso claro com atalhos (o caso real de 2026)
+  painelVazio = true;
+  await pagina.goto(`${BASE}/disponibilidade`, { waitUntil: "networkidle" });
+  ok("Painel vazio: aviso de ano sem dados aparece", (await pagina.locator("text=ainda não tem dados importados").count()) > 0);
+  ok("Painel vazio: atalho para 2025 com a sua percentagem", (await pagina.locator("button:has-text('2025 · 83.1%')").count()) > 0);
+  painelVazio = false;
 
   /* ---------- 3. GRELHA ---------- */
   await pagina.goto(`${BASE}/disponibilidade/grelha`, { waitUntil: "networkidle" });

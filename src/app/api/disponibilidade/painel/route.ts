@@ -39,6 +39,15 @@ type MensalLinha = {
 
 type EquipLinha = { id: number; code: string; name: string | null; group_name: string | null; active: boolean };
 type HorometroLinha = { equipment_id: number; ano: number; mes: number; horas_trabalhadas: number | string | null };
+type MaquinaPainel = {
+  id: number;
+  code: string;
+  nome: string;
+  pctMes: number | null;
+  pctAno: number | null;
+  horasMesA: number;
+  paradoMes: number;
+};
 
 const n = (v: number | string | null | undefined): number => Number(v) || 0;
 
@@ -167,6 +176,51 @@ export async function GET(request: Request) {
       }))
       .sort((a, b) => a.frota.localeCompare(b.frota));
 
+    // --- drill-down: quando uma frota é escolhida, devolve CADA máquina
+    // da frota com a sua própria percentagem (mês e ano) - o pedido do
+    // Filomeno: "seleciono Reach-Stacker e ele descarrega todas com a
+    // percentagem de cada uma"
+    let maquinas: MaquinaPainel[] | null = null;
+    if (frota !== "todos") {
+      const mesPorEq = new Map<number, { a: number; t: number }>();
+      for (const l of linhasPeriodo) {
+        const r = mesPorEq.get(l.equipment_id) || { a: 0, t: 0 };
+        r.a += n(l.horas_a);
+        r.t += n(l.horas_total);
+        mesPorEq.set(l.equipment_id, r);
+      }
+      const anoPorEq = new Map<number, { a: number; t: number }>();
+      for (const l of mensal) {
+        if (l.ano !== ano) continue;
+        const r = anoPorEq.get(l.equipment_id) || { a: 0, t: 0 };
+        r.a += n(l.horas_a);
+        r.t += n(l.horas_total);
+        anoPorEq.set(l.equipment_id, r);
+      }
+      maquinas = equipamentos
+        .filter((e) => e.active && eqVisiveis.has(e.id))
+        .map((e) => {
+          const m = mesPorEq.get(e.id);
+          const a = anoPorEq.get(e.id);
+          return {
+            id: e.id,
+            code: e.code,
+            nome: e.name || "",
+            pctMes: m && m.t > 0 ? pctDisponibilidade(m.a, m.t) : null,
+            pctAno: a && a.t > 0 ? pctDisponibilidade(a.a, a.t) : null,
+            horasMesA: Math.round(m?.a || 0),
+            paradoMes: Math.round(m ? m.t - m.a : 0)
+          };
+        })
+        .sort((x, y) => {
+          // as piores do período primeiro (sem dados no fim), desempate por código
+          if (x.pctMes === null && y.pctMes === null) return x.code.localeCompare(y.code);
+          if (x.pctMes === null) return 1;
+          if (y.pctMes === null) return -1;
+          return x.pctMes - y.pctMes || x.code.localeCompare(y.code);
+        });
+    }
+
     // --- top 6 máquinas com mais horas paradas no período
     const paradasPorEq = new Map<number, number>();
     for (const l of linhasPeriodo) {
@@ -196,6 +250,7 @@ export async function GET(request: Request) {
       estados,
       horometroMes,
       porFrota,
+      maquinas,
       topParadas,
       disponibilidade: pctDisponibilidade(aPeriodo, totalPeriodo)
     });

@@ -68,6 +68,12 @@ export async function rpc<T = unknown>(
 /**
  * Consulta a tabela toda em páginas (o PostgREST devolve no máximo
  * 1000 linhas por pedido). Mesma ideia do queryTudo do hub actual.
+ *
+ * Desempenho: a 1a pagina vem sozinha (e traz o total pelo cabeçalho
+ * Content-Range); as restantes sao buscadas em paralelo (6 de cada vez).
+ * Num ano cheio de disp_mensal (10+ paginas) isto corta segundos de
+ * espera - antes cada pagina esperava a anterior, e o Painel parecia
+ * "nada acontece" enquanto recarregava.
  */
 export async function queryTudo<T = Record<string, unknown>>(
   tabela: string,
@@ -78,9 +84,7 @@ export async function queryTudo<T = Record<string, unknown>>(
   if (!/(^|&)order=/.test(params)) {
     params += (params ? "&" : "") + "order=id.asc";
   }
-  const todas: T[] = [];
-  let inicio = 0;
-  for (let i = 0; i < 200; i++) {
+  const pedirPagina = async (inicio: number): Promise<{ linhas: T[]; total: number }> => {
     const fim = inicio + tamanhoPagina - 1;
     const url = `${SUPABASE_URL}/rest/v1/${tabela}?${params}`;
     const r = await fetch(url, {
@@ -95,12 +99,28 @@ export async function queryTudo<T = Record<string, unknown>>(
       const erro = (await r.json().catch(() => ({}))) as { message?: string };
       throw new Error(erro.message || `Erro a ler ${tabela} (${r.status})`);
     }
-    const bloco = (await r.json()) as T[];
-    todas.push(...bloco);
-    if (bloco.length < tamanhoPagina) break;
-    inicio += tamanhoPagina;
+    const linhas = (await r.json()) as T[];
+    // Content-Range: "0-999/10568" (o total depois da barra)
+    const cr = r.headers.get("content-range") || "";
+    const total = Number(cr.split("/")[1]) || 0;
+    return { linhas, total };
+  };
+
+  const primeira = await pedirPagina(0);
+  if (primeira.linhas.length < tamanhoPagina) return primeira.linhas;
+
+  const total = primeira.total || primeira.linhas.length;
+  const inicioPaginas: number[] = [];
+  for (let i = tamanhoPagina; i < total; i += tamanhoPagina) inicioPaginas.push(i);
+
+  const blocos: T[][] = new Array(inicioPaginas.length);
+  const CONCORRENTES = 6;
+  for (let i = 0; i < inicioPaginas.length; i += CONCORRENTES) {
+    const lote = inicioPaginas.slice(i, i + CONCORRENTES);
+    const resultados = await Promise.all(lote.map((ini) => pedirPagina(ini)));
+    for (let j = 0; j < lote.length; j++) blocos[i + j] = resultados[j].linhas;
   }
-  return todas;
+  return [...primeira.linhas, ...blocos.flat()];
 }
 
 /**

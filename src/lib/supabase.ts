@@ -70,11 +70,18 @@ export async function rpc<T = unknown>(
  * 1000 linhas por pedido). Mesma ideia do queryTudo do hub actual.
  *
  * Desempenho: a 1a pagina vem sozinha (e traz o total pelo cabeçalho
- * Content-Range); as restantes sao buscadas em paralelo (6 de cada vez).
- * Num ano cheio de disp_mensal (10+ paginas) isto corta segundos de
- * espera - antes cada pagina esperava a anterior, e o Painel parecia
- * "nada acontece" enquanto recarregava.
+ * Content-Range, pedido com Prefer: count=exact); as restantes sao
+ * buscadas em paralelo (6 de cada vez).
+ *
+ * ATENCAO: o total no Content-Range so vem se pedirmos count=exact -
+ * sem isso o cabecalho vem "0-999/*" e ficavamos presos a uma unica
+ * pagina. Foi exactamente o bug que escondia 2023-2025 no Painel e
+ * cortava disp_mensal / disp_dias / disp_horometro na linha 1000.
+ * Se mesmo assim o total nao vier, pagina-se em ondas ate uma pagina
+ * vir incompleta (rede de seguranca).
  */
+const CONCORRENTES_PAGINAS = 12;
+
 export async function queryTudo<T = Record<string, unknown>>(
   tabela: string,
   params = "",
@@ -84,14 +91,18 @@ export async function queryTudo<T = Record<string, unknown>>(
   if (!/(^|&)order=/.test(params)) {
     params += (params ? "&" : "") + "order=id.asc";
   }
-  const pedirPagina = async (inicio: number): Promise<{ linhas: T[]; total: number }> => {
+  const pedirPagina = async (
+    inicio: number,
+    comContagem = false
+  ): Promise<{ linhas: T[]; total: number }> => {
     const fim = inicio + tamanhoPagina - 1;
     const url = `${SUPABASE_URL}/rest/v1/${tabela}?${params}`;
     const r = await fetch(url, {
       headers: {
         ...headers(),
         "Range-Unit": "items",
-        Range: `${inicio}-${fim}`
+        Range: `${inicio}-${fim}`,
+        ...(comContagem ? { Prefer: "count=exact" } : {})
       },
       cache: "no-store"
     });
@@ -100,25 +111,45 @@ export async function queryTudo<T = Record<string, unknown>>(
       throw new Error(erro.message || `Erro a ler ${tabela} (${r.status})`);
     }
     const linhas = (await r.json()) as T[];
-    // Content-Range: "0-999/10568" (o total depois da barra)
+    // Content-Range: "0-999/10568" (o total depois da barra) ou "0-999/*"
     const cr = r.headers.get("content-range") || "";
-    const total = Number(cr.split("/")[1]) || 0;
-    return { linhas, total };
+    const total = Number(cr.split("/")[1]);
+    return { linhas, total: Number.isFinite(total) ? total : 0 };
   };
 
-  const primeira = await pedirPagina(0);
+  const primeira = await pedirPagina(0, true);
   if (primeira.linhas.length < tamanhoPagina) return primeira.linhas;
 
-  const total = primeira.total || primeira.linhas.length;
-  const inicioPaginas: number[] = [];
-  for (let i = tamanhoPagina; i < total; i += tamanhoPagina) inicioPaginas.push(i);
+  const blocos: T[][] = [];
 
-  const blocos: T[][] = new Array(inicioPaginas.length);
-  const CONCORRENTES = 6;
-  for (let i = 0; i < inicioPaginas.length; i += CONCORRENTES) {
-    const lote = inicioPaginas.slice(i, i + CONCORRENTES);
-    const resultados = await Promise.all(lote.map((ini) => pedirPagina(ini)));
-    for (let j = 0; j < lote.length; j++) blocos[i + j] = resultados[j].linhas;
+  if (primeira.total > primeira.linhas.length) {
+    // total real: buscar as paginas restantes em paralelo (uma vaga unica
+    // quando cabem todas, ex. disp_mensal ~11 paginas)
+    const inicioPaginas: number[] = [];
+    for (let i = tamanhoPagina; i < primeira.total; i += tamanhoPagina) inicioPaginas.push(i);
+
+    for (let i = 0; i < inicioPaginas.length; i += CONCORRENTES_PAGINAS) {
+      const lote = inicioPaginas.slice(i, i + CONCORRENTES_PAGINAS);
+      const resultados = await Promise.all(lote.map((ini) => pedirPagina(ini)));
+      for (let j = 0; j < lote.length; j++) blocos[i + j] = resultados[j].linhas;
+    }
+  } else {
+    // total ausente: ondas de paginas ate uma vir incompleta (fim da tabela)
+    let inicio = tamanhoPagina;
+    while (true) {
+      const inicios = Array.from({ length: CONCORRENTES_PAGINAS }, (_, i) => inicio + i * tamanhoPagina);
+      const resultados = await Promise.all(inicios.map((ini) => pedirPagina(ini)));
+      let parar = false;
+      for (const res of resultados) {
+        if (res.linhas.length) blocos.push(res.linhas);
+        if (res.linhas.length < tamanhoPagina) {
+          parar = true;
+          break;
+        }
+      }
+      if (parar) break;
+      inicio += CONCORRENTES_PAGINAS * tamanhoPagina;
+    }
   }
   return [...primeira.linhas, ...blocos.flat()];
 }

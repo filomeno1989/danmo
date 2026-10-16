@@ -3,32 +3,25 @@
 /**
  * Painel da Disponibilidade - a vista de cima do módulo.
  *
- * Mostra, com os dados reais importados dos excels (2022-2026):
+ * Mostra:
  * - KPIs do período (disponibilidade %, horas disponíveis/paradas,
- *   horómetro do mês) contra a meta;
+ *   horómetro) contra a meta;
  * - gráfico dos 12 meses do ano (barras) com a linha da meta, o mês
- *   escolhido destacado e a percentagem VISÍVEL em cada barra (antes
- *   só aparecia ao passar o rato, e ninguém via nada);
+ *   escolhido destacado e a percentagem em cada barra;
  * - comparação de disponibilidade entre todos os anos da base;
  * - distribuição de horas por estado físico;
  * - quadro das 12 macro-frotas (mês e ano, contra a meta) OU, quando
  *   uma frota é escolhida, a lista das máquinas dessa frota com a
- *   percentagem de cada uma (drill-down pedido pelo Filomeno);
+ *   percentagem de cada uma;
  * - as 6 máquinas com mais horas paradas no período.
  *
- * Correcções do feedback de Outubro/2026:
- * - o ano escolhido sem dados (ex.: 2026, cujo excel ainda está a
- *   trabalhar) agora mostra um AVISO claro com atalhos para os anos
- *   com dados - antes ficava só a linha da meta sem explicação;
- * - qualquer recarregamento mostra "A actualizar..." e, se falhar,
- *   o erro aparece GRANDE com botão Tentar de novo - antes o erro era
- *   uma faixa discreta e o gráfico antigo ficava parado no ecrã,
- *   parecendo que "não muda nada";
- * - p.p. passou a levar a explicação (pontos percentuais) no ecrã.
+ * Se o ano aberto (corrente) ainda não tem registos, o painel comuta
+ * sozinho para o ano mais recente com dados - só na primeira carga;
+ * depois respeita sempre o que o utilizador escolher.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { BarChart3, CalendarDays, Clock, Gauge, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BarChart3, Clock, Gauge, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import { Cabeca, Etiqueta, Rodar, pedir } from "@/components/oficina/ui-bits";
 import { cn } from "@/lib/utils";
 import {
@@ -84,7 +77,7 @@ function Kpi({
   );
 }
 
-export function PainelDisponibilidade({ podeEditar }: { podeEditar: boolean }) {
+export function PainelDisponibilidade() {
   const agora = new Date();
   const [ano, setAno] = useState(agora.getFullYear());
   const [mes, setMes] = useState(agora.getMonth() + 1);
@@ -93,6 +86,7 @@ export function PainelDisponibilidade({ podeEditar }: { podeEditar: boolean }) {
   const [aCarregar, setACarregar] = useState(true);
   const [falha, setFalha] = useState("");
   const [tentativa, setTentativa] = useState(0);
+  const ajustouAno = useRef(false);
 
   useEffect(() => {
     // Carregamento em cadeia de promessas (sem setState sincrono no efeito)
@@ -104,6 +98,20 @@ export function PainelDisponibilidade({ podeEditar }: { podeEditar: boolean }) {
         if (vivo) {
           setDados(d);
           setFalha("");
+          // Primeira carga: se o ano corrente ainda não tem registos,
+          // abre o ano mais recente com dados (uma única vez).
+          if (!ajustouAno.current) {
+            ajustouAno.current = true;
+            if (!d.resumoMensal.some((m) => m.maquinas > 0)) {
+              const anosComDados = d.comparacaoAnos
+                .filter((c) => c.total > 0 && c.ano !== ano)
+                .map((c) => c.ano);
+              if (anosComDados.length) {
+                setAno(Math.max(...anosComDados));
+                setACarregar(true);
+              }
+            }
+          }
         }
       })
       .catch((e: Error) => {
@@ -139,15 +147,13 @@ export function PainelDisponibilidade({ podeEditar }: { podeEditar: boolean }) {
       : null;
 
   const totalEstados = dados ? Object.values(dados.estados).reduce((s, v) => s + v, 0) : 0;
-  const anoSemDados = dados ? dados.resumoMensal.every((m) => m.maquinas === 0) : false;
-  const anosComDados = dados ? dados.comparacaoAnos.filter((c) => c.total > 0) : [];
   const maquinasNoAno = dados ? Math.max(0, ...dados.resumoMensal.map((m) => m.maquinas)) : 0;
 
   return (
     <div className="space-y-4">
       <Cabeca
         titulo="Disponibilidade de Equipamentos"
-        subtitulo="Horas disponíveis, estados físicos e horómetro - dados reais de 2022 a 2026 (excels AVAILABILITY OF MACHINES)"
+        subtitulo="Horas disponíveis, estados físicos e horómetro da frota"
       >
         <select
           aria-label="Ano"
@@ -215,40 +221,13 @@ export function PainelDisponibilidade({ podeEditar }: { podeEditar: boolean }) {
 
       {dados && (
         <>
-          {anoSemDados && (
-            <div className="card-sombra border border-ambar/50 bg-ambar-claro/40 p-4 text-sm">
-              <p className="font-semibold text-ambar-texto">
-                O ano {ano} ainda não tem dados importados - por isso o gráfico mostra só a linha da meta.
-              </p>
-              <p className="mt-1 text-muted-foreground">
-                Os excels AVAILABILITY OF MACHINES já no sistema vão de 2022 a 2025. Os estados de {ano} entram
-                pela Grelha Diária (ou pela importação do excel de {ano} quando estiver fechado). Toque num ano
-                com dados para ver o histórico real:
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {anosComDados.map((c) => (
-                  <button
-                    key={c.ano}
-                    onClick={() => escolherAno(c.ano)}
-                    className={cn(
-                      "rounded-full border border-ambar/60 px-3 py-1 text-xs font-semibold transition-colors hover:bg-ambar/20",
-                      c.ano === ano && "bg-ambar/30"
-                    )}
-                  >
-                    {c.ano} · {c.pct}%
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* KPIs */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Kpi
               titulo={`Disponibilidade ${mes === 0 ? "do ano" : "do mês"}`}
               valor={`${dados.disponibilidade}%`}
               cor={dados.disponibilidade >= meta ? "text-sucesso" : "text-erro"}
-              nota={`Meta ${meta}% · ${dados.disponibilidade >= meta ? "atingida" : `faltam ${Math.round((meta - dados.disponibilidade) * 10) / 10} p.p. (pontos percentuais)`}`}
+              nota={`Meta ${meta}% · ${dados.disponibilidade >= meta ? "atingida" : `faltam ${Math.round((meta - dados.disponibilidade) * 10) / 10} p.p.`}`}
               icone={<Gauge className="size-4" />}
             />
             <Kpi
@@ -263,19 +242,12 @@ export function PainelDisponibilidade({ podeEditar }: { podeEditar: boolean }) {
               nota="avaria + acidente + pneumático + revisão + peça"
               icone={<TrendingDown className="size-4" />}
             />
-            {dados.horometroMes ? (
+            {dados.horometroMes && (
               <Kpi
-                titulo="Horómetro do mês"
+                titulo={mes === 0 ? "Horómetro do ano" : "Horómetro do mês"}
                 valor={`${dados.horometroMes.trabalhadas.toLocaleString("pt-PT")} h`}
                 nota={`lançado por ${dados.horometroMes.lancadas} de ${dados.horometroMes.totalMaquinas} máquinas`}
                 icone={<Gauge className="size-4" />}
-              />
-            ) : (
-              <Kpi
-                titulo="Comparação anual"
-                valor={`${dados.comparacaoAnos.length} anos`}
-                nota="histórico importado dos excels"
-                icone={<CalendarDays className="size-4" />}
               />
             )}
           </div>
@@ -292,11 +264,8 @@ export function PainelDisponibilidade({ podeEditar }: { podeEditar: boolean }) {
                   <TrendingDown className="mr-1 inline size-3" />{diferenca} p.p.
                 </Etiqueta>
               )}
-              <span
-                className="text-muted-foreground"
-                title="p.p. = pontos percentuais: a diferença directa entre duas percentagens (80% para 85% são +5 p.p., mas 80% para 85% também são +6,25% em termos relativos)"
-              >
-                ({mesesAnterior.pct}% em {MESES_PT[mes - 2]} → {mesActual.pct}% em {MESES_PT[mes - 1]}) · p.p. = pontos percentuais
+              <span className="text-muted-foreground">
+                ({mesesAnterior.pct}% em {MESES_PT[mes - 2]} → {mesActual.pct}% em {MESES_PT[mes - 1]})
               </span>
             </div>
           )}
@@ -358,14 +327,9 @@ export function PainelDisponibilidade({ podeEditar }: { podeEditar: boolean }) {
               </div>
             </div>
             {maquinasNoAno > 0 ? (
-              <p className="text-xs text-muted-foreground">
-                {maquinasNoAno} máquinas com registo no ano · a percentagem de cada barra está escrita por cima
-                dela {mes !== 0 && "· o mês escolhido fica com fundo verde"}
-              </p>
+              <p className="text-xs text-muted-foreground">{maquinasNoAno} máquinas com registo no ano</p>
             ) : (
-              <p className="text-xs text-muted-foreground">
-                Sem registos de horas em {ano} - os estados do dia a dia entram na Grelha Diária.
-              </p>
+              <p className="text-xs text-muted-foreground">Sem registos de horas em {ano}.</p>
             )}
           </div>
 
@@ -394,9 +358,6 @@ export function PainelDisponibilidade({ podeEditar }: { podeEditar: boolean }) {
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Percentagem média de horas disponíveis sobre o total de horas de cada ano.
-              </p>
             </div>
 
             <div className="card-sombra space-y-3 p-4">
@@ -503,10 +464,6 @@ export function PainelDisponibilidade({ podeEditar }: { podeEditar: boolean }) {
                     </tbody>
                   </table>
                 </div>
-                <p className="border-t p-3 text-xs text-muted-foreground">
-                  Ordenada da máquina com menor disponibilidade no período para a melhor. Toque na frota
-                  &quot;Todas as frotas&quot; para voltar ao quadro das 12 frotas.
-                </p>
               </div>
             ) : (
               <div className="card-sombra overflow-hidden p-0 lg:col-span-2">
@@ -548,10 +505,6 @@ export function PainelDisponibilidade({ podeEditar }: { podeEditar: boolean }) {
                     </tbody>
                   </table>
                 </div>
-                <p className="border-t p-3 text-xs text-muted-foreground">
-                  Escolhe uma frota no seletor de cima (ex.: Reach-Stacker 45T) para ver a disponibilidade de
-                  cada máquina dentro dela.
-                </p>
               </div>
             )}
 
@@ -576,12 +529,6 @@ export function PainelDisponibilidade({ podeEditar }: { podeEditar: boolean }) {
                   </li>
                 ))}
               </ul>
-              {podeEditar && (
-                <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">
-                  Marca os estados no dia a dia em <b>Grelha Diária</b> e lança as horas do contador em{" "}
-                  <b>Horómetro</b>.
-                </p>
-              )}
             </div>
           </div>
         </>

@@ -15,5 +15,5 @@ export default async function PaginaDisponibilidade() {
   if (!sessao) redirect("/login?motivo=sem_sessao");
   if (!pode(sessao, "disponibilidade", "ver")) redirect("/");
 
-  return <PainelDisponibilidade podeEditar={pode(sessao, "disponibilidade", "editar")} />;
+  return <PainelDisponibilidade />;
 }

@@ -2,15 +2,13 @@
 
 /**
  * Configurações da Disponibilidade:
- * - meta de disponibilidade (80% por defeito, fixa nos ecrãs mas
- *   ajustável aqui - decisão do Filomeno);
- * - explicação das regras de cálculo (24h por dia, transições, horómetro)
- *   para quem chega agora ao módulo.
+ * - meta de disponibilidade (80% por defeito, ajustável aqui);
+ * - legenda dos estados físicos de um dia.
  */
 
 import { useEffect, useState } from "react";
 import { Save } from "lucide-react";
-import { Cabeca, Etiqueta, Rodar, enviar, pedir } from "@/components/oficina/ui-bits";
+import { Cabeca, Rodar, enviar, pedir } from "@/components/oficina/ui-bits";
 import { COR_ESTADO_DIA, ESTADOS_DIA } from "@/lib/disponibilidade";
 
 type ConfigDados = { ok: boolean; meta: number; atualizado_em: string | null; atualizado_por: string | null };
@@ -52,7 +50,7 @@ export function ConfigClient({ podeEditar }: { podeEditar: boolean }) {
     <div className="space-y-4">
       <Cabeca
         titulo="Configurações da Disponibilidade"
-        subtitulo="Meta, estados físicos e regras de cálculo do módulo"
+        subtitulo="Meta de disponibilidade e estados físicos do módulo"
       />
 
       {falha && (
@@ -98,10 +96,6 @@ export function ConfigClient({ podeEditar }: { podeEditar: boolean }) {
                 </span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Fixa em 80% por decisão do Filomeno, mas ajustável aqui. Verde nos ecrãs = meta atingida,
-              laranja/vermelho = abaixo da meta.
-            </p>
           </div>
 
           <div className="card-sombra max-w-2xl space-y-3 p-4">
@@ -114,46 +108,6 @@ export function ConfigClient({ podeEditar }: { podeEditar: boolean }) {
                 </li>
               ))}
             </ul>
-            <p className="text-xs text-muted-foreground">
-              São os mesmos estados de <b>ordens_servico.status_fisico</b> - previstos desde o início da
-              Oficina e finalmente em uso real com este módulo. Os códigos dos excels antigos (A, PM, TY, AC,
-              BD, SP) foram mapeados para estes nomes na importação.
-            </p>
-          </div>
-
-          <div className="card-sombra max-w-2xl space-y-2 p-4 text-sm">
-            <h2 className="text-sm font-semibold">Regras de cálculo</h2>
-            <ul className="list-disc space-y-1.5 pl-5 text-muted-foreground">
-              <li>
-                Cada dia marcado vale <b>24 horas</b>: Disponível soma 24h ao disponível; qualquer outro
-                estado soma as horas ao estado (as horas disponíveis parciais, 0-24, podem ser ajustadas à
-                mão no dia - ex.: máquina saiu da oficina às 14:00 = 14h).
-              </li>
-              <li>
-                A mudança de estado a meio cria <b>dois segmentos</b> com data/hora (entrou Avariada às
-                10:22, às 15:00 passou a Aguarda Acessório: cada tramo conta as suas horas, mesmo sem a
-                máquina ser mexida).
-              </li>
-              <li>
-                O mensal soma os dias marcados de cada máquina; a percentagem usa o total de horas do mês
-                (dias do mês × 24), igual ao excel deles.
-              </li>
-              <li>
-                O horómetro guarda a leitura inicial e final de cada mês; as horas trabalhadas = final -
-                inicial. A inicial do mês seguinte vem preenchida com a final do anterior.
-              </li>
-              <li>
-                Histórico 2022-2025 importado dos excels (horas por dia + resumo mensal por estado +
-                horómetro). 2026 em diante passa a ser marcado aqui dentro, sem papel.
-              </li>
-            </ul>
-            <p className="pt-1">
-              <Etiqueta cor="bg-info-bg text-info">Nota</Etiqueta>{" "}
-              <span className="text-xs text-muted-foreground">
-                os 102 códigos do histórico que não estavam na base foram criados como máquinas inactivas
-                (decisão do Filomeno) para o histórico ficar completo.
-              </span>
-            </p>
           </div>
         </>
       )}

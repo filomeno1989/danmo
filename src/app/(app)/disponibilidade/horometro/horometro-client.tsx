@@ -189,7 +189,7 @@ export function HorometroClient({ podeEditar, nomeUtilizador }: { podeEditar: bo
     <div className="space-y-4">
       <Cabeca
         titulo="Horómetro"
-        subtitulo="Leituras mensais do contador de horas - substitui a folia HOURMETER CONTROL (DAN_ADO_FR_021)"
+        subtitulo="Leituras mensais do contador de horas - substitui a folha HOURMETER CONTROL (DAN_ADO_FR_021)"
       >
         <select
           aria-label="Mês"
@@ -349,10 +349,8 @@ export function HorometroClient({ podeEditar, nomeUtilizador }: { podeEditar: bo
           </div>
 
           <p className="text-xs text-muted-foreground">
-            A leitura inicial vem do FINAL do mês anterior. Se o contador foi trocado ou reiniciou, lança o valor
-            novo na inicial e explica na observação - o sistema guarda as horas trabalhadas desse mês como
-            estiverem lançadas. As leituras importadas dos excels ficam com "por importacao" até serem
-            actualizadas.
+            A leitura inicial vem do final do mês anterior. Se o contador foi trocado ou reiniciou, lança o
+            valor novo na inicial e aponta na observação.
           </p>
         </>
       )}

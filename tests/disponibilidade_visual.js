@@ -206,13 +206,13 @@ let postsSemana = [];
   await contexto.addCookies([{ name: "dss_token", value: "estrutura", url: BASE }]);
 
   await contexto.route("**/api/disponibilidade/painel*", (rota) => {
-    if (painelVazio) return rota.fulfill({ json: PAINEL_VAZIO });
     const u = new URL(rota.request().url());
     const fr = u.searchParams.get("frota") || "todos";
     if (fr !== "todos") {
       return rota.fulfill({ json: { ...PAINEL_FROTA, ano: Number(u.searchParams.get("ano") || 2026) } });
     }
     if (u.searchParams.get("ano") === "2025") return rota.fulfill({ json: PAINEL_2025 });
+    if (painelVazio) return rota.fulfill({ json: PAINEL_VAZIO });
     return rota.fulfill({ json: PAINEL });
   });
   await contexto.route("**/api/disponibilidade/dias*", (rota) => {
@@ -272,10 +272,10 @@ let postsSemana = [];
   ok("Painel: quadro por frota com 11 frotas", (await pagina.locator("tbody tr").count()) >= 11);
   ok("Painel: top paradas com 45-17", (await pagina.locator("text=45-17").first().isVisible().catch(() => false)));
 
-  // trocar para ano inteiro -> horómetro sai, comparação anual entra
+  // trocar para ano inteiro -> o 4o KPI passa a Horómetro do ano
   await pagina.selectOption("select[aria-label='Mês']", "0");
   await pagina.waitForTimeout(500);
-  ok("Painel: ano inteiro mostra 4 KPIs sem horometro", (await pagina.locator("text=horas do mês").count()) === 0);
+  ok("Painel: ano inteiro mostra Horómetro do ano", (await pagina.locator("text=Horómetro do ano").count()) > 0);
   await pagina.selectOption("select[aria-label='Mês']", "10");
   await pagina.waitForTimeout(400);
 
@@ -301,11 +301,13 @@ let postsSemana = [];
   await pagina.waitForTimeout(600);
   ok("Painel frota: quadro por frota regressa", (await pagina.locator("h2:has-text('Quadro por frota')").count()) > 0);
 
-  // 2e. ano sem dados: aviso claro com atalhos (o caso real de 2026)
+  // 2e. ano sem dados: o painel comuta sozinho para o ano mais recente
+  // com dados (o caso real de 2026) - sem notas no ecrã
   painelVazio = true;
   await pagina.goto(`${BASE}/disponibilidade`, { waitUntil: "networkidle" });
-  ok("Painel vazio: aviso de ano sem dados aparece", (await pagina.locator("text=ainda não tem dados importados").count()) > 0);
-  ok("Painel vazio: atalho para 2025 com a sua percentagem", (await pagina.locator("button:has-text('2025 · 83.1%')").count()) > 0);
+  ok("Painel vazio: abre sozinho no ano com dados (2025)", (await pagina.locator("text=Disponibilidade por mês em 2025").count()) > 0);
+  ok("Painel vazio: gráfico de 2025 com barras (65.9% visível)", (await pagina.locator("span:text-is('65.9%')").count()) > 0);
+  ok("Painel vazio: sem notas explicativas no ecrã", (await pagina.locator("text=ainda não tem dados").count()) === 0 && (await pagina.locator("text=Toque num ano").count()) === 0);
   painelVazio = false;
 
   /* ---------- 3. GRELHA ---------- */
@@ -393,8 +395,8 @@ let postsSemana = [];
   await pagina.goto(`${BASE}/disponibilidade/config`, { waitUntil: "networkidle" });
   ok("Config: cabecalho", (await pagina.locator("h1:has-text('Configurações da Disponibilidade')").count()) > 0);
   ok("Config: meta 80 no input", (await pagina.locator("input[type='number']").first().inputValue()) === "80");
-  ok("Config: regras de calculo", (await pagina.locator("h2:has-text('Regras de cálculo')").count()) > 0);
-  ok("Config: nota das 102 maquinas inactivas", (await pagina.locator("text=102 códigos").count()) > 0);
+  ok("Config: legenda de estados físicos", (await pagina.locator("h2:has-text('Estados físicos de um dia')").count()) > 0);
+  ok("Config: sem notas/explicações (limpo)", (await pagina.locator("text=Regras de cálculo").count()) === 0 && (await pagina.locator("text=102 códigos").count()) === 0);
 
   /* ---------- 7. BLOQUEIO SEM SESSAO ---------- */
   const contextoLimpo = await browser.newContext();

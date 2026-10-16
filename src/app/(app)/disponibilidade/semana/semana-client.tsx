@@ -46,7 +46,7 @@ function periodoSemana(ano: number, semana: number): string {
   return `${fmt(ini)} - ${fmt(fim)}`;
 }
 
-export function SemanaClient({ podeEditar, nomeUtilizador }: { podeEditar: boolean; nomeUtilizador: string }) {
+export function SemanaClient({ podeEditar }: { podeEditar: boolean }) {
   const hoje = new Date();
   const [ano, setAno] = useState(hoje.getFullYear());
   const [semana, setSemana] = useState(
@@ -172,7 +172,7 @@ export function SemanaClient({ podeEditar, nomeUtilizador }: { podeEditar: boole
     <div className="space-y-4">
       <Cabeca
         titulo="Resumo Semanal da Direcção"
-        subtitulo="Movimento por frota, dificuldades e plano de melhorias - o ficheiro do Director, agora vivo no portal"
+        subtitulo="Movimento por frota, dificuldades e plano de melhorias da semana"
       >
         <button
           onClick={() => mudarSemana(-1)}
@@ -416,9 +416,6 @@ export function SemanaClient({ podeEditar, nomeUtilizador }: { podeEditar: boole
                 ))}
               </div>
             )}
-            <p className="mt-3 text-xs text-muted-foreground">
-              Gravado por {nomeUtilizador}. A apresentação ao Director fica para quando o portal estiver a 100%.
-            </p>
           </div>
         </>
       )}

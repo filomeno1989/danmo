@@ -101,7 +101,7 @@ export async function GET(request: Request) {
     });
 
     // --- comparação entre anos (todos os que existem na base)
-    const anosPresentes = [...new Set(mensal.map((l) => l.ano))].sort();
+    const anosPresentes = [...new Set(mensal.map((l) => l.ano))].sort((a, b) => a - b);
     const comparacaoAnos = anosPresentes.map((a) => {
       const linhas = mensal.filter((l) => l.ano === a);
       const horasA = linhas.reduce((s, l) => s + n(l.horas_a), 0);
@@ -127,19 +127,18 @@ export async function GET(request: Request) {
       estados["Aguarda Acessório"] += n(l.horas_sp);
     }
 
-    // --- horómetro do mês (só faz sentido por mês)
-    let horometroMes: { trabalhadas: number; lancadas: number; totalMaquinas: number } | null = null;
-    if (mes !== 0) {
-      const linhas = horometroAno.filter((h) => h.mes === mes && eqVisiveis.has(h.equipment_id));
-      const trabalhadas = linhas.reduce((s, h) => s + n(h.horas_trabalhadas), 0);
-      const comFinal = linhas.filter((h) => h.horas_trabalhadas !== null && h.horas_trabalhadas !== undefined);
-      const totalMaquinas = equipamentos.filter((e) => e.active && eqVisiveis.has(e.id)).length;
-      horometroMes = {
-        trabalhadas: Math.round(trabalhadas),
-        lancadas: comFinal.length,
-        totalMaquinas
-      };
-    }
+    // --- horómetro (mês escolhido ou o ano inteiro)
+    const linhasH = horometroAno.filter(
+      (h) => (mes === 0 || h.mes === mes) && eqVisiveis.has(h.equipment_id)
+    );
+    const trabalhadas = linhasH.reduce((s, h) => s + n(h.horas_trabalhadas), 0);
+    const comFinal = linhasH.filter((h) => h.horas_trabalhadas !== null && h.horas_trabalhadas !== undefined);
+    const totalMaquinas = equipamentos.filter((e) => e.active && eqVisiveis.has(e.id)).length;
+    const horometroMes = {
+      trabalhadas: Math.round(trabalhadas),
+      lancadas: comFinal.length,
+      totalMaquinas
+    };
 
     // --- quadro por frota (12 macro-frotas; com dados do mês e do ano)
     const mapaFrota = new Map<string, { mesA: number; mesT: number; anoA: number; anoT: number; maquinas: Set<number> }>();

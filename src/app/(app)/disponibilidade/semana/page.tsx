@@ -15,10 +15,5 @@ export default async function PaginaSemana() {
   if (!sessao) redirect("/login?motivo=sem_sessao");
   if (!pode(sessao, "disponibilidade", "ver")) redirect("/");
 
-  return (
-    <SemanaClient
-      podeEditar={pode(sessao, "disponibilidade", "editar")}
-      nomeUtilizador={sessao.utilizador.nome}
-    />
-  );
+  return <SemanaClient podeEditar={pode(sessao, "disponibilidade", "editar")} />;
 }

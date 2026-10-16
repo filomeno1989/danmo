@@ -6,8 +6,9 @@ IMPORTACAO DOS DADOS REAIS - Modulo Disponibilidade (Fase 4)
 Le os excels "AVAILABILITY OF MACHINES" (2022 a 2026) e alimenta:
   1. equipment      -> maquinas do historico que nao existem na base, criadas
                        como INATIVAS (autorizado pelo Filomeno)
-  2. disp_dias      -> grelha diaria: 2022-2025 = horas disponiveis (0-24);
-                       2026 = estado do dia (A/PM/TY/AC/BD/SP -> nomes PT)
+  2. disp_dias      -> grelha diaria: ESTADO FISICO do dia + horas
+                       disponiveis (0-24), lidos da sub-coluna do estado
+                       na aba mensal (A/PM/TY/AC/BD/SP -> nomes PT)
   3. disp_mensal    -> agregado mensal por estado em horas (aba SUMMARY)
   4. disp_horometro -> leituras mensais INITIAL/END/W.H. (aba WORKED HOURS)
   5. disp_transicoes-> segmentos derivados dos estados diarios de 2026
@@ -49,6 +50,10 @@ ESTADO_PT = {
     "BD": "Avariada",
     "SP": "Aguarda Acessório",
 }
+# sub-colunas de cada dia na aba mensal, pela ordem (a hora do dia vai na
+# coluna do estado: A = disponivel, PM/TY/AC/BD/SP = horas paradas nesse estado)
+SUB_COLUNAS = ["A", "PM", "TY", "AC", "BD", "SP"]
+
 # grupo do excel -> grupo da base (casos claros; o resto vai por votacao)
 GRUPO_FIXO = {
     "FORKLIFT 2.5 TONNES": "FKL 2.5T",
@@ -155,7 +160,14 @@ def achar_cabecalho(ws):
     return None, None, None, None
 
 def ler_dias_aba(ws):
-    """Le a aba mensal: devolve lista (ref, dia, horas, codigo_estado)."""
+    """Le a aba mensal: devolve lista (ref, dia, estado, horas_disponiveis).
+
+    Cada dia tem 6 sub-colunas (A, PM, TY, AC, BD, SP) e o numero de horas
+    vai na coluna do estado: A = horas disponiveis do dia, as restantes =
+    horas paradas nesse estado (A + paradas da 24). O estado do dia e a
+    paragem com mais horas quando houver mais do que uma (caso raro).
+    Celulas de texto com codigo (A/PM/TY/AC/BD/SP) tambem sao aceites.
+    """
     linhas = list(ws.iter_rows(values_only=True))
     cab, col_ref, col_grupo, col_dia1 = achar_cabecalho(ws)
     if cab is None or col_dia1 is None:
@@ -176,17 +188,35 @@ def ler_dias_aba(ws):
             col = col_dia1 + d * 6
             if col >= len(r):
                 break
+            horas_a = None
+            paragens = []
+            codigo = None
             for k in range(6):
                 v = r[col + k] if col + k < len(r) else None
                 if v is None or txt(v) == "":
                     continue
                 horas = num(v)
                 if horas is not None:
-                    saida.append((ref, d + 1, round(horas, 2), None))
+                    if k == 0:
+                        horas_a = round(horas, 2)
+                    else:
+                        paragens.append((SUB_COLUNAS[k], horas))
                 else:
-                    codigo = txt(v).upper()[:2]
-                    if codigo in ESTADO_PT:
-                        saida.append((ref, d + 1, None, codigo))
+                    cod = txt(v).upper()[:2]
+                    if cod in ESTADO_PT:
+                        codigo = cod
+            if codigo:
+                estado = ESTADO_PT[codigo]
+                horas_dia = horas_a if horas_a is not None else (24.0 if estado == "Disponível" else 0.0)
+            elif paragens:
+                estado = ESTADO_PT[max(paragens, key=lambda x: x[1])[0]]
+                horas_dia = horas_a if horas_a is not None else 0.0
+            elif horas_a is not None:
+                estado = "Disponível"
+                horas_dia = horas_a
+            else:
+                continue
+            saida.append((ref, d + 1, estado, horas_dia))
     return saida
 
 def ler_resumo(wb, aba):
@@ -366,18 +396,13 @@ def main():
         for m, aba in enumerate(MESES_ABA, start=1):
             if aba not in wb.sheetnames:
                 continue
-            for ref, dia, horas, codigo in ler_dias_aba(wb[aba]):
+            for ref, dia, estado, horas_dia in ler_dias_aba(wb[aba]):
                 if ref not in base:
                     continue
                 try:
                     dt = date(ano, m, dia)
                 except ValueError:
                     continue
-                estado = ESTADO_PT.get(codigo) if codigo else None
-                if estado:
-                    horas_dia = 24.0 if estado == "Disponível" else 0.0
-                else:
-                    horas_dia = horas
                 linhas.append({
                     "equipment_id": base[ref]["id"], "data": dt.isoformat(),
                     "estado": estado,

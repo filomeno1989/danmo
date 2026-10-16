@@ -287,6 +287,28 @@ let postsSemana = [];
   ok("Painel 2025: percentagem 65.9% visível na barra (sem passar o rato)", (await pagina.locator("span:text-is('65.9%')").count()) > 0);
   ok("Painel 2025: KPI disponibilidade 65.5%", (await pagina.locator("text=65.5%").count()) > 0);
 
+  // 2b'. barras desenhadas de verdade: a barra do mês tem altura em pixels
+  // (o bug de Out/2026: colunas com height em % contra um contentor sem
+  // altura definida resolviam a 0 e o gráfico só mostrava a linha da meta)
+  const barraAltura = await pagina
+    .locator("button[aria-label*='Setembro de 2025'] > span")
+    .first()
+    .evaluate((el) => el.getBoundingClientRect().height);
+  ok("Painel 2025: barra do gráfico desenhada com altura real", barraAltura > 50);
+
+  // 2b''. meses clicáveis no gráfico (pedido do Filomeno): tocar em Ago
+  // abre Agosto nos KPIs; tocar de novo volta ao ano inteiro; tocar em Out
+  // fica em Outubro (estado para os testes seguintes)
+  await pagina.locator("button[aria-label='Abrir Agosto de 2025']").click();
+  await pagina.waitForTimeout(600);
+  ok("Painel 2025: tocar no mês abre Agosto", (await pagina.locator("text=Disponibilidade do mês").count()) > 0 && (await pagina.locator("select[aria-label='Mês']").inputValue() === "8"));
+  await pagina.locator("button[aria-label='Abrir Agosto de 2025']").click();
+  await pagina.waitForTimeout(600);
+  ok("Painel 2025: tocar de novo volta ao ano inteiro", (await pagina.locator("text=Disponibilidade do ano").count()) > 0 && (await pagina.locator("select[aria-label='Mês']").inputValue() === "0"));
+  await pagina.locator("button[aria-label='Abrir Outubro de 2025']").click();
+  await pagina.waitForTimeout(600);
+  ok("Painel 2025: tocar noutro mês muda para Outubro", (await pagina.locator("select[aria-label='Mês']").inputValue() === "10"));
+
   // 2c. drill-down da frota: escolher Reach-Stacker 45T -> lista de máquinas
   // com a percentagem de cada uma (pedido do Filomeno)
   await pagina.selectOption("select[aria-label='Frota']", "Reach-Stacker 45T");

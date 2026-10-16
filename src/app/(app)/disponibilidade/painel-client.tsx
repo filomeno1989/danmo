@@ -278,53 +278,73 @@ export function PainelDisponibilidade() {
               </h2>
               <span className="text-xs text-muted-foreground">linha verde = meta {meta}%</span>
             </div>
+            {/* A barra e um bloco absoluto dentro de uma coluna com altura
+                definida (items-stretch): assim a percentagem tem uma base de
+                calculo real e a linha da meta alinha com o topo das barras. */}
             <div className="relative">
               <div
-                className="absolute inset-x-0 border-t-2 border-dashed border-sucesso/70"
+                className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-sucesso/70"
                 style={{ bottom: `${(meta / maxEscala) * 100}%` }}
                 aria-hidden
               />
-              <div className="flex h-48 items-end gap-1.5 sm:gap-3">
+              <div className="flex h-48 items-stretch gap-1.5 sm:gap-3">
                 {dados.resumoMensal.map((m) => {
                   const altura = (m.pct / maxEscala) * 100;
                   const temDados = m.maquinas > 0;
                   const destacado = mes !== 0 && m.mes === mes;
                   return (
-                    <div
+                    <button
                       key={m.mes}
+                      type="button"
+                      onClick={() => escolherMes(mes === m.mes ? 0 : m.mes)}
+                      aria-label={`${MESES_PT[m.mes - 1]} de ${ano}: ${temDados ? `${m.pct}%` : "sem registos"}`}
+                      title={`${MESES_PT[m.mes - 1]} de ${ano}: ${temDados ? `${m.pct}% (${m.horasA.toLocaleString("pt-PT")} h disp. de ${(m.total / 24).toFixed(0)} dias-máquina)` : "sem registos"}`}
                       className={cn(
-                        "group flex min-w-0 flex-1 flex-col items-center justify-end gap-1 rounded-md",
+                        "relative min-w-0 flex-1 cursor-pointer rounded-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primario",
                         destacado && "bg-primario/10 ring-1 ring-primario/40"
                       )}
                     >
                       <span
                         className={cn(
-                          "whitespace-nowrap text-[0.6rem] font-semibold tabular-nums sm:text-[0.68rem]",
-                          destacado ? "text-primario" : "text-muted-foreground"
-                        )}
-                      >
-                        {temDados ? `${m.pct}%` : ""}
-                      </span>
-                      <div
-                        className={cn(
-                          "w-full rounded-t-md transition-colors",
+                          "absolute inset-x-0 bottom-0 rounded-t-md transition-colors",
                           !temDados ? "bg-muted" : corMeta(m.pct, meta)
                         )}
                         style={{ height: `${temDados ? Math.max(2, altura) : 2}%` }}
-                        title={`${MESES_PT[m.mes - 1]}: ${m.pct}% (${m.horasA.toLocaleString("pt-PT")} h disp. de ${(m.total / 24).toFixed(0)} dias-máquina)`}
                       />
-                      <span
-                        className={cn(
-                          "text-[0.62rem]",
-                          destacado ? "font-bold text-primario" : "font-medium text-muted-foreground"
-                        )}
-                      >
-                        {MESES_PT[m.mes - 1].slice(0, 3)}
-                      </span>
-                    </div>
+                      {temDados && (
+                        <span
+                          className={cn(
+                            "absolute inset-x-0 whitespace-nowrap text-center text-[0.6rem] font-semibold tabular-nums sm:text-[0.68rem]",
+                            destacado ? "text-primario" : "text-muted-foreground"
+                          )}
+                          style={{ bottom: `calc(${altura}% + 3px)` }}
+                        >
+                          {m.pct}%
+                        </span>
+                      )}
+                    </button>
                   );
                 })}
               </div>
+            </div>
+            <div className="flex gap-1.5 sm:gap-3">
+              {dados.resumoMensal.map((m) => {
+                const destacado = mes !== 0 && m.mes === mes;
+                return (
+                  <button
+                    key={m.mes}
+                    type="button"
+                    onClick={() => escolherMes(mes === m.mes ? 0 : m.mes)}
+                    aria-label={`Abrir ${MESES_PT[m.mes - 1]} de ${ano}`}
+                    className={cn(
+                      "min-w-0 flex-1 cursor-pointer rounded py-0.5 text-center text-[0.62rem] transition-colors hover:bg-muted hover:text-primario focus:outline-none focus-visible:ring-2 focus-visible:ring-primario",
+                      destacado ? "font-bold text-primario" : "font-medium text-muted-foreground"
+                    )}
+                  >
+                    {MESES_PT[m.mes - 1].slice(0, 3)}
+                  </button>
+                );
+              })}
             </div>
             {maquinasNoAno > 0 ? (
               <p className="text-xs text-muted-foreground">{maquinasNoAno} máquinas com registo no ano</p>

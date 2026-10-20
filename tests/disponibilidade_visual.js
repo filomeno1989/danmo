@@ -436,7 +436,7 @@ let postsSemana = [];
   await pagina.waitForTimeout(200);
   const entrada70 = await pagina.locator("tr:has-text('Tratores 70T') input").nth(1).inputValue();
   ok("Semana: preencher das OS met entradas=3 nos Tratores 70T", entrada70 === "3", entrada70);
-  const pendFecho70 = await pagina.locator("tr:has-text('Tratores 70T') td").nth(4).innerText();
+  const pendFecho70 = await pagina.locator("tr:has-text('Tratores 70T') td").nth(5).innerText();
   ok("Semana: pend. fecho calculado 4 (2+3-1)", pendFecho70.trim() === "4", pendFecho70);
 
   await pagina.locator("button:has-text('Gravar semana')").click();

@@ -10,9 +10,14 @@
  *   diária (disp_dias) e comparada com a meta.
  *
  * GET ?ano=2026&semana=42 -> dados guardados + números calculados das OS
- *   (para o botão "Preencher das OS") + disponibilidade da semana.
+ *   (para o botão "Preencher das OS") + disponibilidade da semana +
+ *   total de máquinas por frota + avarias frequentes/complexas da
+ *   secção 03 + disponibilidade global da semana.
  * POST { ano, semana, linhas:[{frota,pend_inicio,entradas,saidas,
- *        aguardam_pecas}], dificuldades, melhorias } -> grava tudo.
+ *        aguardam_pecas}], dificuldades, melhorias,
+ *        avarias:[{frota,frequentes,complexas}] } -> grava tudo.
+ *   Se a tabela das avarias ainda não existir no Supabase, o resto
+ *   grava na mesma e a resposta traz um aviso.
  */
 
 import { NextResponse } from "next/server";
@@ -36,7 +41,6 @@ type OsLinha = {
   status_atual: string | null;
   status_fisico: string | null;
 };
-type EquipLinha = { id: number; group_name: string | null };
 type DiaLinha = { equipment_id: number; data: string; horas_disponiveis: number | string | null };
 type SemanalLinha = {
   frota: string;
@@ -46,6 +50,8 @@ type SemanalLinha = {
   aguardam_pecas: number | string;
 };
 type GeralLinha = { dificuldades: string | null; melhorias: unknown };
+type AvariaLinha = { frota: string; frequentes: string | null; complexas: string | null };
+type EquipTotalLinha = { id: number; group_name: string | null; active: boolean | null };
 
 const int = (v: unknown): number => Math.max(0, Math.trunc(Number(v) || 0));
 
@@ -96,7 +102,7 @@ export async function GET(request: Request) {
 
     const [os, equipamentos, dias, guardadas, geral, config] = await Promise.all([
       queryTudo<OsLinha>("ordens_servico", "select=id,equipment_id,data_abertura,data_fecho,status_atual,status_fisico"),
-      queryTudo<EquipLinha>("equipment", "select=id,group_name"),
+      queryTudo<EquipTotalLinha>("equipment", "select=id,group_name,active"),
       queryTudo<DiaLinha>(
         "disp_dias",
         `select=equipment_id,data,horas_disponiveis&data=gte.${de}&data=lt.${ate}`
@@ -115,8 +121,34 @@ export async function GET(request: Request) {
     const grupoDe = new Map(equipamentos.map((e) => [e.id, e.group_name || ""]));
     const osCalculado = Object.fromEntries(calcularDasOs(os, grupoDe, de, ate, inicioSemanaAnterior));
 
+    // total de máquinas activas por frota (a coluna Total do ficheiro)
+    const totalFrota: Record<string, number> = {};
+    for (const f of FROTAS_PADRAO) totalFrota[f.label] = 0;
+    for (const e of equipamentos) {
+      if (e.active === false) continue;
+      const frota = frotaDeGrupo(e.group_name);
+      totalFrota[frota] = (totalFrota[frota] || 0) + 1;
+    }
+
+    // avarias frequentes e complexas da secção 03. Se a tabela ainda
+    // não foi criada no Supabase, a secção nasce vazia e o resto segue.
+    let avarias: Record<string, { frequentes: string; complexas: string }> = {};
+    try {
+      const av = await query<AvariaLinha>(
+        "disp_semana_avarias",
+        `select=frota,frequentes,complexas&ano=eq.${ano}&semana=eq.${semana}`
+      );
+      avarias = Object.fromEntries(
+        av.map((a) => [a.frota, { frequentes: a.frequentes || "", complexas: a.complexas || "" }])
+      );
+    } catch {
+      avarias = {};
+    }
+
     // disponibilidade real da semana por frota (da grelha diária)
     const dispSemana = new Map<string, { a: number; t: number }>();
+    let globalA = 0;
+    let globalT = 0;
     for (const d of dias) {
       const frota = frotaDeGrupo(grupoDe.get(d.equipment_id));
       let bloco = dispSemana.get(frota);
@@ -124,12 +156,16 @@ export async function GET(request: Request) {
         bloco = { a: 0, t: 0 };
         dispSemana.set(frota, bloco);
       }
-      bloco.a += Number(d.horas_disponiveis) || 0;
+      const horas = Number(d.horas_disponiveis) || 0;
+      bloco.a += horas;
       bloco.t += 24;
+      globalA += horas;
+      globalT += 24;
     }
     const disponibilidade = Object.fromEntries(
       [...dispSemana.entries()].map(([f, v]) => [f, pctDisponibilidade(v.a, v.t)])
     );
+    const disponibilidadeGlobal = globalT > 0 ? pctDisponibilidade(globalA, globalT) : null;
 
     const guardado = Object.fromEntries(
       guardadas.map((l) => [
@@ -153,6 +189,9 @@ export async function GET(request: Request) {
       osCalculado,
       guardado,
       disponibilidade,
+      disponibilidadeGlobal,
+      totalFrota,
+      avarias,
       geral: geral.length
         ? { dificuldades: geral[0].dificuldades || "", melhorias: geral[0].melhorias || [] }
         : { dificuldades: "", melhorias: [] }
@@ -180,6 +219,7 @@ export async function POST(request: Request) {
     linhas?: { frota: string; pend_inicio: unknown; entradas: unknown; saidas: unknown; aguardam_pecas: unknown }[];
     dificuldades?: string;
     melhorias?: MelhoriaEntrada[];
+    avarias?: { frota: string; frequentes?: unknown; complexas?: unknown }[];
   };
   try {
     corpo = await request.json();
@@ -235,7 +275,37 @@ export async function POST(request: Request) {
       "ano,semana"
     );
 
-    return NextResponse.json({ ok: true, frotas: linhas.length, melhorias: melhorias.length });
+    // Secção 03: avarias frequentes e complexas por frota. Se a tabela
+    // ainda não existir no Supabase, o resto da semana fica gravado na
+    // mesma e a resposta avisa em vez de partir.
+    let avariasGravadas = 0;
+    let aviso = "";
+    const avarias = (corpo.avarias || [])
+      .filter((a) => a && rotulos.has(a.frota))
+      .map((a) => ({
+        ano,
+        semana,
+        frota: a.frota,
+        frequentes: String(a.frequentes || "").slice(0, 8000) || null,
+        complexas: String(a.complexas || "").slice(0, 8000) || null,
+        criado_por: nomeUtilizador
+      }));
+    if (avarias.length) {
+      try {
+        await upsert("disp_semana_avarias", avarias, "ano,semana,frota");
+        avariasGravadas = avarias.length;
+      } catch {
+        aviso = "Semana gravada, mas as avarias não: falta a tabela disp_semana_avarias (colar o SQL fase4-semanal-avarias.sql no Supabase).";
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      frotas: linhas.length,
+      melhorias: melhorias.length,
+      avarias: avariasGravadas,
+      ...(aviso ? { aviso } : {})
+    });
   } catch (e) {
     return erroBase(e, "gravar resumo semanal");
   }

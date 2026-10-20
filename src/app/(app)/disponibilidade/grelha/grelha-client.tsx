@@ -39,8 +39,20 @@ type DiaLinha = {
   hora_entrada: string | null;
   hora_saida: string | null;
   observacao: string | null;
+  origem?: string;
+  os_id?: number | null;
+  numero_obra?: string | null;
 };
-type TransicaoAberta = { id: number; equipment_id: number; estado: string; inicio: string; code: string; nome: string };
+type TransicaoAberta = {
+  id: number;
+  equipment_id: number;
+  estado: string;
+  inicio: string;
+  code: string;
+  nome: string;
+  obra?: string | null;
+  os_id?: number | null;
+};
 type GrelhaDados = {
   ok: boolean;
   equipamentos: EquipLinha[];
@@ -60,6 +72,8 @@ type EditarDia = {
   hora_saida: string;
   observacao: string;
   repetirAte: string; // "" = só o dia
+  os_id?: number | null;
+  numero_obra?: string | null;
 };
 
 const chaveDe = (equipmentId: number, data: string) => `${equipmentId}|${data}`;
@@ -133,7 +147,9 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
       hora_entrada: orig.hora_entrada || "",
       hora_saida: orig.hora_saida || "",
       observacao: orig.observacao || "",
-      repetirAte: ""
+      repetirAte: "",
+      os_id: orig.os_id ?? null,
+      numero_obra: orig.numero_obra ?? null
     };
   };
 
@@ -167,7 +183,9 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
       hora_entrada: v?.hora_entrada ?? "",
       hora_saida: v?.hora_saida ?? "",
       observacao: v?.observacao ?? "",
-      repetirAte: ""
+      repetirAte: "",
+      os_id: v?.os_id ?? null,
+      numero_obra: v?.numero_obra ?? null
     });
   }
 
@@ -395,7 +413,7 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
                               )}
                               title={
                                 estado
-                                  ? `${eq.code} · ${data}: ${estado}${parcial ? ` (${horas}h disp.)` : ""}${v?.observacao ? ` · ${v.observacao}` : ""}`
+                                  ? `${eq.code} · ${data}: ${estado}${v?.numero_obra ? ` · Obra ${v.numero_obra}` : ""}${parcial ? ` (${horas}h disp.)` : ""}${v?.observacao ? ` · ${v.observacao}` : ""}`
                                   : `${eq.code} · ${data}: sem marcação`
                               }
                             >
@@ -479,6 +497,15 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
                       <span className="min-w-0">
                         <span className="font-semibold">{t.code}</span>{" "}
                         <span className="text-muted-foreground">{t.nome}</span>
+                        {t.obra && (
+                          <a
+                            href={`/oficina/ordens/${t.os_id}`}
+                            className="text-primario hover:underline dark:text-primario-forte"
+                          >
+                            {" "}
+                            Obra {t.obra}
+                          </a>
+                        )}
                       </span>
                       <Etiqueta cor={COR_ESTADO_DIA[t.estado] || "bg-muted text-muted-foreground"}>{t.estado}</Etiqueta>
                     </li>
@@ -512,6 +539,17 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
       >
         {diaAberto && (
           <div className="space-y-4">
+            {diaAberto.numero_obra && (
+              <p className="text-sm">
+                Parada pela obra{" "}
+                <a
+                  href={`/oficina/ordens/${diaAberto.os_id}`}
+                  className="font-semibold text-primario hover:underline dark:text-primario-forte"
+                >
+                  {diaAberto.numero_obra}
+                </a>
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {ESTADOS_DIA.map((estado) => (
                 <button

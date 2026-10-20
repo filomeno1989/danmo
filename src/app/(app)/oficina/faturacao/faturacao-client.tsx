@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Download, Pencil, Plus, Printer, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Pencil, Plus, Printer, RotateCcw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -77,6 +77,7 @@ export function FaturacaoClient({
   const [erro, setErro] = useState("");
   const [ano, setAno] = useState("");
   const [mes, setMes] = useState("");
+  const [fBusca, setFBusca] = useState("");
   const [expandida, setExpandida] = useState<number | null>(null);
   // Tabela de Preços (para a edição do fecho assumir os valores registados)
   const [precos, setPrecos] = useState<PrecoCatalogo[]>([]);
@@ -141,8 +142,16 @@ export function FaturacaoClient({
     let lista = dados?.linhas || [];
     if (ano) lista = lista.filter((l) => l.data_fecho.slice(0, 4) === ano);
     if (mes) lista = lista.filter((l) => Number(l.data_fecho.slice(5, 7)) === Number(mes));
+    const busca = fBusca.trim().toLowerCase();
+    if (busca) {
+      lista = lista.filter(
+        (l) =>
+          (l.numero_obra || "").toLowerCase().includes(busca) ||
+          (l.equip_code || "").toLowerCase().includes(busca)
+      );
+    }
     return lista;
-  }, [dados, ano, mes]);
+  }, [dados, ano, mes, fBusca]);
 
   const etiquetaPeriodo = useMemo(() => {
     if (!ano && !mes) return "Todo o período";
@@ -152,6 +161,8 @@ export function FaturacaoClient({
   }, [ano, mes]);
 
   const sufixoPeriodo = ano && mes ? `${ano}-${mes.padStart(2, "0")}` : ano ? ano : mes ? `mes_${mes.padStart(2, "0")}` : "todo_o_periodo";
+
+  const temFiltros = Boolean(ano || mes || fBusca.trim());
 
   const totais = useMemo<Totais>(() => {
     return {
@@ -807,6 +818,16 @@ export function FaturacaoClient({
           <div className="flex flex-wrap items-center gap-3">
             <p className="font-semibold">Resumo por mês</p>
             <div className="ml-auto flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                <Input
+                  aria-label="Buscar por obra ou máquina"
+                  className="h-8 w-56 pl-8"
+                  placeholder="Nº de obra ou máquina..."
+                  value={fBusca}
+                  onChange={(e) => setFBusca(e.target.value)}
+                />
+              </div>
               <Label className="text-xs">Mês</Label>
               <select
                 className="border-input bg-transparent h-8 rounded-md border px-2 text-sm outline-none dark:bg-input/30"
@@ -868,7 +889,11 @@ export function FaturacaoClient({
             </div>
           ) : (
             <p className="text-muted-foreground text-sm">
-              {aCarregar ? "A carregar..." : "Ainda não há obras fechadas registadas."}
+              {aCarregar
+                ? "A carregar..."
+                : temFiltros
+                  ? "Nenhuma obra com os filtros escolhidos."
+                  : "Ainda não há obras fechadas registadas."}
             </p>
           )}
         </CardContent>
@@ -933,7 +958,9 @@ export function FaturacaoClient({
             <p className="text-muted-foreground text-sm">
               {aCarregar
                 ? "A carregar..."
-                : "Quando fechares uma obra com o formulário de Faturação, ela aparece aqui."}
+                : temFiltros
+                  ? "Nenhuma obra com os filtros escolhidos."
+                  : "Quando fechares uma obra com o formulário de Faturação, ela aparece aqui."}
             </p>
           )}
         </CardContent>
@@ -1196,8 +1223,32 @@ function FechoLinha({
             )}
           </button>
         </td>
-        <td className="py-2 pr-2 font-medium">{linha.numero_obra || "S/Nº"}</td>
-        <td className="py-2 pr-2">{linha.equip_code || "-"}</td>
+        <td className="py-2 pr-2 font-medium">
+          {linha.os_id ? (
+            <a
+              href={`/oficina/ordens/${linha.os_id}`}
+              title="Abrir a obra nas Ordens de Serviço"
+              className="text-primario hover:underline dark:text-primario-forte"
+            >
+              {linha.numero_obra || "S/Nº"}
+            </a>
+          ) : (
+            (linha.numero_obra || "S/Nº")
+          )}
+        </td>
+        <td className="py-2 pr-2">
+          {linha.equipment_id ? (
+            <a
+              href={`/oficina/maquina/${linha.equipment_id}`}
+              title="Abrir o histórico da máquina"
+              className="text-info hover:underline"
+            >
+              {linha.equip_code || "-"}
+            </a>
+          ) : (
+            (linha.equip_code || "-")
+          )}
+        </td>
         <td className="py-2 pr-2">{formatarData(linha.data_fecho)}</td>
         <td className="py-2 pr-2 text-right">{linha.dias_ate_fecho}</td>
         <td className="py-2 pr-2 text-right">{linha.dias_apos_trabalho}</td>

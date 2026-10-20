@@ -2,8 +2,13 @@
  * /api/disponibilidade/dias - Grelha diária de disponibilidade.
  *
  * GET ?mes=2026-02&frota=<macro-frota|todos>
- *   -> máquinas da frota + marcações diárias do mês + transições em curso
- *      (máquinas paradas neste momento) + resumo semanal do mês.
+ *   -> máquinas da frota + marcações diárias do mês + resumo semanal.
+ *      PONTE COM AS ORDENS (ponte-os.ts): os dias sem marcação ficam
+ *      preenchidos automaticamente - uma obra aberta interrompe a
+ *      disponibilidade da máquina desde a data de abertura com o estado
+ *      físico da obra e a máquina só volta a "Disponível" quando a obra
+ *      é enviada à CdM ou fechada; nos dias sem obra nenhum a máquina
+ *      assume-se disponível 24h. As marcações manuais ganham sempre.
  *
  * POST { marcacoes: [{ equipment_id, data, estado, horas_disponiveis,
  *                      hora_entrada, hora_saida, observacao }] }
@@ -20,6 +25,14 @@ import { NextResponse } from "next/server";
 import { delFiltro, insert, query, queryTudo, upsert } from "@/lib/supabase";
 import { autorizadoDisp, eErro, erroBase } from "@/lib/guarda-api";
 import { gruposDaFrota, hojeMaputo, pctDisponibilidade, semanaISOde } from "@/lib/disponibilidade";
+import {
+  paradasDeHoje,
+  segmentosDeOrdens,
+  segmentosDeTransicoes,
+  sintetizarDias,
+  type OrdemPonte
+} from "@/lib/ponte-os";
+import type { OrdemServico } from "@/lib/oficina";
 
 export const dynamic = "force-dynamic";
 
@@ -156,9 +169,76 @@ export async function GET(request: Request) {
     const eqs = equipamentos.filter((e) => !gruposFrota || gruposFrota.includes(e.group_name || ""));
     const ids = new Set(eqs.map((e) => e.id));
 
-    // resumo semanal do mês (requisito: disponibilidade também por semana)
+    const hoje = hojeMaputo();
+    const fimMesExclusivo = mes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mes + 1).padStart(2, "0")}-01`;
+
+    /* ============ PONTE COM AS ORDENS ============ */
+    // Ordens destas máquinas com abertura até ao fim do mês. A "saida"
+    // (dia em que a máquina volta a ficar disponível) é:
+    // - Fechada -> data_fecho;
+    // - CdM -> a data da última mudança de estado para CdM no histórico
+    //   (reserva: actualizado_em);
+    // - ainda na oficina -> null (parada até nova ordem).
+    let ordensBrutas: OrdemServico[] = [];
+    if (ids.size) {
+      ordensBrutas = await queryTudo<OrdemServico>(
+        "ordens_servico",
+        `select=id,numero_obra,equipment_id,data_abertura,data_fecho,status_atual,status_fisico,atualizado_em&equipment_id=in.(${[...ids].join(",")})&data_abertura=lte.${fimMesExclusivo}`
+      );
+    }
+    const idsCdm = ordensBrutas
+      .filter((o) => o.status_atual === "CdM" && !o.data_fecho)
+      .map((o) => o.id);
+    const logsCdm = idsCdm.length
+      ? await queryTudo<{ os_id: number; data_mudanca: string }>(
+          "os_status_log",
+          `select=os_id,data_mudanca&status_novo=eq.CdM&os_id=in.(${idsCdm.join(",")})&order=data_mudanca.asc`
+        )
+      : [];
+    const saidaCdM = new Map<number, string>();
+    for (const l of logsCdm) {
+      const d = (l.data_mudanca || "").slice(0, 10);
+      if (d && d > (saidaCdM.get(l.os_id) || "")) saidaCdM.set(l.os_id, d);
+    }
+    const ordensPonte: OrdemPonte[] = ordensBrutas.map((o) => ({
+      id: o.id,
+      numero_obra: o.numero_obra || null,
+      equipment_id: o.equipment_id,
+      data_abertura: o.data_abertura || null,
+      status_atual: o.status_atual,
+      status_fisico: o.status_fisico || null,
+      saida:
+        o.status_atual === "Fechada" || o.status_atual === "CdM"
+          ? (o.data_fecho || "").slice(0, 10) ||
+            saidaCdM.get(o.id) ||
+            (o.atualizado_em || "").slice(0, 10) ||
+            null
+          : null
+    }));
+
+    const segmentos = [
+      ...segmentosDeOrdens(ordensPonte).filter((s) => ids.has(s.equipment_id)),
+      ...segmentosDeTransicoes(
+        transicoesAbertas.filter((t) => ids.has(t.equipment_id)),
+        hoje
+      )
+    ];
+
+    const chavesExplicitas = new Set(
+      dias.filter((d) => ids.has(d.equipment_id)).map((d) => `${d.equipment_id}|${d.data.slice(0, 10)}`)
+    );
+    const sintetizados = sintetizarDias({
+      mes: mesParam,
+      equipamentos: eqs,
+      chavesExplicitas,
+      segmentos
+    });
+    const diasCompletos = [...dias, ...sintetizados];
+
+    // resumo semanal do mês (requisito: disponibilidade também por semana);
+    // conta com os dias sintetizados da ponte (o mês inteiro tem estado)
     const semanas = new Map<number, { horasA: number; maquinas: Set<number>; dias: Set<string> }>();
-    for (const d of dias) {
+    for (const d of diasCompletos) {
       if (!ids.has(d.equipment_id)) continue;
       const { ano: anoISO, semana } = semanaISOde(new Date(d.data.slice(0, 10) + "T00:00:00Z"));
       const chave = anoISO === ano ? semana : 0; // semanas que pertencem ao mês pela data
@@ -179,22 +259,22 @@ export async function GET(request: Request) {
         return { semana, pct: pctDisponibilidade(v.horasA, total), maquinas: v.maquinas.size, dias: v.dias.size };
       });
 
-    const horasMes = dias.reduce((s, d) => s + n(d.horas_disponiveis), 0);
-    const abertas = transicoesAbertas.filter((t) => ids.has(t.equipment_id));
+    const horasMes = diasCompletos.reduce((s, d) => s + n(d.horas_disponiveis), 0);
+    const nomesMaquinas = new Map(eqs.map((e) => [e.id, { code: e.code, nome: e.name || "" }]));
 
     return NextResponse.json({
       ok: true,
       mes: mesParam,
       equipamentos: eqs,
-      dias: dias.filter((d) => ids.has(d.equipment_id)),
-      transicoesAbertas: abertas.map((t) => {
-        const e = eqs.find((x) => x.id === t.equipment_id);
-        return { ...t, code: e?.code || "?", nome: e?.name || "" };
-      }),
+      dias: diasCompletos.filter((d) => ids.has(d.equipment_id)),
+      transicoesAbertas: paradasDeHoje(segmentos, hoje, nomesMaquinas),
       resumoSemanal,
       resumoMes: {
         horasDisponiveis: Math.round(horasMes),
-        diasMarcados: new Set(dias.map((d) => d.data.slice(0, 10))).size
+        // dias com marcação REAL (escrita na grelha); a síntese não conta
+        diasMarcados: new Set(
+          dias.filter((d) => ids.has(d.equipment_id)).map((d) => d.data.slice(0, 10))
+        ).size
       }
     });
   } catch (e) {

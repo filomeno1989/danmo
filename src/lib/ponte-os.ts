@@ -348,6 +348,48 @@ export type MovimentoFrota = {
 };
 
 /**
+ * Dias sintetizados de um PERÍODO (ex.: a semana do Resumo Semanal),
+ * mês a mês para reutilizar o motor da Grelha. Devolve só os dias dentro
+ * de [de, ate) e já vividos (data <= hoje), com marcações explícitas a
+ * ganhar e troços de ordens/transições a interromper - exactamente as
+ * regras da Grelha, para que o Resumo Semanal também nasça das ordens
+ * e não de marcações manuais.
+ */
+export function sintetizarDiasPeriodo(params: {
+  de: string; // AAAA-MM-DD (incluído)
+  ate: string; // AAAA-MM-DD (excluído)
+  hoje: string;
+  equipamentos: { id: number; active: boolean }[];
+  /** Marcações explícitas dos meses do período (disp_dias). */
+  diasExplicitos: {
+    equipment_id: number;
+    data: string;
+    estado: string | null;
+    horas_disponiveis: number | string | null;
+  }[];
+  segmentos: SegmentoPonte[];
+}): DiaSintetizado[] {
+  const { de, ate, hoje, equipamentos, diasExplicitos, segmentos } = params;
+  const meses = new Set<string>();
+  for (let d = de; d < ate; d = new Date(new Date(d + "T00:00:00Z").getTime() + 86400000).toISOString().slice(0, 10)) {
+    meses.add(d.slice(0, 7));
+  }
+
+  const saida: DiaSintetizado[] = [];
+  for (const mes of [...meses].sort()) {
+    const chaves = new Set<string>();
+    for (const d of diasExplicitos) {
+      const data = (d.data || "").slice(0, 10);
+      if (data.length === 10 && data.slice(0, 7) === mes) chaves.add(`${d.equipment_id}|${data}`);
+    }
+    for (const s of sintetizarDias({ mes, hoje, equipamentos, chavesExplicitas: chaves, segmentos })) {
+      if (s.data >= de && s.data < ate) saida.push(s);
+    }
+  }
+  return saida;
+}
+
+/**
  * Movimento da semana calculado das ordens (o "Preencher das OS" e o
  * preenchimento automático do Resumo Semanal):
  * - Pend. início: aberta antes da semana e ainda sem saída no primeiro dia;

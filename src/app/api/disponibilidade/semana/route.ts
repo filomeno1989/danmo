@@ -6,8 +6,9 @@
  *   Pend. fecho (início + entradas - saídas) / Aguardam peças;
  * - dificuldades da semana + plano de melhorias (responsável, prazo,
  *   estado: Por iniciar / Em curso / Concluído);
- * - disponibilidade real de cada frota na semana, calculada da grelha
- *   diária (disp_dias) e comparada com a meta.
+ * - disponibilidade real de cada frota na semana, NASCIDA DAS ORDENS
+ *   (a mesma ponte da Grelha: obras, transições e marcações explícitas)
+ *   e comparada com a meta.
  *
  * GET ?ano=2026&semana=42 -> dados guardados + números calculados das OS
  *   (pend_inicio/entradas/saidas/aguardam_pecas - preenchem as caixas
@@ -27,23 +28,32 @@ import { autorizadoDisp, eErro, erroBase } from "@/lib/guarda-api";
 import {
   FROTAS_PADRAO,
   frotaDeGrupo,
-  gruposDaFrota,
+  hojeMaputo,
   intervaloSemanaISO,
   pctDisponibilidade
 } from "@/lib/disponibilidade";
-import { calcularMovimentoDeOrdens } from "@/lib/ponte-os";
+import {
+  calcularMovimentoDeOrdens,
+  segmentosDeOrdens,
+  segmentosDeTransicoes,
+  sintetizarDiasPeriodo,
+  type OrdemPonte
+} from "@/lib/ponte-os";
 
 export const dynamic = "force-dynamic";
 
 type OsLinha = {
   id: number;
   equipment_id: number;
+  numero_obra: string | null;
   data_abertura: string | null;
   data_fecho: string | null;
   status_atual: string | null;
   status_fisico: string | null;
+  atualizado_em: string | null;
 };
-type DiaLinha = { equipment_id: number; data: string; horas_disponiveis: number | string | null };
+type DiaLinha = { equipment_id: number; data: string; estado: string | null; horas_disponiveis: number | string | null };
+type TransicaoLinha = { id: number; equipment_id: number; estado: string; inicio: string };
 type SemanalLinha = {
   frota: string;
   pend_inicio: number | string;
@@ -72,13 +82,25 @@ export async function GET(request: Request) {
   try {
     const { de, ate } = intervaloSemanaISO(ano, semana);
 
-    const [os, equipamentos, dias, guardadas, geral, config] = await Promise.all([
-      queryTudo<OsLinha>("ordens_servico", "select=id,equipment_id,data_abertura,data_fecho,status_atual,status_fisico"),
+    // Os meses que a semana toca (a semana pode atravessar dois meses).
+    // As marcações explícitas vêm do mês INTEIRO porque a síntese da
+    // ponte é mês a mês (o motor da Grelha).
+    const domingo = new Date(new Date(ate + "T00:00:00Z").getTime() - 86400000).toISOString().slice(0, 10);
+    const [fa, fm] = domingo.split("-").map(Number);
+    const inicioSpan = `${de.slice(0, 7)}-01`;
+    const fimSpan = fm === 12 ? `${fa + 1}-01-01` : `${fa}-${String(fm + 1).padStart(2, "0")}-01`;
+
+    const [os, equipamentos, diasSpan, transicoesAbertas, guardadas, geral, config] = await Promise.all([
+      queryTudo<OsLinha>(
+        "ordens_servico",
+        "select=id,equipment_id,numero_obra,data_abertura,data_fecho,status_atual,status_fisico,atualizado_em"
+      ),
       queryTudo<EquipTotalLinha>("equipment", "select=id,group_name,active"),
       queryTudo<DiaLinha>(
         "disp_dias",
-        `select=equipment_id,data,horas_disponiveis&data=gte.${de}&data=lt.${ate}`
+        `select=equipment_id,data,estado,horas_disponiveis&data=gte.${inicioSpan}&data=lt.${fimSpan}`
       ),
+      queryTudo<TransicaoLinha>("disp_transicoes", "select=id,equipment_id,estado,inicio&fim=is.null"),
       query<SemanalLinha>(
         "disp_semanal",
         `select=frota,pend_inicio,entradas,saidas,aguardam_pecas&ano=eq.${ano}&semana=eq.${semana}`
@@ -91,6 +113,7 @@ export async function GET(request: Request) {
     ]);
 
     const grupoDe = new Map(equipamentos.map((e) => [e.id, e.group_name || ""]));
+
     // números calculados das ordens (chaves iguais às linhas gravadas:
     // pend_inicio, entradas, saidas, aguardam_pecas)
     const osCalculado = calcularMovimentoDeOrdens(
@@ -125,11 +148,62 @@ export async function GET(request: Request) {
       avarias = {};
     }
 
-    // disponibilidade real da semana por frota (da grelha diária)
+    // disponibilidade real da semana por frota, NASCIDA DAS ORDENS
+    // (a mesma ponte da Grelha: obras interrompem desde a abertura com o
+    // seu estado físico, marcações explícitas ganham, o resto é Disponível
+    // 24h, e nunca se conta um dia que ainda não aconteceu). Antes lia
+    // disp_dias cru: nas semanas sem marcações manuais a coluna ficava
+    // vazia ou mentia.
+    const hoje = hojeMaputo();
+    const idsCdm = os
+      .filter((o) => o.status_atual === "CdM" && !o.data_fecho)
+      .map((o) => o.id);
+    const logsCdm = idsCdm.length
+      ? await queryTudo<{ os_id: number; data_mudanca: string }>(
+          "os_status_log",
+          `select=os_id,data_mudanca&status_novo=eq.CdM&os_id=in.(${idsCdm.join(",")})&order=data_mudanca.asc`
+        )
+      : [];
+    const saidaCdM = new Map<number, string>();
+    for (const l of logsCdm) {
+      const d = (l.data_mudanca || "").slice(0, 10);
+      if (d && d > (saidaCdM.get(l.os_id) || "")) saidaCdM.set(l.os_id, d);
+    }
+    const ordensPonte: OrdemPonte[] = os.map((o) => ({
+      id: o.id,
+      numero_obra: o.numero_obra || null,
+      equipment_id: o.equipment_id,
+      data_abertura: o.data_abertura || null,
+      status_atual: o.status_atual || "",
+      status_fisico: o.status_fisico || null,
+      saida:
+        o.status_atual === "Fechada" || o.status_atual === "CdM"
+          ? (o.data_fecho || "").slice(0, 10) ||
+            saidaCdM.get(o.id) ||
+            (o.atualizado_em || "").slice(0, 10) ||
+            null
+          : null
+    }));
+    const segmentos = [
+      ...segmentosDeOrdens(ordensPonte),
+      ...segmentosDeTransicoes(transicoesAbertas, hoje)
+    ];
+    const activos = equipamentos
+      .filter((e) => e.active !== false)
+      .map((e) => ({ id: e.id, active: true }));
+    const sintetizados = sintetizarDiasPeriodo({
+      de,
+      ate,
+      hoje,
+      equipamentos: activos,
+      diasExplicitos: diasSpan,
+      segmentos
+    });
+
     const dispSemana = new Map<string, { a: number; t: number }>();
     let globalA = 0;
     let globalT = 0;
-    for (const d of dias) {
+    for (const d of sintetizados) {
       const frota = frotaDeGrupo(grupoDe.get(d.equipment_id));
       let bloco = dispSemana.get(frota);
       if (!bloco) {

@@ -363,3 +363,32 @@ describe("G. GET /api/disponibilidade/semana", () => {
     cenario = { ...cenario, ordens: ORDENS_MES, dias: DIAS_ANO };
   });
 });
+
+/* ==================== H. GET semana: disponibilidade nasce das ordens ==================== */
+
+describe("H. GET semana: disponibilidade da semana nasce da ponte", () => {
+  it("semana 42: obra aberta mantem 0%, obra que sai a meio conta meio", async () => {
+    // semana 42 de 2026 = seg 12-10 a dom 18-10
+    cenario = {
+      ...cenario,
+      ordens: [
+        { id: 21, equipment_id: 1, data_abertura: "2026-10-05", data_fecho: null, status_atual: "Aberta", status_fisico: "Aguarda Acessório", atualizado_em: null },
+        { id: 22, equipment_id: 1, data_abertura: "2026-10-13", data_fecho: null, status_atual: "Aberta", status_fisico: null, atualizado_em: null },
+        { id: 23, equipment_id: 2, data_abertura: "2026-09-20", data_fecho: "2026-10-14", status_atual: "Fechada", status_fisico: "Revisão/Manutenção", atualizado_em: null },
+        { id: 24, equipment_id: 2, data_abertura: "2026-10-11", data_fecho: "2026-10-12", status_atual: "Fechada", status_fisico: null, atualizado_em: null }
+      ],
+      dias: [],
+      transicoes: []
+    };
+    const j = await getJson("../src/app/api/disponibilidade/semana/route?ano=2026&semana=42");
+    expect(j.ok).toBe(true);
+    const disp = j.disponibilidade as Record<string, number>;
+    // máquina 1: obra aberta desde 05-10 e ainda lá está -> parada a semana toda
+    expect(disp["Reach-Stacker 45T"]).toBe(0);
+    // máquina 2: obra fechada saiu a 14-10 -> parada 12 e 13, disponível 14 a 18
+    expect(disp["Tratores 70T"]).toBe(71.4);
+    // global: (0 + 120h) / (2 máquinas x 7 dias x 24h)
+    expect(j.disponibilidadeGlobal).toBe(35.7);
+    cenario = { ...cenario, ordens: ORDENS_MES, dias: DIAS_ANO };
+  });
+});

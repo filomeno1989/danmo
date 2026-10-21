@@ -124,14 +124,14 @@ export const MODULOS: Modulo[] = [
     id: "stock",
     label: "Gestão de Stock",
     icone: "Package",
-    fase: 4,
+    fase: 0,
     sub: [
-      { label: "Painel", href: "/em-migracao?mod=stock" },
-      { label: "Entradas", href: "/em-migracao?mod=stock" },
-      { label: "Saídas", href: "/em-migracao?mod=stock" },
-      { label: "Materiais", href: "/em-migracao?mod=stock" },
-      { label: "Relatórios", href: "/em-migracao?mod=stock" },
-      { label: "Configurações", href: "/em-migracao?mod=stock" }
+      { label: "Painel", href: "/stock" },
+      { label: "Entradas", href: "/stock/entradas" },
+      { label: "Saídas", href: "/stock/saidas" },
+      { label: "Materiais", href: "/stock/materiais" },
+      { label: "Relatórios", href: "/stock/relatorios" },
+      { label: "Configurações", href: "/stock/config" }
     ]
   },
   {

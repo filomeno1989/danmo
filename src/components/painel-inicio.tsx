@@ -11,7 +11,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { HeroiSaudacao } from "@/components/heroi-saudacao";
 import {
   CircleCheck,
-  Clock,
   Shield,
   Cog,
   Package,
@@ -163,18 +162,17 @@ export function PainelInicio({
           marcaAgua={Package}
           titulo="Gestão de Stock"
           corTitulo="text-red-950 dark:text-white"
-          texto="A próxima a entrar: Materiais, Entradas, Saídas, Painel e Relatórios, tal como estão no hub actual. Depois: Ferramentaria, HST, RH e a matriz de permissões."
+          texto="Já está no ar: Materiais, Entradas, Saídas, Painel, Relatórios e Configurações, com stock calculado no servidor e o stock nunca negativo. Depois: Ferramentaria, HST, RH e a matriz de permissões."
           corTexto="text-red-900/75 dark:text-white/75"
           pill={
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 text-[0.72rem] font-bold text-red-800 shadow-sm dark:bg-white/15 dark:text-red-200">
-              <Clock className="size-3.5" aria-hidden />
-              A seguir
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600/15 px-3 py-1 text-[0.72rem] font-bold text-emerald-700 dark:bg-white/15 dark:text-emerald-200">
+              <CircleCheck className="size-3.5" aria-hidden />
+              No ar
             </span>
           }
           seta="border-red-700/30 text-red-900 hover:bg-red-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
-          href="/em-migracao?mod=stock"
-          externo
-          rotulo="Gestão de Stock: ver o plano da migração"
+          href="/stock"
+          rotulo="Abrir a Gestão de Stock"
         />
       </section>
 

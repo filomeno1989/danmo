@@ -55,7 +55,7 @@ const FOTOS = "/home/z/my-project/danmo/tests";
   const activo = await page.locator('a[aria-current="page"]').textContent();
   ok("Item activo é 'Início'", (activo || "").includes("Início"));
   ok("Admin vê 'Definições' no menu", corpo.includes("Definições"));
-  ok("Fases marcadas no menu", corpo.includes("Fase 4") && corpo.includes("Fase 7"));
+  ok("Fases marcadas no menu (stock já não é futuro)", !corpo.includes("Fase 4") && corpo.includes("Fase 5") && corpo.includes("Fase 7"));
 
   // 4. Herói: saudação + selos + cartões de fase (nas cores do logo)
   ok("Herói tem 'Olá,'", corpo.includes("Olá,"));
@@ -66,7 +66,7 @@ const FOTOS = "/home/z/my-project/danmo/tests";
   ok("Sem ponto verde junto ao nome", (await page.locator("h1 span.bg-sucesso").count()) === 0);
   ok("Selos de confiança", corpo.includes("Sistema seguro") && corpo.includes("Acesso autorizado") && corpo.includes("Em funcionamento"));
   ok("Cartões de fase", corpo.includes("Fundação") && corpo.includes("Oficina & Manutenção") && corpo.includes("Gestão de Stock"));
-  ok("Pills de estado", corpo.includes("Concluída") && corpo.includes("No ar") && corpo.includes("A seguir"));
+  ok("Pills de estado (stock passa a No ar)", corpo.includes("Concluída") && (corpo.match(/No ar/g) || []).length >= 2 && !corpo.includes("A seguir"));
   ok("Cartões nas cores do logo (verde + ambar + vermelho)",
      (await page.locator(".fase-verde").count()) === 1 &&
      (await page.locator(".fase-ambar").count()) === 1 &&

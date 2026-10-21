@@ -63,6 +63,23 @@ export function erroBase(e: unknown, accao: string): NextResponse {
 export async function autorizadoDisp(
   accao: AccaoOficina
 ): Promise<Sessao | NextResponse> {
+  return autorizarModulo("disponibilidade", accao, "Disponibilidade");
+}
+
+/**
+ * Guarda das rotas /api/stock/* - igual às outras, contra o módulo "stock".
+ */
+export async function autorizadoStock(
+  accao: AccaoOficina
+): Promise<Sessao | NextResponse> {
+  return autorizarModulo("stock", accao, "Stock");
+}
+
+async function autorizarModulo(
+  modulo: string,
+  accao: AccaoOficina,
+  nomeBonito: string
+): Promise<Sessao | NextResponse> {
   const sessao = await obterSessao();
   if (!sessao) {
     return NextResponse.json(
@@ -70,14 +87,14 @@ export async function autorizadoDisp(
       { status: 401 }
     );
   }
-  if (!pode(sessao, "disponibilidade", accao)) {
+  if (!pode(sessao, modulo, accao)) {
     return NextResponse.json(
       {
         ok: false,
         erro:
           accao === "ver"
-            ? "Não tens permissão para ver a Disponibilidade."
-            : `Não tens permissão para ${accao} na Disponibilidade.`
+            ? `Não tens permissão para ver o módulo ${nomeBonito}.`
+            : `Não tens permissão para ${accao} no módulo ${nomeBonito}.`
       },
       { status: 403 }
     );

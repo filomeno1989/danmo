@@ -323,15 +323,22 @@ export const UNIDADES_PECA = [
   "Rolo"
 ];
 
-/** Classe Tailwind da etiqueta de cada estado físico (2 temas). */
+/**
+ * Classe Tailwind da etiqueta de cada estado físico (2 temas).
+ *
+ * Sistema semântico único do portal (Grelha, Painel, Oficina e legenda do
+ * gráfico partilham exactamente as mesmas cores): a cor identifica o estado
+ * à primeira vista, na ordem da legenda do Power BI do Director.
+ * Cada estado tem a sua cor, sem repetições nem tons parecidos.
+ */
 export const COR_FISICO: Record<string, string> = {
   Disponível: "bg-sucesso-bg text-sucesso",
   Avariada: "bg-erro-bg text-erro",
-  Acidentada: "bg-erro-bg text-erro",
-  Pneumático: "bg-info-bg text-info",
+  Acidentada: "bg-aviso-bg text-aviso",
+  Pneumático: "bg-roxo-bg text-roxo",
   "Revisão/Manutenção": "bg-ambar-claro text-ambar-texto",
-  Inspeção: "bg-ambar-claro text-ambar-texto",
-  "Aguarda Acessório": "bg-muted text-muted-foreground",
+  Inspeção: "bg-rosa-bg text-rosa",
+  "Aguarda Acessório": "bg-info-bg text-info",
   Concluído: "bg-sucesso-bg text-sucesso"
 };
 

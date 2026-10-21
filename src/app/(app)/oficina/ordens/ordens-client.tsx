@@ -41,16 +41,6 @@ type Dados = {
   colaboradores: ColaboradorLinha[];
 };
 
-const BADGE_FISICO: Record<string, string> = {
-  Avariada: "bg-erro-bg text-erro",
-  Acidentada: "bg-erro-bg text-erro",
-  Pneumático: "bg-info-bg text-info",
-  "Revisão/Manutenção": "bg-ambar-claro text-ambar-texto",
-  Inspeção: "bg-ambar-claro text-ambar-texto",
-  "Aguarda Acessório": "bg-muted text-muted-foreground",
-  Concluído: "bg-sucesso-bg text-sucesso"
-};
-
 export function OrdensClient({ podeCriar, podeApagar }: { podeCriar: boolean; podeApagar: boolean }) {
   const router = useRouter();
   const [dados, setDados] = useState<Dados | null>(null);

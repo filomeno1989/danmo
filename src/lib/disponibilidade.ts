@@ -29,6 +29,22 @@ export type EstadoDia = (typeof ESTADOS_DIA)[number];
 /** Cores por estado (herdam o padrão da Oficina). */
 export const COR_ESTADO_DIA = COR_FISICO;
 
+/**
+ * Cor sólida de cada estado para gráficos (barras do Painel e legenda).
+ * Mesma família da etiqueta pálida, para que a cor do gráfico e a cor
+ * da Grelha sejam reconhecidas como o mesmo estado em todo o portal.
+ */
+export const COR_SOLIDA_ESTADO: Record<string, string> = {
+  Disponível: "bg-sucesso",
+  Avariada: "bg-erro",
+  Acidentada: "bg-aviso",
+  Pneumático: "bg-roxo",
+  "Revisão/Manutenção": "bg-ambar",
+  Inspeção: "bg-rosa",
+  "Aguarda Acessório": "bg-info",
+  Concluído: "bg-sucesso"
+};
+
 /** Código de 2 letras usado nos excels antigos (A, PM, TY, AC, BD, SP). */
 export const CODIGO_ESTADO: Record<string, string> = {
   Disponível: "A",

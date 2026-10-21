@@ -25,7 +25,7 @@ import { BarChart3, Clock, Gauge, RefreshCw, TrendingDown, TrendingUp } from "lu
 import { Cabeca, Etiqueta, Rodar, pedir } from "@/components/oficina/ui-bits";
 import { cn } from "@/lib/utils";
 import {
-  COR_ESTADO_DIA,
+  COR_SOLIDA_ESTADO,
   ESTADOS_DIA,
   FROTAS_PADRAO,
   MESES_PT
@@ -76,7 +76,7 @@ const ESTADOS_GRAFICO: { estado: string; codigo: string; cor: string }[] = [
   { estado: "Avariada", codigo: "BD", cor: "bg-erro" },
   { estado: "Revisão/Manutenção", codigo: "PM", cor: "bg-ambar" },
   { estado: "Aguarda Acessório", codigo: "SP", cor: "bg-info" },
-  { estado: "Pneumático", codigo: "TY", cor: "bg-violet-500" }
+  { estado: "Pneumático", codigo: "TY", cor: "bg-roxo" }
 ];
 
 function Kpi({
@@ -504,7 +504,7 @@ export function PainelDisponibilidade() {
                       <span className="w-40 shrink-0 truncate text-xs font-medium">{estado}</span>
                       <div className="h-3 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
                         <div
-                          className={cn("h-full rounded-full", COR_ESTADO_DIA[estado] || "bg-muted")}
+                          className={cn("h-full rounded-full", COR_SOLIDA_ESTADO[estado] || "bg-muted")}
                           style={{ width: `${pct}%` }}
                         />
                       </div>

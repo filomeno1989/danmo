@@ -51,11 +51,15 @@
   --sucesso: #059669;
   --sucesso-bg: #d1fae5;
   --aviso: #d97706;
-  --aviso-bg: #fef3c7;
+  --aviso-bg: #ffedd5;
   --erro: #dc2626;
   --erro-bg: #fee2e2;
   --info: #2563eb;
   --info-bg: #dbeafe;
+  --roxo: #7c3aed;
+  --roxo-bg: #ede9fe;
+  --rosa: #db2777;
+  --rosa-bg: #fce7f3;
 
   /* Ambar da marca Danmo */
   --ambar: #f59e0b;
@@ -118,11 +122,15 @@
   --sucesso: #34d399;
   --sucesso-bg: #064e3b;
   --aviso: #fbbf24;
-  --aviso-bg: #78350f;
+  --aviso-bg: #7c2d12;
   --erro: #f87171;
   --erro-bg: #7f1d1d;
   --info: #60a5fa;
   --info-bg: #1e3a8a;
+  --roxo: #c4b5fd;
+  --roxo-bg: #4c1d95;
+  --rosa: #f9a8d4;
+  --rosa-bg: #831843;
 
   --ambar: #f59e0b;
   --ambar-hover: #fbbf24;
@@ -176,6 +184,10 @@
   --color-erro-bg: var(--erro-bg);
   --color-info: var(--info);
   --color-info-bg: var(--info-bg);
+  --color-roxo: var(--roxo);
+  --color-roxo-bg: var(--roxo-bg);
+  --color-rosa: var(--rosa);
+  --color-rosa-bg: var(--rosa-bg);
 
   --color-ambar: var(--ambar);
   --color-ambar-hover: var(--ambar-hover);

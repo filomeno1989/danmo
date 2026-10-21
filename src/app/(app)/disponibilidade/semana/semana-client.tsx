@@ -10,7 +10,10 @@
  *   disponibilidade pela fórmula do ficheiro ((total - pend. fecho -
  *   aguardam peças) ÷ total) ao lado da nossa de horas reais da
  *   grelha, e o gráfico de barras com a linha da meta;
- * - botão "Preencher das OS" calcula tudo das ordens de serviço reais;
+ * - botão "Preencher das OS" recalcula tudo das ordens de serviço reais;
+ * - as caixas nascem JÁ PREENCHIDAS pelas ordens quando a semana ainda
+ *   não foi gravada (pedido do Filomeno: o movimento vem das obras, não
+ *   do preenchimento à mão); gravar fixa os números, que passam a mandar;
  * - botão "Importar backup" carrega o JSON exportado do ficheiro do
  *   Director e preenche a semana dele (frotas, avarias, dificuldades,
  *   melhorias), saltando para a semana certa;
@@ -156,7 +159,8 @@ export function SemanaClient({ podeEditar }: { podeEditar: boolean }) {
         const av: Record<string, AvariaSemana> = {};
         const ab: Record<string, boolean> = {};
         for (const f of d.frotas) {
-          l[f] = d.guardado[f] || { pend_inicio: 0, entradas: 0, saidas: 0, aguardam_pecas: 0 };
+          // semana gravada manda; sem gravação, nasce preenchida pelas ordens
+          l[f] = d.guardado[f] || d.osCalculado?.[f] || { pend_inicio: 0, entradas: 0, saidas: 0, aguardam_pecas: 0 };
           const a = d.avarias?.[f];
           av[f] = { frequentes: a?.frequentes || "", complexas: a?.complexas || "" };
           if (a && (a.frequentes || a.complexas)) ab[f] = true;
@@ -185,7 +189,8 @@ export function SemanaClient({ podeEditar }: { podeEditar: boolean }) {
         const av: Record<string, AvariaSemana> = {};
         const ab: Record<string, boolean> = {};
         for (const f of d.frotas) {
-          l[f] = d.guardado[f] || { pend_inicio: 0, entradas: 0, saidas: 0, aguardam_pecas: 0 };
+          // semana gravada manda; sem gravação, nasce preenchida pelas ordens
+          l[f] = d.guardado[f] || d.osCalculado?.[f] || { pend_inicio: 0, entradas: 0, saidas: 0, aguardam_pecas: 0 };
           const a = d.avarias?.[f];
           av[f] = { frequentes: a?.frequentes || "", complexas: a?.complexas || "" };
           if (a && (a.frequentes || a.complexas)) ab[f] = true;

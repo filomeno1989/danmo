@@ -3,9 +3,7 @@
  *
  * GET ?ano=2026&mes=10|0&frota=<macro-frota|todos>
  *
- * Devolve numa só viagem (agregações calculadas no servidor a partir de
- * disp_mensal, disp_horometro e disp_config - os dados reais importados
- * dos excels AVAILABILITY OF MACHINES 2022-2026):
+ * Devolve numa só viagem (agregações calculadas no servidor):
  * - meta de disponibilidade (80% por defeito, ajustável nas configurações);
  * - resumo dos 12 meses do ano (horas disponíveis, paradas, percentagem);
  * - comparação entre todos os anos existentes na base;
@@ -14,13 +12,30 @@
  * - horas trabalhadas do horómetro no mês;
  * - as 6 máquinas com mais horas paradas no período.
  *
+ * FONTES (pedido do Filomeno de 21/10: o Painel não pode estar vazio no
+ * ano em que o diário já mostra dados reais):
+ * - anos fechados: disp_mensal oficial (excels AVAILABILITY OF MACHINES
+ *   2022-2025), como sempre, intacto;
+ * - ano em curso: calculado na hora pela ponte das ordens (ponte-os.ts,
+ *   o mesmo motor da Grelha), com marcações explícitas a ganhar e só
+ *   dias já vividos (o mês em curso entra até hoje). Quando sair o excel
+ *   oficial do ano, ele passa a mandar sozinho (ano passa a ser fechado).
+ *
  * "mes=0" significa o ano inteiro.
  */
 
 import { NextResponse } from "next/server";
 import { query, queryTudo } from "@/lib/supabase";
 import { autorizadoDisp, eErro, erroBase } from "@/lib/guarda-api";
-import { frotaDeGrupo, gruposDaFrota, pctDisponibilidade } from "@/lib/disponibilidade";
+import { frotaDeGrupo, gruposDaFrota, hojeMaputo, pctDisponibilidade } from "@/lib/disponibilidade";
+import {
+  segmentosDeOrdens,
+  segmentosDeTransicoes,
+  sintetizarAnoMensal,
+  type OrdemPonte,
+  type SegmentoPonte
+} from "@/lib/ponte-os";
+import type { OrdemServico } from "@/lib/oficina";
 
 export const dynamic = "force-dynamic";
 
@@ -85,9 +100,81 @@ export async function GET(request: Request) {
 
     const mensal = mensalTudo.filter((l) => eqVisiveis.has(l.equipment_id));
 
+    const hoje = hojeMaputo();
+    const anoActual = Number(hoje.slice(0, 4));
+
+    /* ===== linhas do ano escolhido (oficial ou síntese do ano em curso) ===== */
+    let linhasAno: MensalLinha[] = [];
+    if (ano === anoActual) {
+      const idsVisiveis = [...equipamentos.filter((e) => eqVisiveis.has(e.id)).map((e) => e.id)];
+      const [ordensBrutas, transicoesAbertas, diasAno] = await Promise.all([
+        queryTudo<OrdemServico>(
+          "ordens_servico",
+          `select=id,numero_obra,equipment_id,data_abertura,data_fecho,status_atual,status_fisico,atualizado_em&data_abertura=lte.${ano}-12-31`
+        ),
+        queryTudo<{ id: number; equipment_id: number; estado: string; inicio: string }>(
+          "disp_transicoes",
+          "select=id,equipment_id,estado,inicio&fim=is.null"
+        ),
+        queryTudo<{ equipment_id: number; data: string; estado: string | null; horas_disponiveis: number | string | null }>(
+          "disp_dias",
+          `select=equipment_id,data,estado,horas_disponiveis&data=gte.${ano}-01-01&data=lt.${ano + 1}-01-01`
+        )
+      ]);
+      const conjunto = new Set(idsVisiveis);
+      const ordensVisiveis = ordensBrutas.filter((o) => conjunto.has(o.equipment_id));
+      const idsCdm = ordensVisiveis
+        .filter((o) => o.status_atual === "CdM" && !o.data_fecho)
+        .map((o) => o.id);
+      const logsCdm = idsCdm.length
+        ? await queryTudo<{ os_id: number; data_mudanca: string }>(
+            "os_status_log",
+            `select=os_id,data_mudanca&status_novo=eq.CdM&os_id=in.(${idsCdm.join(",")})&order=data_mudanca.asc`
+          )
+        : [];
+      const saidaCdM = new Map<number, string>();
+      for (const l of logsCdm) {
+        const d = (l.data_mudanca || "").slice(0, 10);
+        if (d && d > (saidaCdM.get(l.os_id) || "")) saidaCdM.set(l.os_id, d);
+      }
+      const ordensPonte: OrdemPonte[] = ordensVisiveis.map((o) => ({
+        id: o.id,
+        numero_obra: o.numero_obra || null,
+        equipment_id: o.equipment_id,
+        data_abertura: o.data_abertura || null,
+        status_atual: o.status_atual,
+        status_fisico: o.status_fisico || null,
+        saida:
+          o.status_atual === "Fechada" || o.status_atual === "CdM"
+            ? (o.data_fecho || "").slice(0, 10) ||
+              saidaCdM.get(o.id) ||
+              (o.atualizado_em || "").slice(0, 10) ||
+              null
+            : null
+      }));
+      const segmentos: SegmentoPonte[] = [
+        ...segmentosDeOrdens(ordensPonte),
+        ...segmentosDeTransicoes(
+          transicoesAbertas
+            .filter((t) => conjunto.has(t.equipment_id))
+            .map((t) => ({ id: t.id, equipment_id: t.equipment_id, estado: t.estado, inicio: (t.inicio || "").slice(0, 10) })),
+          hoje
+        )
+      ];
+      linhasAno = sintetizarAnoMensal({
+        ano,
+        hoje,
+        equipamentos: equipamentos.filter((e) => eqVisiveis.has(e.id)),
+        diasExplicitos: diasAno.filter((d) => conjunto.has(d.equipment_id)),
+        segmentos
+      });
+    } else {
+      linhasAno = mensal.filter((l) => l.ano === ano);
+    }
+
     // --- resumo dos 12 meses do ano escolhido
     const resumoMensal = Array.from({ length: 12 }, (_, i) => {
-      const linhas = mensal.filter((l) => l.ano === ano && l.mes === i + 1);
+      const linhas = linhasAno.filter((l) => l.mes === i + 1);
       const horasA = linhas.reduce((s, l) => s + n(l.horas_a), 0);
       const horasTotal = linhas.reduce((s, l) => s + n(l.horas_total), 0);
       const horasBD = linhas.reduce((s, l) => s + n(l.horas_bd), 0);
@@ -113,17 +200,20 @@ export async function GET(request: Request) {
       };
     });
 
-    // --- comparação entre anos (todos os que existem na base)
-    const anosPresentes = [...new Set(mensal.map((l) => l.ano))].sort((a, b) => a - b);
+    // --- comparação entre anos (oficiais + o ano em curso sintetizado;
+    // as linhas disp_mensal do ano em curso ficam de fora para não contar dobrado)
+    const todasLinhas =
+      ano === anoActual ? [...mensal.filter((l) => l.ano !== anoActual), ...linhasAno] : mensal;
+    const anosPresentes = [...new Set(todasLinhas.map((l) => l.ano))].sort((a, b) => a - b);
     const comparacaoAnos = anosPresentes.map((a) => {
-      const linhas = mensal.filter((l) => l.ano === a);
+      const linhas = todasLinhas.filter((l) => l.ano === a);
       const horasA = linhas.reduce((s, l) => s + n(l.horas_a), 0);
       const horasTotal = linhas.reduce((s, l) => s + n(l.horas_total), 0);
       return { ano: a, pct: pctDisponibilidade(horasA, horasTotal), horasA: Math.round(horasA), total: Math.round(horasTotal) };
     });
 
     // --- período activo (mês escolhido ou ano inteiro)
-    const linhasPeriodo = mensal.filter((l) => l.ano === ano && (mes === 0 || l.mes === mes));
+    const linhasPeriodo = linhasAno.filter((l) => mes === 0 || l.mes === mes);
     const aPeriodo = linhasPeriodo.reduce((s, l) => s + n(l.horas_a), 0);
     const totalPeriodo = linhasPeriodo.reduce((s, l) => s + n(l.horas_total), 0);
 
@@ -168,8 +258,7 @@ export async function GET(request: Request) {
       if (!eqVisiveis.has(e.id) || !e.active) continue;
       garantir(e.group_name).maquinas.add(e.id);
     }
-    for (const l of mensal) {
-      if (l.ano !== ano) continue;
+    for (const l of linhasAno) {
       const linha = garantir(grupoDe.get(l.equipment_id) ?? "");
       linha.anoA += n(l.horas_a);
       linha.anoT += n(l.horas_total);
@@ -202,8 +291,7 @@ export async function GET(request: Request) {
         mesPorEq.set(l.equipment_id, r);
       }
       const anoPorEq = new Map<number, { a: number; t: number }>();
-      for (const l of mensal) {
-        if (l.ano !== ano) continue;
+      for (const l of linhasAno) {
         const r = anoPorEq.get(l.equipment_id) || { a: 0, t: 0 };
         r.a += n(l.horas_a);
         r.t += n(l.horas_total);

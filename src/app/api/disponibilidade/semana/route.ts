@@ -10,9 +10,10 @@
  *   diária (disp_dias) e comparada com a meta.
  *
  * GET ?ano=2026&semana=42 -> dados guardados + números calculados das OS
- *   (para o botão "Preencher das OS") + disponibilidade da semana +
- *   total de máquinas por frota + avarias frequentes/complexas da
- *   secção 03 + disponibilidade global da semana.
+ *   (pend_inicio/entradas/saidas/aguardam_pecas - preenchem as caixas
+ *   sozinhos quando a semana ainda não foi gravada) + disponibilidade da
+ *   semana + total de máquinas por frota + avarias frequentes/complexas
+ *   da secção 03 + disponibilidade global da semana.
  * POST { ano, semana, linhas:[{frota,pend_inicio,entradas,saidas,
  *        aguardam_pecas}], dificuldades, melhorias,
  *        avarias:[{frota,frequentes,complexas}] } -> grava tudo.
@@ -30,6 +31,7 @@ import {
   intervaloSemanaISO,
   pctDisponibilidade
 } from "@/lib/disponibilidade";
+import { calcularMovimentoDeOrdens } from "@/lib/ponte-os";
 
 export const dynamic = "force-dynamic";
 
@@ -55,33 +57,6 @@ type EquipTotalLinha = { id: number; group_name: string | null; active: boolean 
 
 const int = (v: unknown): number => Math.max(0, Math.trunc(Number(v) || 0));
 
-/** Números calculados das OS para uma semana (o preenchimento automático). */
-function calcularDasOs(
-  os: OsLinha[],
-  grupoDe: Map<number, string>,
-  de: string,
-  ate: string,
-  inicioSemanaAnterior: string
-) {
-  const contagem = new Map<string, { pend: number; ent: number; sai: number; pecas: number }>();
-  for (const f of FROTAS_PADRAO) {
-    contagem.set(f.label, { pend: 0, ent: 0, sai: 0, pecas: 0 });
-  }
-  for (const o of os) {
-    const frota = frotaDeGrupo(grupoDe.get(o.equipment_id));
-    const linha = contagem.get(frota);
-    if (!linha) continue;
-    const abertura = (o.data_abertura || "").slice(0, 10);
-    const fecho = (o.data_fecho || "").slice(0, 10);
-    const aberta = Boolean(abertura) && !fecho;
-    if (abertura && abertura < de && (!fecho || fecho >= de)) linha.pend += 1;
-    if (abertura >= de && abertura < ate) linha.ent += 1;
-    if (fecho && fecho >= de && fecho < ate) linha.sai += 1;
-    if (aberta && abertura < ate && (o.status_fisico || "") === "Aguarda Acessório") linha.pecas += 1;
-  }
-  return contagem;
-}
-
 export async function GET(request: Request) {
   const auth = await autorizadoDisp("ver");
   if (eErro(auth)) return auth;
@@ -96,9 +71,6 @@ export async function GET(request: Request) {
 
   try {
     const { de, ate } = intervaloSemanaISO(ano, semana);
-    const anterior = new Date(de + "T00:00:00Z");
-    anterior.setUTCDate(anterior.getUTCDate() - 7);
-    const inicioSemanaAnterior = anterior.toISOString().slice(0, 10);
 
     const [os, equipamentos, dias, guardadas, geral, config] = await Promise.all([
       queryTudo<OsLinha>("ordens_servico", "select=id,equipment_id,data_abertura,data_fecho,status_atual,status_fisico"),
@@ -119,7 +91,15 @@ export async function GET(request: Request) {
     ]);
 
     const grupoDe = new Map(equipamentos.map((e) => [e.id, e.group_name || ""]));
-    const osCalculado = Object.fromEntries(calcularDasOs(os, grupoDe, de, ate, inicioSemanaAnterior));
+    // números calculados das ordens (chaves iguais às linhas gravadas:
+    // pend_inicio, entradas, saidas, aguardam_pecas)
+    const osCalculado = calcularMovimentoDeOrdens(
+      os,
+      (id) => frotaDeGrupo(grupoDe.get(id)),
+      FROTAS_PADRAO.map((f) => f.label),
+      de,
+      ate
+    );
 
     // total de máquinas activas por frota (a coluna Total do ficheiro)
     const totalFrota: Record<string, number> = {};

@@ -9,6 +9,8 @@
  *      físico da obra e a máquina só volta a "Disponível" quando a obra
  *      é enviada à CdM ou fechada; nos dias sem obra nenhum a máquina
  *      assume-se disponível 24h. As marcações manuais ganham sempre.
+ *      A síntese e as percentagens param no dia actual: o mês em curso
+ *      nunca conta dias que ainda não aconteceram (pedido do Filomeno).
  *
  * POST { marcacoes: [{ equipment_id, data, estado, horas_disponiveis,
  *                      hora_entrada, hora_saida, observacao }] }
@@ -229,16 +231,20 @@ export async function GET(request: Request) {
     );
     const sintetizados = sintetizarDias({
       mes: mesParam,
+      hoje,
       equipamentos: eqs,
       chavesExplicitas,
       segmentos
     });
     const diasCompletos = [...dias, ...sintetizados];
+    // As percentagens contam só dias já vividos: uma marcação do futuro
+    // ("repetir até") entra na conta no dia em que chegar.
+    const diasContaveis = diasCompletos.filter((d) => d.data.slice(0, 10) <= hoje);
 
     // resumo semanal do mês (requisito: disponibilidade também por semana);
-    // conta com os dias sintetizados da ponte (o mês inteiro tem estado)
+    // conta com os dias sintetizados da ponte, parados no dia actual
     const semanas = new Map<number, { horasA: number; maquinas: Set<number>; dias: Set<string> }>();
-    for (const d of diasCompletos) {
+    for (const d of diasContaveis) {
       if (!ids.has(d.equipment_id)) continue;
       const { ano: anoISO, semana } = semanaISOde(new Date(d.data.slice(0, 10) + "T00:00:00Z"));
       const chave = anoISO === ano ? semana : 0; // semanas que pertencem ao mês pela data
@@ -259,7 +265,7 @@ export async function GET(request: Request) {
         return { semana, pct: pctDisponibilidade(v.horasA, total), maquinas: v.maquinas.size, dias: v.dias.size };
       });
 
-    const horasMes = diasCompletos.reduce((s, d) => s + n(d.horas_disponiveis), 0);
+    const horasMes = diasContaveis.reduce((s, d) => s + n(d.horas_disponiveis), 0);
     const nomesMaquinas = new Map(eqs.map((e) => [e.id, { code: e.code, nome: e.name || "" }]));
 
     return NextResponse.json({

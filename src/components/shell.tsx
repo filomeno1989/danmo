@@ -737,19 +737,44 @@ export function Shell({ utilizador, modulos, paginas, children }: Props) {
                               </button>
                               {ga && (
                                 <div className="mb-1 ml-3 space-y-0.5 border-l border-sidebar-border pl-2">
-                                  {grupo.itens.map((item) => (
-                                    <Link
-                                      key={item.label}
-                                      href={item.href}
-                                      className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[0.8rem] text-sidebar-secundario transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                                    >
-                                      <ChevronRight
-                                        className="size-3 shrink-0 opacity-50"
-                                        aria-hidden
-                                      />
-                                      <span className="truncate">{item.label}</span>
-                                    </Link>
-                                  ))}
+                                  {grupo.itens.map((item) => {
+                                    /* Mesma regra das sub-páginas: item de
+                                       grupo com página entra pela matriz; sem
+                                       página (Em migração) só a administração.
+                                       Bloqueado: círculo com a barra - o
+                                       servidor recusa de qualquer forma. */
+                                    const autorizadoItem = item.pagina
+                                      ? paginas.includes(item.pagina)
+                                      : eAdmin;
+                                    if (!autorizadoItem) {
+                                      return (
+                                        <div
+                                          key={item.label}
+                                          title={`${item.label} (sem acesso)`}
+                                          className="flex cursor-not-allowed items-center gap-2 rounded-lg px-2.5 py-2 text-[0.8rem] text-sidebar-foreground/40"
+                                        >
+                                          <CircleSlash
+                                            className="size-3 shrink-0 opacity-60"
+                                            aria-hidden
+                                          />
+                                          <span className="truncate">{item.label}</span>
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <Link
+                                        key={item.label}
+                                        href={item.href}
+                                        className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[0.8rem] text-sidebar-secundario transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                                      >
+                                        <ChevronRight
+                                          className="size-3 shrink-0 opacity-50"
+                                          aria-hidden
+                                        />
+                                        <span className="truncate">{item.label}</span>
+                                      </Link>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>

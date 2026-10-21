@@ -495,3 +495,19 @@
     animation: none;
   }
 }
+
+/* ============ Editor rico da Faturação (descrição do serviço) ============ */
+.rich-editor.rich-vazio::before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground, #8a94a6);
+  pointer-events: none;
+  display: block;
+}
+.rich-editor p {
+  margin: 0 0 4px 0;
+}
+.rich-editor ul,
+.rich-editor ol {
+  margin: 4px 0;
+  padding-left: 24px;
+}

@@ -18,6 +18,7 @@ import {
   KeyRound,
   Cog,
   Package,
+  Briefcase,
   Layers,
   ArrowRight,
   type LucideIcon
@@ -126,6 +127,7 @@ export function PainelInicio({
   quem,
   podeOficina,
   podeStock,
+  podeFaturacao,
   eAdmin,
   fundos
 }: {
@@ -133,6 +135,7 @@ export function PainelInicio({
   quem: string;
   podeOficina: boolean;
   podeStock: boolean;
+  podeFaturacao: boolean;
   eAdmin: boolean;
   fundos?: Parameters<typeof HeroiSaudacao>[0]["fundosIniciais"];
 }) {
@@ -204,6 +207,23 @@ export function PainelInicio({
             seta="border-red-700/30 text-red-900 hover:bg-red-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
             href="/stock"
             rotulo="Abrir a Gestão de Stock"
+          />
+        </SemPermissaoAplicada>
+
+        <SemPermissaoAplicada permitido={podeFaturacao}>
+          <CartaoFase
+            classeFundo="fase-ambar text-amber-950 dark:text-white"
+            icone={Briefcase}
+            tile="bg-amber-600 text-white dark:bg-white/15 dark:text-white"
+            marcaAgua={Briefcase}
+            titulo="Admin. Oficinal"
+            corTitulo="text-amber-950 dark:text-white"
+            texto="Faturação no ar: Cotações e Faturas com numeração anual 001/2026, conversão de cotação em fatura e anexo de material do cliente. Seguem RH, Avaliação, Aquisições e Férias."
+            corTexto="text-amber-900/75 dark:text-white/75"
+            pill={pillNoAr}
+            seta="border-amber-700/30 text-amber-900 hover:bg-amber-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
+            href="/faturacao"
+            rotulo="Abrir a Faturação da Administração"
           />
         </SemPermissaoAplicada>
 

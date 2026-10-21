@@ -6,8 +6,17 @@
  * usa a hora de Maputo.
  */
 
-import { obterSessao, pode, NIVEL_LABEL } from "@/lib/auth";
+import { obterSessao, pode, podeVerAlgum, NIVEL_LABEL } from "@/lib/auth";
 import { PainelInicio } from "@/components/painel-inicio";
+
+const PAGINAS_FATURACAO = [
+  "faturacao",
+  "faturacao.editor",
+  "faturacao.clientes",
+  "faturacao.tecnicos",
+  "faturacao.tarifas",
+  "faturacao.relatorios"
+];
 
 /** Cumprimento certo à hora local de Moçambique (UTC+2). */
 function cumprimento(): string {
@@ -32,6 +41,7 @@ export default async function PaginaInicio() {
       quem={quem}
       podeOficina={pode(sessao, "oficina", "ver")}
       podeStock={pode(sessao, "stock", "ver")}
+      podeFaturacao={podeVerAlgum(sessao, PAGINAS_FATURACAO)}
       eAdmin={sessao?.utilizador.nivel === "admin"}
     />
   );

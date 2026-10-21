@@ -55,8 +55,10 @@ const FOTOS = "/home/z/my-project/danmo/tests";
   const activo = await page.locator('a[aria-current="page"]').textContent();
   ok("Item activo é 'Início'", (activo || "").includes("Início"));
   ok("Admin vê 'Definições' no menu", corpo.includes("Definições"));
-  ok("Fases marcadas no menu (Permissões já no ar: fase 7 saiu do menu)",
-     !corpo.includes("Fase 4") && corpo.includes("Fase 5") && corpo.includes("Fase 6") && !corpo.includes("Fase 7"));
+  // Fase 6: Admin. Oficinal entrou no ar (Faturação), logo "Fase 6"
+  // saiu do menu; ficam Fase 5 (HST e Ferramentaria).
+  ok("Fases marcadas no menu (Admin. Oficinal no ar: fase 6 saiu do menu)",
+     !corpo.includes("Fase 4") && corpo.includes("Fase 5") && !corpo.includes("Fase 6") && !corpo.includes("Fase 7"));
 
   // 4. Herói: saudação + selos + cartões de fase (nas cores do logo)
   ok("Herói tem 'Olá,'", corpo.includes("Olá,"));
@@ -68,10 +70,12 @@ const FOTOS = "/home/z/my-project/danmo/tests";
   ok("Selos de confiança", corpo.includes("Sistema seguro") && corpo.includes("Acesso autorizado") && corpo.includes("Em funcionamento"));
   ok("Cartões de fase", corpo.includes("Fundação") && corpo.includes("Oficina & Manutenção") && corpo.includes("Gestão de Stock"));
   ok("Pills de estado (stock passa a No ar)", corpo.includes("Concluída") && (corpo.match(/No ar/g) || []).length >= 2 && !corpo.includes("A seguir"));
-  ok("Cartões nas cores do logo (verde + ambar + vermelho)",
+  // Fase 6: 5 cartões (Oficina e Admin. Oficinal partilham o ambar)
+  ok("Cartões nas cores do logo (verde + 2 ambar + vermelho + azul)",
      (await page.locator(".fase-verde").count()) === 1 &&
-     (await page.locator(".fase-ambar").count()) === 1 &&
-     (await page.locator(".fase-vermelha").count()) === 1);
+     (await page.locator(".fase-ambar").count()) === 2 &&
+     (await page.locator(".fase-vermelha").count()) === 1 &&
+     (await page.locator(".fase-azul").count()) === 1);
   ok("Sobre este painel presente", (await page.locator("#sobre").count()) === 1);
   ok("Painel 'Sobre' no claro acompanha o tema (texto verde profundo)",
      (await page.evaluate(() => getComputedStyle(document.querySelector(".painel-sobre")).color)) === "rgb(20, 83, 45)");

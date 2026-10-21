@@ -110,22 +110,36 @@ describe("pode(): as 3 marcas", () => {
 });
 
 describe("PAGINAS: o mapa das páginas atribuíveis", () => {
-  test("são as 18 páginas reais dos 3 módulos no ar", () => {
-    expect(PAGINAS.length).toBe(18);
+  test("são as 24 páginas reais dos 4 módulos no ar (18 + 6 da Faturação)", () => {
+    expect(PAGINAS.length).toBe(24);
     const modulos = new Set(PAGINAS.map((p) => p.modulo));
-    expect([...modulos].sort()).toEqual(["disponibilidade", "oficina", "stock"]);
+    expect([...modulos].sort()).toEqual(["admin", "disponibilidade", "oficina", "stock"]);
+  });
+  test("a Faturação entra na matriz como páginas novas (sem href do sub, vem dos grupos)", () => {
+    const fat = PAGINAS.filter((p) => p.pagina.startsWith("faturacao"));
+    expect(fat.length).toBe(6);
+    expect(fat.map((p) => p.pagina).sort()).toEqual([
+      "faturacao",
+      "faturacao.clientes",
+      "faturacao.editor",
+      "faturacao.relatorios",
+      "faturacao.tarifas",
+      "faturacao.tecnicos"
+    ]);
   });
   test("ids únicos", () => {
     const ids = PAGINAS.map((p) => p.pagina);
     expect(new Set(ids).size).toBe(ids.length);
   });
-  test("cada id casa com a sub do seu módulo (menu e matriz falam a mesma língua)", () => {
+  test("cada id casa com a sub ou item de grupo do seu módulo (menu e matriz falam a mesma língua)", () => {
     for (const p of PAGINAS) {
       const m = moduloPorId(p.modulo);
       expect(m).toBeDefined();
       const sub = (m?.sub || []).find((x) => x.pagina === p.pagina);
-      expect(sub).toBeDefined();
-      expect(sub?.href).toBe(p.href);
+      const grupo = (m?.grupos || []).flatMap((g) => g.itens).find((x) => x.pagina === p.pagina);
+      const origem = sub || grupo;
+      expect(origem).toBeDefined();
+      expect(origem?.href).toBe(p.href);
     }
   });
   test("módulos por migrar (fase > 0) não entram na matriz", () => {
@@ -138,6 +152,10 @@ describe("PAGINAS: o mapa das páginas atribuíveis", () => {
   test("labelPagina junta o nome do módulo", () => {
     expect(labelPagina("stock.entradas")).toBe("Entradas (Gestão de Stock)");
     expect(labelPagina("oficina")).toBe("Visão Geral (Oficina & Manutenção)");
+  });
+  test("labelPagina prefixa a Faturação (Painel sozinho não diz nada na matriz)", () => {
+    expect(labelPagina("faturacao")).toBe("Faturação - Painel (Admin. Oficinal)");
+    expect(labelPagina("faturacao.relatorios")).toBe("Faturação - Relatórios (Admin. Oficinal)");
   });
   test("labels especiais para páginas garantidas/admin", () => {
     expect(labelPagina("permissoes")).toBe("Permissões & Contas");

@@ -78,7 +78,10 @@ export const MODULOS: Modulo[] = [
     id: "admin",
     label: "Admin. Oficinal",
     icone: "Briefcase",
-    fase: 6,
+    // Fase 6 começou a entrar no ar: a FATURAÇÃO (Cotações e Faturas) é
+    // o primeiro módulo real deste grupo. Os restantes grupos seguem
+    // "Em migração" (bloqueados para todos menos a administração).
+    fase: 0,
     grupos: [
       {
         label: "RH & Quadro de Pessoal",
@@ -113,12 +116,12 @@ export const MODULOS: Modulo[] = [
       {
         label: "Faturação (Cotações e Faturas)",
         itens: [
-          { label: "Painel", href: "/em-migracao?mod=faturacao" },
-          { label: "Novo Documento", href: "/em-migracao?mod=faturacao" },
-          { label: "Clientes", href: "/em-migracao?mod=faturacao" },
-          { label: "Técnicos", href: "/em-migracao?mod=faturacao" },
-          { label: "Tarifas", href: "/em-migracao?mod=faturacao" },
-          { label: "Relatórios", href: "/em-migracao?mod=faturacao" }
+          { label: "Painel", href: "/faturacao", pagina: "faturacao" },
+          { label: "Novo Documento", href: "/faturacao/editor", pagina: "faturacao.editor" },
+          { label: "Clientes", href: "/faturacao/clientes", pagina: "faturacao.clientes" },
+          { label: "Técnicos", href: "/faturacao/tecnicos", pagina: "faturacao.tecnicos" },
+          { label: "Tarifas", href: "/faturacao/tarifas", pagina: "faturacao.tarifas" },
+          { label: "Relatórios", href: "/faturacao/relatorios", pagina: "faturacao.relatorios" }
         ]
       }
     ]
@@ -191,19 +194,33 @@ export function moduloPorId(id: string): Modulo | undefined {
 }
 
 /**
- * As PÁGINAS atribuíveis na matriz (Fase 7 R1): as 18 páginas reais dos
- * módulos já no ar. Início e o perfil próprio ("Os meus dados") são
+ * As PÁGINAS atribuíveis na matriz (Fase 7 R1): as páginas reais dos
+ * módulos já no ar (de "sub" e dos GRUPOS, como a Faturação dentro de
+ * Admin. Oficinal). Início e o perfil próprio ("Os meus dados") são
  * garantidos a todos e não entram na matriz; a página Permissões é só
  * da administração. As páginas "Em migração" (fase > 0) ficam bloqueadas
- * para todos menos o admin, como sempre.
+ * para todos menos o admin, como sempre. Páginas novas entram SEM linha
+ * na matriz: ninguém as vê até o Filomeno destravar à mão.
  */
-export const PAGINAS: { pagina: string; label: string; modulo: string; href: string }[] =
-  MODULOS.filter((m) => m.fase === 0 && m.sub?.length)
-    .flatMap((m) =>
-      (m.sub || [])
-        .filter((s) => s.pagina)
-        .map((s) => ({ pagina: s.pagina as string, label: s.label, modulo: m.id, href: s.href }))
-    );
+export const PAGINAS: { pagina: string; label: string; modulo: string; href: string }[] = [
+  ...MODULOS.filter((m) => m.fase === 0 && m.sub?.length).flatMap((m) =>
+    (m.sub || [])
+      .filter((s) => s.pagina)
+      .map((s) => ({ pagina: s.pagina as string, label: s.label, modulo: m.id, href: s.href }))
+  ),
+  ...MODULOS.filter((m) => m.fase === 0 && m.grupos?.length).flatMap((m) =>
+    (m.grupos || []).flatMap((g) =>
+      g.itens
+        .filter((i) => i.pagina)
+        .map((i) => ({
+          pagina: i.pagina as string,
+          label: i.label,
+          modulo: m.id,
+          href: i.href
+        }))
+    )
+  )
+];
 
 /** Label bonito de uma página na matriz (ex.: "Entradas (Gestão de Stock)"). */
 export function labelPagina(pagina: string): string {
@@ -211,6 +228,8 @@ export function labelPagina(pagina: string): string {
   if (pagina === "perfil") return "Os meus dados";
   const p = PAGINAS.find((x) => x.pagina === pagina);
   if (!p) return pagina;
+  // Faturação: "Painel" sozinho não diz nada na matriz; prefixa o módulo.
+  const prefixo = pagina.startsWith("faturacao") ? "Faturação - " : "";
   const mod = moduloPorId(p.modulo);
-  return `${p.label} (${mod?.label || p.modulo})`;
+  return `${prefixo}${p.label} (${mod?.label || p.modulo})`;
 }

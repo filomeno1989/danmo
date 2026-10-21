@@ -203,6 +203,62 @@ export function serieSeisMeses(
   return serie;
 }
 
+/** Linha de material do fecho CdM, já validada pelo servidor. */
+export type LinhaFechoStock = {
+  material: string;
+  quantidade: number;
+  valor_unitario: number;
+};
+
+/** Saída de stock que o fecho CdM deve criar, já agregada por material. */
+export type SaidaFechoStock = {
+  material_id: string;
+  nome_material: string;
+  quantidade: number;
+  nomes_fecho: string[];
+};
+
+/**
+ * ETAPA D - DESCONTO ÚNICO POR OBRA: transforma as linhas de material do
+ * fecho CdM nas saídas de stock a criar. Três regras:
+ * 1. Linhas do fecho com o MESMO material agregam-se numa saída só
+ *    (quantidades somadas, arredondadas a 2 casas);
+ * 2. Materiais em idsJaSaidos (material_ids que já têm saída ligada às
+ *    peças da MESMA obra - pendente ou confirmado; um movimento
+ *    rejeitado foi APAGADO, por isso não entra no conjunto) ficam de
+ *    fora: o material já saiu do stock na oficina, o fecho deles serve
+ *    só para FATURAR, não gera nova saída;
+ * 3. Nomes sem material no catálogo ficam de fora (só faturação).
+ */
+export function saidasStockDoFecho(
+  linhas: LinhaFechoStock[],
+  catalogo: { id: string; nome: string; ativo: boolean }[],
+  idsJaSaidos: string[] = []
+): SaidaFechoStock[] {
+  const jaSaidos = new Set(idsJaSaidos);
+  const agregado = new Map<string, SaidaFechoStock>();
+  for (const l of linhas) {
+    const nome = (l.material || "").trim();
+    const qtd = Number(l.quantidade);
+    if (!nome || !Number.isFinite(qtd) || qtd <= 0) continue;
+    const mat = casarMaterialFecho(nome, catalogo);
+    if (!mat) continue;
+    const h = agregado.get(mat.id);
+    if (h) {
+      h.quantidade = Math.round((h.quantidade + qtd) * 100) / 100;
+      if (!h.nomes_fecho.includes(nome)) h.nomes_fecho.push(nome);
+    } else {
+      agregado.set(mat.id, {
+        material_id: mat.id,
+        nome_material: mat.nome,
+        quantidade: Math.round(qtd * 100) / 100,
+        nomes_fecho: [nome]
+      });
+    }
+  }
+  return [...agregado.values()].filter((s) => !jaSaidos.has(s.material_id));
+}
+
 /**
  * Casar o nome livre do fecho CdM (gases) com um material do catálogo,
  * sem acentos e sem diferenciar maiúsculas. Devolve o material ou null.

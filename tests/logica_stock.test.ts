@@ -9,6 +9,9 @@
  *  - apagar entrada consumida é bloqueado;
  *  - série dos 6 meses com zeros e custo MZN;
  *  - casarMaterialFecho (nomes dos gases sem acentos);
+ *  - saidasStockDoFecho: desconto ÚNICO por obra (materiais já saídos
+ *    pelas peças não geram saída nova no fecho; linhas repetidas
+ *    agregam-se numa saída só);
  *  - busca sem acentos (normalizar).
  */
 
@@ -20,6 +23,7 @@ import {
   motivoBloqueioApagarEntrada,
   serieSeisMeses,
   casarMaterialFecho,
+  saidasStockDoFecho,
   normalizar,
   fmtNum,
   fmtMzn,
@@ -184,6 +188,100 @@ describe("casarMaterialFecho (gases da Faturação)", () => {
   it("devolve null quando não casa", () => {
     expect(casarMaterialFecho("Argon", catalogo)).toBeNull();
     expect(casarMaterialFecho("", catalogo)).toBeNull();
+  });
+});
+
+describe("saidasStockDoFecho (desconto único por obra)", () => {
+  const catalogo = [
+    { id: "g1", nome: "Gás Acetileno", ativo: true },
+    { id: "g2", nome: "Oxigénio Medicinal", ativo: true },
+    { id: "g3", nome: "Óleo DOT3", ativo: true }
+  ];
+
+  it("material já saído pelas peças da MESMA obra não gera saída nova no fecho", () => {
+    const r = saidasStockDoFecho(
+      [
+        { material: "Gás Acetileno", quantidade: 2, valor_unitario: 500 },
+        { material: "Óleo DOT3", quantidade: 1, valor_unitario: 350 }
+      ],
+      catalogo,
+      ["g1"] // g1 já tem saída ligada às peças da obra
+    );
+    expect(r).toHaveLength(1);
+    expect(r[0].material_id).toBe("g3");
+  });
+
+  it("materiais só do fecho (não passaram pelas peças) criam a saída", () => {
+    const r = saidasStockDoFecho(
+      [{ material: "Oxigénio", quantidade: 3, valor_unitario: 100 }],
+      catalogo,
+      ["g1"]
+    );
+    expect(r).toHaveLength(1);
+    expect(r[0].material_id).toBe("g2");
+    expect(r[0].quantidade).toBe(3);
+  });
+
+  it("linhas repetidas do mesmo material agregam numa ÚNICA saída", () => {
+    const r = saidasStockDoFecho(
+      [
+        { material: "gas acetileno", quantidade: 2, valor_unitario: 500 },
+        { material: "GÁS ACETILENO", quantidade: 1.5, valor_unitario: 500 }
+      ],
+      catalogo,
+      []
+    );
+    expect(r).toHaveLength(1);
+    expect(r[0].material_id).toBe("g1");
+    expect(r[0].quantidade).toBe(3.5);
+    expect(r[0].nomes_fecho).toEqual(["gas acetileno", "GÁS ACETILENO"]);
+  });
+
+  it("nome sem material no catálogo fica só na faturação", () => {
+    const r = saidasStockDoFecho(
+      [{ material: "Argon", quantidade: 1, valor_unitario: 50 }],
+      catalogo,
+      []
+    );
+    expect(r).toEqual([]);
+  });
+
+  it("linhas inválidas (vazias, qtd 0 ou negativa) são ignoradas", () => {
+    const r = saidasStockDoFecho(
+      [
+        { material: "", quantidade: 2, valor_unitario: 10 },
+        { material: "Oxigénio", quantidade: 0, valor_unitario: 10 },
+        { material: "Oxigénio", quantidade: -1, valor_unitario: 10 }
+      ],
+      catalogo,
+      []
+    );
+    expect(r).toEqual([]);
+  });
+
+  it("movimento da peça rejeitado (apagado) não conta: o fecho cria a saída", () => {
+    // idsJaSaidos vem dos movimentos VIVOS ligados às peças; um rejeitado
+    // foi apagado da base, logo o material não está no conjunto - o
+    // material saiu à mesma e o fecho fica com o desconto.
+    const r = saidasStockDoFecho(
+      [{ material: "Gás Acetileno", quantidade: 2, valor_unitario: 500 }],
+      catalogo,
+      []
+    );
+    expect(r).toHaveLength(1);
+    expect(r[0].material_id).toBe("g1");
+  });
+
+  it("mesmo material nas peças e repetido no fecho: nada duplica", () => {
+    const r = saidasStockDoFecho(
+      [
+        { material: "Gás Acetileno", quantidade: 2, valor_unitario: 500 },
+        { material: "Gas Acetileno", quantidade: 1, valor_unitario: 500 }
+      ],
+      catalogo,
+      ["g1"]
+    );
+    expect(r).toEqual([]);
   });
 });
 

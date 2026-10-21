@@ -36,7 +36,7 @@ import {
   type TemplateChecklist,
   type TrocaRevisao
 } from "@/lib/oficina";
-import { casarMaterialFecho } from "@/lib/stock";
+import { saidasStockDoFecho } from "@/lib/stock";
 
 type Contexto = { params: Promise<{ id: string }> };
 
@@ -505,6 +505,36 @@ export async function POST(req: NextRequest, ctx: Contexto) {
         const dataPeca = (p.data || dataHojeISO()).slice(0, 10);
         const dataMovPeca = dataPeca > dataHojeISO() ? dataHojeISO() : dataPeca;
 
+        // DESCONTO ÚNICO POR OBRA (lado da peça): se a obra já foi fechada
+        // com fecho CdM, os materiais do fecho têm a sua saída com a
+        // finalidade "OS xxx (Fecho CdM)". Uma peça registada ou editada
+        // DEPOIS do fecho com um desses materiais grava SEM movimento
+        // novo, para o mesmo material nunca sair duas vezes da mesma
+        // obra. (Peças criadas ANTES do fecho mantêm o seu movimento: foi
+        // o fecho que as pulou ao gravar.) Tolerante à tabela ausente:
+        // sem o SQL do fecho, comportamento de sempre.
+        let materiaisDoFecho: Set<string> = new Set();
+        if (p.usarStock) {
+          try {
+            const fechoGravado = await query<{ id: number }>(
+              "obras_fechadas_cdm",
+              `select=id&os_id=eq.${osId}&limit=1`
+            );
+            if (fechoGravado.length) {
+              const finalidadeFecho = `OS ${os.numero_obra || "S/Nº"} (Fecho CdM)`;
+              const movsFecho = await query<{ material_id: string }>(
+                "stock_movimentos",
+                `select=material_id&tipo=eq.saida&finalidade=eq.${encodeURIComponent(
+                  finalidadeFecho
+                )}`
+              );
+              materiaisDoFecho = new Set(movsFecho.map((m) => m.material_id));
+            }
+          } catch {
+            // sem o módulo de faturação na base, nada a pular
+          }
+        }
+
         for (const linha of p.linhas) {
           const qtd = Number(linha.qtd);
           if (!Number.isFinite(qtd) || qtd <= 0) {
@@ -542,28 +572,39 @@ export async function POST(req: NextRequest, ctx: Contexto) {
             }
 
             let movId: string | null = null;
-            if (p.id) movId = await movPendenteDaPeca(p.id);
-            if (movId) {
-              // Edição: o MESMO movimento pendente é actualizado.
-              await update("stock_movimentos", `id=eq.${movId}`, {
-                material_id: linha.materialId,
-                quantidade: qtdGravada,
-                data_movimento: dataMovPeca,
-                colaborador_nome: p.colaborador || ""
-              });
+            if (materiaisDoFecho.has(linha.materialId)) {
+              // Material já sai pelo fecho desta obra: a peça grava sem
+              // movimento próprio. Um pendente antigo desta peça sai
+              // (trocou para um material já faturado); já CONFIRMADO
+              // fica - o histórico não mente.
+              if (p.id) {
+                const antigo = await movPendenteDaPeca(p.id);
+                if (antigo) await del("stock_movimentos", antigo);
+              }
             } else {
-              const mov = await insert<{ id: string }>("stock_movimentos", {
-                tipo: "saida",
-                estado: "pendente",
-                material_id: linha.materialId,
-                quantidade: qtdGravada,
-                data_movimento: dataMovPeca,
-                departamento: "Oficina",
-                finalidade: `OS ${os.numero_obra || "S/Nº"}`,
-                observacoes: `Avaria: ${os.descricao_avaria || "-"}`,
-                colaborador_nome: p.colaborador || ""
-              });
-              movId = mov[0]?.id || null;
+              if (p.id) movId = await movPendenteDaPeca(p.id);
+              if (movId) {
+                // Edição: o MESMO movimento pendente é actualizado.
+                await update("stock_movimentos", `id=eq.${movId}`, {
+                  material_id: linha.materialId,
+                  quantidade: qtdGravada,
+                  data_movimento: dataMovPeca,
+                  colaborador_nome: p.colaborador || ""
+                });
+              } else {
+                const mov = await insert<{ id: string }>("stock_movimentos", {
+                  tipo: "saida",
+                  estado: "pendente",
+                  material_id: linha.materialId,
+                  quantidade: qtdGravada,
+                  data_movimento: dataMovPeca,
+                  departamento: "Oficina",
+                  finalidade: `OS ${os.numero_obra || "S/Nº"}`,
+                  observacoes: `Avaria: ${os.descricao_avaria || "-"}`,
+                  colaborador_nome: p.colaborador || ""
+                });
+                movId = mov[0]?.id || null;
+              }
             }
             const payload = {
               os_id: osId,
@@ -834,23 +875,45 @@ async function gravarFechoCdM(
     "materiais",
     "select=id,nome,ativo&ativo=eq.true&order=nome.asc"
   );
-  const saidasGases = matsLimpos
-    .map((m) => {
-      const mat = casarMaterialFecho(m.material, catalogo);
-      if (!mat) return null; // nome sem material no catálogo: só faturação
-      return {
-        tipo: "saida",
-        estado: "pendente",
-        material_id: mat.id,
-        quantidade: arred2(m.quantidade),
-        data_movimento: dataMov,
-        departamento: "Oficina",
-        finalidade: `OS ${numeroObra || "S/Nº"} (Fecho CdM)`,
-        observacoes: `Material do fecho CdM casado de: "${m.material}"`,
-        colaborador_nome: responsavel || "Fecho CdM"
-      };
+  // DESCONTO ÚNICO POR OBRA: materiais que já têm saída ligada às PEÇAS
+  // desta obra (movimento vivo, pendente ou confirmado; um rejeitado foi
+  // apagado e por isso não conta) já saíram do stock na oficina - para
+  // eles o fecho serve só para FATURAR e não gera nova saída. Linhas do
+  // fecho com o mesmo material agregam-se numa saída só.
+  const pecasObra = await query<{ stock_movimento_id: string | null }>(
+    "os_pecas",
+    `select=stock_movimento_id&os_id=eq.${osId}`
+  );
+  const idsMovPecas = [
+    ...new Set(
+      pecasObra
+        .map((p) => p.stock_movimento_id)
+        .filter((x): x is string => !!x)
+    )
+  ];
+  let idsJaSaidos: string[] = [];
+  if (idsMovPecas.length) {
+    const movs = await query<{ material_id: string }>(
+      "stock_movimentos",
+      `select=material_id&id=in.(${idsMovPecas.join(",")})`
+    );
+    idsJaSaidos = [...new Set(movs.map((m) => m.material_id))];
+  }
+  const saidasGases = saidasStockDoFecho(matsLimpos, catalogo, idsJaSaidos).map(
+    (s) => ({
+      tipo: "saida",
+      estado: "pendente",
+      material_id: s.material_id,
+      quantidade: s.quantidade,
+      data_movimento: dataMov,
+      departamento: "Oficina",
+      finalidade: `OS ${numeroObra || "S/Nº"} (Fecho CdM)`,
+      observacoes: `Material do fecho CdM casado de: ${s.nomes_fecho
+        .map((n) => `"${n}"`)
+        .join(" + ")}`,
+      colaborador_nome: responsavel || "Fecho CdM"
     })
-    .filter((s): s is NonNullable<typeof s> => s !== null);
+  );
   let idsSaidas: { id: string }[] = [];
   if (saidasGases.length) {
     idsSaidas = await insert<{ id: string }>("stock_movimentos", saidasGases);

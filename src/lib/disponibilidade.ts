@@ -26,13 +26,16 @@ export const ESTADOS_DIA = [
 
 export type EstadoDia = (typeof ESTADOS_DIA)[number];
 
-/** Cores por estado (herdam o padrão da Oficina). */
+/**
+ * Cor CHEIA de cada estado, com o texto garantido por cima (tokens --sobre-*).
+ * Usada nas células da Grelha, etiquetas e botões do modal: a mesma cor
+ * viva do gráfico do Painel, visível no tema claro e no escuro.
+ */
 export const COR_ESTADO_DIA = COR_FISICO;
 
 /**
- * Cor sólida de cada estado para gráficos (barras do Painel e legenda).
- * Mesma família da etiqueta pálida, para que a cor do gráfico e a cor
- * da Grelha sejam reconhecidas como o mesmo estado em todo o portal.
+ * Cor sólida SEM texto, para quadradinhos/bolas de legenda e barras de
+ * gráfico (mesma família da COR_ESTADO_DIA).
  */
 export const COR_SOLIDA_ESTADO: Record<string, string> = {
   Disponível: "bg-sucesso",

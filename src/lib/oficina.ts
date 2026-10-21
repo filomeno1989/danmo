@@ -330,16 +330,19 @@ export const UNIDADES_PECA = [
  * gráfico partilham exactamente as mesmas cores): a cor identifica o estado
  * à primeira vista, na ordem da legenda do Power BI do Director.
  * Cada estado tem a sua cor, sem repetições nem tons parecidos.
+ * As etiquetas e as células da Grelha usam a COR CHEIA (a mesma do gráfico
+ * do Painel), visível em claro e escuro, com o texto em --sobre-* garantido
+ * por cima da cor.
  */
 export const COR_FISICO: Record<string, string> = {
-  Disponível: "bg-sucesso-bg text-sucesso",
-  Avariada: "bg-erro-bg text-erro",
-  Acidentada: "bg-aviso-bg text-aviso",
-  Pneumático: "bg-roxo-bg text-roxo",
-  "Revisão/Manutenção": "bg-ambar-claro text-ambar-texto",
-  Inspeção: "bg-rosa-bg text-rosa",
-  "Aguarda Acessório": "bg-info-bg text-info",
-  Concluído: "bg-sucesso-bg text-sucesso"
+  Disponível: "bg-sucesso text-sobre-sucesso",
+  Avariada: "bg-erro text-sobre-erro",
+  Acidentada: "bg-aviso text-sobre-aviso",
+  Pneumático: "bg-roxo text-sobre-roxo",
+  "Revisão/Manutenção": "bg-ambar text-sobre-ambar",
+  Inspeção: "bg-rosa text-sobre-rosa",
+  "Aguarda Acessório": "bg-info text-sobre-info",
+  Concluído: "bg-sucesso text-sobre-sucesso"
 };
 
 export const COR_ESTADO: Record<string, string> = {

@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { Save } from "lucide-react";
 import { Cabeca, Rodar, enviar, pedir } from "@/components/oficina/ui-bits";
-import { COR_ESTADO_DIA, ESTADOS_DIA } from "@/lib/disponibilidade";
+import { COR_SOLIDA_ESTADO, ESTADOS_DIA } from "@/lib/disponibilidade";
 
 type ConfigDados = { ok: boolean; meta: number; atualizado_em: string | null; atualizado_por: string | null };
 
@@ -103,7 +103,7 @@ export function ConfigClient({ podeEditar }: { podeEditar: boolean }) {
             <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {ESTADOS_DIA.map((estado) => (
                 <li key={estado} className="flex items-center gap-2 text-sm">
-                  <span className={`inline-block size-3.5 shrink-0 rounded-sm ${COR_ESTADO_DIA[estado] || "bg-muted"}`} />
+                  <span className={`inline-block size-3.5 shrink-0 rounded-sm ${COR_SOLIDA_ESTADO[estado] || "bg-muted"}`} />
                   {estado}
                 </li>
               ))}

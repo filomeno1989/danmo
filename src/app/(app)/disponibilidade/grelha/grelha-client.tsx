@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   COR_ESTADO_DIA,
+  COR_SOLIDA_ESTADO,
   ESTADOS_DIA,
   FROTAS_PADRAO,
   MESES_PT,
@@ -445,7 +446,7 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
                   return (
                     <li key={estado} className="flex items-center justify-between gap-2 text-xs">
                       <span className="flex min-w-0 items-center gap-1.5">
-                        <span className={cn("inline-block size-2.5 shrink-0 rounded-full", COR_ESTADO_DIA[estado] || "bg-muted")} />
+                        <span className={cn("inline-block size-2.5 shrink-0 rounded-full", COR_SOLIDA_ESTADO[estado] || "bg-muted")} />
                         <span className="truncate">{estado}</span>
                       </span>
                       <span className="shrink-0 font-semibold tabular-nums">
@@ -519,7 +520,7 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
               <ul className="mt-2 grid grid-cols-2 gap-1.5">
                 {ESTADOS_DIA.map((estado) => (
                   <li key={estado} className="flex items-center gap-1.5 text-[0.68rem]">
-                    <span className={cn("inline-block size-3 shrink-0 rounded-sm", COR_ESTADO_DIA[estado] || "bg-muted")} />
+                    <span className={cn("inline-block size-3 shrink-0 rounded-sm", COR_SOLIDA_ESTADO[estado] || "bg-muted")} />
                     {estado}
                   </li>
                 ))}

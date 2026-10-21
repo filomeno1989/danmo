@@ -61,6 +61,15 @@
   --rosa: #db2777;
   --rosa-bg: #fce7f3;
 
+  /* Texto garantido por cima da cor cheia (etiquetas e celulas solidas) */
+  --sobre-sucesso: #ffffff;
+  --sobre-aviso: #ffffff;
+  --sobre-erro: #ffffff;
+  --sobre-info: #ffffff;
+  --sobre-roxo: #ffffff;
+  --sobre-rosa: #ffffff;
+  --sobre-ambar: #78350f;
+
   /* Ambar da marca Danmo */
   --ambar: #f59e0b;
   --ambar-hover: #d97706;
@@ -132,6 +141,15 @@
   --rosa: #f9a8d4;
   --rosa-bg: #831843;
 
+  /* Texto sobre a cor cheia, versao escura (as solidas ficam claras) */
+  --sobre-sucesso: #064e3b;
+  --sobre-aviso: #78350f;
+  --sobre-erro: #7f1d1d;
+  --sobre-info: #1e3a8a;
+  --sobre-roxo: #4c1d95;
+  --sobre-rosa: #831843;
+  --sobre-ambar: #78350f;
+
   --ambar: #f59e0b;
   --ambar-hover: #fbbf24;
   --ambar-claro: #332005;
@@ -188,6 +206,13 @@
   --color-roxo-bg: var(--roxo-bg);
   --color-rosa: var(--rosa);
   --color-rosa-bg: var(--rosa-bg);
+  --color-sobre-sucesso: var(--sobre-sucesso);
+  --color-sobre-aviso: var(--sobre-aviso);
+  --color-sobre-erro: var(--sobre-erro);
+  --color-sobre-info: var(--sobre-info);
+  --color-sobre-roxo: var(--sobre-roxo);
+  --color-sobre-rosa: var(--sobre-rosa);
+  --color-sobre-ambar: var(--sobre-ambar);
 
   --color-ambar: var(--ambar);
   --color-ambar-hover: var(--ambar-hover);

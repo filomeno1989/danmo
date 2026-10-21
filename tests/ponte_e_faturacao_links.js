@@ -114,7 +114,7 @@ const FATURACAO_GET = {
   // dia implícito: verde Disponível sem marcação
   const celulaAuto = pagina.locator("button[title*='2.5-01 · 2026-10-02']");
   const classeAuto = (await celulaAuto.getAttribute("class")) || "";
-  ok("Grelha: dia implicito Disponivel pinta de verde", classeAuto.includes("bg-sucesso-bg"), classeAuto);
+  ok("Grelha: dia implicito Disponivel pinta de verde cheio", classeAuto.includes("bg-sucesso") && !classeAuto.includes("bg-sucesso-bg"), classeAuto);
 
   // abrir o painel do dia da obra
   await celulaObra.click();

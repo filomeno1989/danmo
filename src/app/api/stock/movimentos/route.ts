@@ -197,7 +197,18 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (qtd > 1000000) {
+    // A quantidade gravada é a arredondada a 2 casas: é contra ELA que se
+    // valida o stock (validar contra o valor cru e gravar o arredondado
+    // podia gravar mais do que o validado - ex. 9,988 passa com stock 9,99
+    // e gravava 9,99... ou 10,145 passava com stock 10,14 e gravava 10,15).
+    const qtdGravada = arred2(qtd);
+    if (qtdGravada <= 0) {
+      return NextResponse.json(
+        { ok: false, erro: "Quantidade: escreve um número maior que 0." },
+        { status: 400 }
+      );
+    }
+    if (qtdGravada > 1000000) {
       return NextResponse.json(
         { ok: false, erro: "Quantidade demasiado grande (máximo 1 000 000)." },
         { status: 400 }
@@ -236,7 +247,7 @@ export async function POST(req: NextRequest) {
       // BLOQUEIO do stock negativo: quem levanta não pode levar o que
       // não existe. A posição é sempre recalculada aqui no servidor.
       const pos = await posicoesActuais();
-      const bloqueio = motivoBloqueioSaida(qtd, pos[mv.material_id] || 0);
+      const bloqueio = motivoBloqueioSaida(qtdGravada, pos[mv.material_id] || 0);
       if (bloqueio) {
         return NextResponse.json(
           {
@@ -252,7 +263,7 @@ export async function POST(req: NextRequest) {
       tipo,
       estado: "confirmado",
       material_id: mv.material_id,
-      quantidade: arred2(qtd),
+      quantidade: qtdGravada,
       data_movimento: data,
       data_confirmacao: data,
       observacoes: (mv.observacoes || "").trim() || null

@@ -62,7 +62,10 @@ export async function GET() {
       }))
       .filter((a) => a.estado !== "OK");
 
-    const serie = serieSeisMeses(confirmados, new Date(), MESES_PT);
+    // A série usa a MESMA hora de Maputo dos KPIs (mes = hojeISO(), que
+    // soma +2h ao UTC): com new Date() cru, nas primeiras 2 horas de cada
+    // mês o gráfico ficava no mês anterior e os KPIs já no novo.
+    const serie = serieSeisMeses(confirmados, new Date(Date.now() + 2 * 3600 * 1000), MESES_PT);
 
     const ultimasEntradas = confirmados
       .filter((m) => m.tipo === "entrada")

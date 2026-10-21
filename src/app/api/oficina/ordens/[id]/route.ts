@@ -36,6 +36,7 @@ import {
   type TemplateChecklist,
   type TrocaRevisao
 } from "@/lib/oficina";
+import { casarMaterialFecho } from "@/lib/stock";
 
 type Contexto = { params: Promise<{ id: string }> };
 
@@ -341,8 +342,27 @@ export async function POST(req: NextRequest, ctx: Contexto) {
         // nunca ficar obra fechada sem o registo de faturação (se o SQL
         // do módulo ainda não correu, avisa com instrução clara).
         if (novo === "Fechada" && corpo.fecho) {
+          // Re-fecho bloqueado: uma obra não se fecha duas vezes (o 2º
+          // fecho duplicaria a faturação CdM E as saídas de gás no
+          // stock). Obras fechadas no tempo antigo, sem fecho gravado,
+          // continuam a poder ser fechadas uma vez para ganhar o
+          // registo de faturação.
+          const fechoExistente = await query<{ id: number }>(
+            "obras_fechadas_cdm",
+            `select=id&os_id=eq.${osId}&limit=1`
+          );
+          if (fechoExistente.length) {
+            return NextResponse.json(
+              {
+                ok: false,
+                erro:
+                  "Esta obra já tem fecho com faturação gravado. Não se fecha uma obra duas vezes."
+              },
+              { status: 409 }
+            );
+          }
           try {
-            await gravarFechoCdM(osId, corpo.fecho, responsavel);
+            await gravarFechoCdM(osId, corpo.fecho, responsavel, os.numero_obra || null);
           } catch (e) {
             if (e instanceof ErroValidacao) {
               return NextResponse.json({ ok: false, erro: e.message }, { status: 400 });
@@ -463,8 +483,37 @@ export async function POST(req: NextRequest, ctx: Contexto) {
           "select=id,nome,usos"
         );
 
+        // LIGAÇÃO PEÇAS ↔ STOCK (Etapa D): cada linha com material do
+        // catálogo tem UMA saída pendente no stock. Editar a peça
+        // actualiza o MESMO movimento enquanto ele estiver pendente
+        // (não cria órfãos na lista de pendentes); apagar a peça apaga
+        // o pendente. Movimento já CONFIRMADO nunca é tocado nem
+        // apagado aqui: o material saiu à mesma, o histórico não mente.
+        const movPendenteDaPeca = async (idPeca: number): Promise<string | null> => {
+          const antigas = await query<{ stock_movimento_id: string | null }>(
+            "os_pecas",
+            `select=stock_movimento_id&id=eq.${idPeca}&limit=1`
+          );
+          const movId = antigas[0]?.stock_movimento_id;
+          if (!movId) return null;
+          const movs = await query<{ id: string; estado: string }>(
+            "stock_movimentos",
+            `select=id,estado&id=eq.${movId}&limit=1`
+          );
+          return movs[0]?.estado === "pendente" ? movId : null;
+        };
+        const dataPeca = (p.data || dataHojeISO()).slice(0, 10);
+        const dataMovPeca = dataPeca > dataHojeISO() ? dataHojeISO() : dataPeca;
+
         for (const linha of p.linhas) {
-          const qtd = Number(linha.qtd) || 1;
+          const qtd = Number(linha.qtd);
+          if (!Number.isFinite(qtd) || qtd <= 0) {
+            return NextResponse.json(
+              { ok: false, erro: "Quantidade da peça: escreve um número maior que 0." },
+              { status: 400 }
+            );
+          }
+          const qtdGravada = arred2(qtd);
           if (p.usarStock) {
             if (!linha.materialId) {
               return NextResponse.json(
@@ -472,35 +521,69 @@ export async function POST(req: NextRequest, ctx: Contexto) {
                 { status: 400 }
               );
             }
-            const mat = await query<{ id: string; nome: string; unidade: string | null }>(
-              "materiais",
-              `select=id,nome,unidade&id=eq.${linha.materialId}`
-            );
+            const mat = await query<{
+              id: string;
+              nome: string;
+              unidade: string | null;
+              ativo: boolean;
+            }>("materiais", `select=id,nome,unidade,ativo&id=eq.${linha.materialId}`);
             const material = mat[0];
-            const mov = await insert<{ id: string }>("stock_movimentos", {
-              tipo: "saida",
-              estado: "pendente",
-              material_id: linha.materialId,
-              quantidade: qtd,
-              data_movimento: p.data || dataHojeISO(),
-              departamento: "Oficina",
-              finalidade: `OS ${os.numero_obra || "S/Nº"}`,
-              observacoes: `Avaria: ${os.descricao_avaria || "-"}`,
-              colaborador_nome: p.colaborador || ""
-            });
+            if (!material) {
+              return NextResponse.json({ ok: false, erro: "Material não encontrado." }, { status: 404 });
+            }
+            if (material.ativo === false) {
+              return NextResponse.json(
+                {
+                  ok: false,
+                  erro: `"${material.nome}" está inactivo no Stock. Escolhe outro material ou reactiva-o.`
+                },
+                { status: 409 }
+              );
+            }
+
+            let movId: string | null = null;
+            if (p.id) movId = await movPendenteDaPeca(p.id);
+            if (movId) {
+              // Edição: o MESMO movimento pendente é actualizado.
+              await update("stock_movimentos", `id=eq.${movId}`, {
+                material_id: linha.materialId,
+                quantidade: qtdGravada,
+                data_movimento: dataMovPeca,
+                colaborador_nome: p.colaborador || ""
+              });
+            } else {
+              const mov = await insert<{ id: string }>("stock_movimentos", {
+                tipo: "saida",
+                estado: "pendente",
+                material_id: linha.materialId,
+                quantidade: qtdGravada,
+                data_movimento: dataMovPeca,
+                departamento: "Oficina",
+                finalidade: `OS ${os.numero_obra || "S/Nº"}`,
+                observacoes: `Avaria: ${os.descricao_avaria || "-"}`,
+                colaborador_nome: p.colaborador || ""
+              });
+              movId = mov[0]?.id || null;
+            }
             const payload = {
               os_id: osId,
-              peca: material ? material.nome : "Material do Stock",
+              peca: material.nome,
               data: p.data,
-              quantidade: qtd,
-              unidade: material ? material.unidade || "Unidade" : linha.unidade,
+              quantidade: qtdGravada,
+              unidade: material.unidade || "Unidade",
               colaborador: p.colaborador,
               material_id: linha.materialId,
-              stock_movimento_id: mov[0].id
+              stock_movimento_id: movId
             };
             if (p.id) await update("os_pecas", `id=eq.${p.id}`, payload);
             else await insert("os_pecas", payload);
           } else {
+            // Trocou de material do Stock para peça livre: o pendente
+            // antigo sai do stock (se ainda estiver pendente).
+            if (p.id) {
+              const movId = await movPendenteDaPeca(p.id);
+              if (movId) await del("stock_movimentos", movId);
+            }
             const nome = (linha.nome || "").trim();
             if (!nome) {
               return NextResponse.json(
@@ -512,7 +595,7 @@ export async function POST(req: NextRequest, ctx: Contexto) {
               os_id: osId,
               peca: nome,
               data: p.data,
-              quantidade: qtd,
+              quantidade: qtdGravada,
               unidade: linha.unidade || "Unidade",
               colaborador: p.colaborador,
               material_id: null,
@@ -537,6 +620,22 @@ export async function POST(req: NextRequest, ctx: Contexto) {
         const idPeca = Number((corpo.peca as unknown as { id?: number })?.id);
         if (!idPeca) {
           return NextResponse.json({ ok: false, erro: "Peça não indicada." }, { status: 400 });
+        }
+        // O movimento pendente ligado sai do stock com a peça (sem
+        // deixar pendente órfão na lista de confirmações). Se já foi
+        // CONFIRMADO, fica: o material saiu à mesma, o histórico não
+        // mente (pode-se apagar à mão nas Saídas, se for o caso).
+        const antigas = await query<{ stock_movimento_id: string | null }>(
+          "os_pecas",
+          `select=stock_movimento_id&id=eq.${idPeca}&limit=1`
+        );
+        const movId = antigas[0]?.stock_movimento_id;
+        if (movId) {
+          const movs = await query<{ estado: string }>(
+            "stock_movimentos",
+            `select=estado&id=eq.${movId}&limit=1`
+          );
+          if (movs[0]?.estado === "pendente") await del("stock_movimentos", movId);
         }
         await del("os_pecas", idPeca);
         return NextResponse.json({ ok: true });
@@ -684,11 +783,18 @@ const arred2 = (n: number) => Math.round(n * 100) / 100;
  * considerou, valor/hora (total = horas x valor) e os materiais usados
  * (Oxigênio, Gas Propano, Gas Acetileno, ...). Os totais são SEMPRE
  * recalculados aqui no servidor - nunca se confia nos que vêm do browser.
+ *
+ * ETAPA D: cada material do fecho casado com o catálogo do Stock cria
+ * UMA saída PENDENTE (as confirmações passam pelo mesmo bloqueio de
+ * stock negativo das outras saídas). As saídas são criadas ANTES do
+ * fecho; se o fecho falhar, elas são apagadas (nada fica meio gravado
+ * e repetir o fecho não duplica saídas).
  */
 async function gravarFechoCdM(
   osId: number,
   fecho: NonNullable<Corpo["fecho"]>,
-  responsavel: string
+  responsavel: string,
+  numeroObra: string | null
 ) {
   const dataFecho = (fecho.data_fecho || "").slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dataFecho)) {
@@ -722,30 +828,71 @@ async function gravarFechoCdM(
     matsLimpos.reduce((s, m) => s + m.quantidade * m.valor_unitario, 0)
   );
 
-  const criado = await insert<{ id: number }>("obras_fechadas_cdm", {
-    os_id: osId,
-    data_fecho: dataFecho,
-    horas_cdm: horas,
-    valor_hora: valor,
-    total_mao_obra: totalMao,
-    total_material: totalMat,
-    total_geral: arred2(totalMao + totalMat),
-    responsavel: responsavel || null,
-    observacao: (fecho.observacao || "").trim() || null
-  });
-  const fechoId = criado[0]?.id;
-  if (!fechoId) throw new Error("obras_fechadas_cdm sem id de retorno");
+  /* ---- saídas de gás/material no stock (Etapa D) ---- */
+  const dataMov = dataFecho > dataHojeISO() ? dataHojeISO() : dataFecho;
+  const catalogo = await query<{ id: string; nome: string; ativo: boolean }>(
+    "materiais",
+    "select=id,nome,ativo&ativo=eq.true&order=nome.asc"
+  );
+  const saidasGases = matsLimpos
+    .map((m) => {
+      const mat = casarMaterialFecho(m.material, catalogo);
+      if (!mat) return null; // nome sem material no catálogo: só faturação
+      return {
+        tipo: "saida",
+        estado: "pendente",
+        material_id: mat.id,
+        quantidade: arred2(m.quantidade),
+        data_movimento: dataMov,
+        departamento: "Oficina",
+        finalidade: `OS ${numeroObra || "S/Nº"} (Fecho CdM)`,
+        observacoes: `Material do fecho CdM casado de: "${m.material}"`,
+        colaborador_nome: responsavel || "Fecho CdM"
+      };
+    })
+    .filter((s): s is NonNullable<typeof s> => s !== null);
+  let idsSaidas: { id: string }[] = [];
+  if (saidasGases.length) {
+    idsSaidas = await insert<{ id: string }>("stock_movimentos", saidasGases);
+  }
 
-  if (matsLimpos.length) {
-    await insert(
-      "obras_fechadas_cdm_material",
-      matsLimpos.map((m) => ({
-        fecho_id: fechoId,
-        material: m.material,
-        quantidade: m.quantidade,
-        valor_unitario: m.valor_unitario,
-        total: arred2(m.quantidade * m.valor_unitario)
-      }))
-    );
+  try {
+    const criado = await insert<{ id: number }>("obras_fechadas_cdm", {
+      os_id: osId,
+      data_fecho: dataFecho,
+      horas_cdm: horas,
+      valor_hora: valor,
+      total_mao_obra: totalMao,
+      total_material: totalMat,
+      total_geral: arred2(totalMao + totalMat),
+      responsavel: responsavel || null,
+      observacao: (fecho.observacao || "").trim() || null
+    });
+    const fechoId = criado[0]?.id;
+    if (!fechoId) throw new Error("obras_fechadas_cdm sem id de retorno");
+
+    if (matsLimpos.length) {
+      await insert(
+        "obras_fechadas_cdm_material",
+        matsLimpos.map((m) => ({
+          fecho_id: fechoId,
+          material: m.material,
+          quantidade: m.quantidade,
+          valor_unitario: m.valor_unitario,
+          total: arred2(m.quantidade * m.valor_unitario)
+        }))
+      );
+    }
+  } catch (e) {
+    // Compensação: o fecho não gravou, as saídas de gás recém-criadas
+    // saem do stock - a base nunca fica meio gravada.
+    for (const s of idsSaidas) {
+      try {
+        await del("stock_movimentos", s.id);
+      } catch {
+        // melhor esforço: o log abaixo mostra o problema na mesma
+      }
+    }
+    throw e;
   }
 }

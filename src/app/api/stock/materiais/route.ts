@@ -128,12 +128,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Referência única: duas referências iguais (mesmo com maiúsculas
-    // diferentes) tornam o armazém ambíguo.
-    const refLimpa = referencia;
-    // O filtro ilike já cobre maiúsculas/minúsculas
+    // diferentes) tornam o armazém ambíguo. O % e o _ escapam: são
+    // caracteres curinga do LIKE e uma referência "MAT_1" nunca pode
+    // casar com "MATX1".
+    const padraoRef = encodeURIComponent(
+      referencia.replace(/[\\%_]/g, (c) => `\\${c}`)
+    );
     const iguais = await query<Material & { id: string }>(
       "materiais",
-      `select=id,referencia&referencia=ilike.${encodeURIComponent(refLimpa)}${
+      `select=id,referencia&referencia=ilike.${padraoRef}${
         corpo.action === "editar" && corpo.id ? `&id=neq.${corpo.id}` : ""
       }&limit=1`
     );
@@ -148,24 +151,28 @@ export async function POST(req: NextRequest) {
     }
 
     const payload = {
-      referencia: refLimpa,
+      referencia,
       nome,
       categoria: (corpo.categoria || "").trim() || null,
       unidade,
       stock_minimo: Number.isFinite(minimo) && corpo.stock_minimo !== "" ? arred2(minimo) : 0,
       localizacao: (corpo.localizacao || "").trim() || null,
-      preco_mzn: Number.isFinite(preco) && corpo.preco_mzn !== "" ? arred2(preco) : null,
-      ativo: true
+      preco_mzn: Number.isFinite(preco) && corpo.preco_mzn !== "" ? arred2(preco) : null
     };
 
     if (corpo.action === "criar") {
-      const criado = await insert<Material & { id: string }>("materiais", payload);
+      const criado = await insert<Material & { id: string }>("materiais", {
+        ...payload,
+        ativo: true
+      });
       return NextResponse.json({ ok: true, id: criado[0]?.id });
     }
 
     if (!corpo.id) {
       return NextResponse.json({ ok: false, erro: "Material não indicado." }, { status: 400 });
     }
+    // EDITAR não toca no ativo: editar um material inactivo não pode
+    // reactivá-lo em silêncio (quem decide é o toggle Mostrar inactivas).
     await update("materiais", `id=eq.${corpo.id}`, payload);
     return NextResponse.json({ ok: true });
   } catch (e) {

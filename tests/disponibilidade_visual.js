@@ -150,18 +150,38 @@ const EQUIPS = [
   { id: 3, code: "70-01", name: "Sino Truck", group_name: "TT 70T", active: true }
 ];
 
+// A inactiva só regressa ao pedido com inactivas=1 (modo auditoria)
+const EQUIPS_GRELHA = [
+  ...EQUIPS,
+  { id: 9, code: "99-99", name: "Vendida", group_name: "TT 70T", active: false }
+];
+
+// 14 paradas em curso: prova que a lista não corta às 12 e ordena pela mais antiga
+const PARADAS_GRELHA = [
+  { id: 9, equipment_id: 1, estado: "Aguarda Acessório", inicio: "2026-10-03T00:00:00+02:00", code: "2.5-01", nome: "Doosan" }
+];
+for (let i = 0; i < 13; i++) {
+  PARADAS_GRELHA.push({
+    id: 100 + i,
+    equipment_id: (i % 3) + 1,
+    estado: ["Avariada", "Pneumático", "Revisão/Manutenção"][i % 3],
+    inicio: `2026-${i > 5 ? "09" : "08"}-${String(2 + i).padStart(2, "0")}T00:00:00+02:00`,
+    code: ["2.5-01", "45-17", "70-01"][i % 3],
+    nome: ["Doosan", "Sany", "Sino Truck"][i % 3]
+  });
+}
+
 const DIAS_GET = {
   ok: true,
   equipamentos: EQUIPS,
+  inactivasEscondidas: 1,
   dias: [
     { id: 1, equipment_id: 1, data: "2026-10-01", estado: "Disponível", horas_disponiveis: 24, hora_entrada: null, hora_saida: null, observacao: null },
     { id: 2, equipment_id: 1, data: "2026-10-02", estado: "Avariada", horas_disponiveis: 0, hora_entrada: "08:30", hora_saida: null, observacao: "bombas injetoras" },
     { id: 3, equipment_id: 1, data: "2026-10-03", estado: "Aguarda Acessório", horas_disponiveis: 0, hora_entrada: null, hora_saida: null, observacao: null },
     { id: 4, equipment_id: 2, data: "2026-10-01", estado: "Pneumático", horas_disponiveis: 0, hora_entrada: null, hora_saida: "14:00", observacao: null }
   ],
-  transicoesAbertas: [
-    { id: 9, equipment_id: 1, estado: "Aguarda Acessório", inicio: "2026-10-03T00:00:00+02:00", fim: null, code: "2.5-01", nome: "Doosan" }
-  ],
+  transicoesAbertas: PARADAS_GRELHA,
   resumoSemanal: [
     { semana: 41, pct: 80.4, maquinas: 3, dias: 7 },
     { semana: 42, pct: 66.7, maquinas: 3, dias: 3 }
@@ -233,7 +253,13 @@ let postsSemana = [];
     return rota.fulfill({ json: PAINEL });
   });
   await contexto.route("**/api/disponibilidade/dias*", (rota) => {
-    if (rota.request().method() === "GET") return rota.fulfill({ json: DIAS_GET });
+    if (rota.request().method() === "GET") {
+      const u = new URL(rota.request().url());
+      if (u.searchParams.get("inactivas") === "1") {
+        return rota.fulfill({ json: { ...DIAS_GET, equipamentos: EQUIPS_GRELHA, inactivasEscondidas: 0 } });
+      }
+      return rota.fulfill({ json: DIAS_GET });
+    }
     if (rota.request().method() === "POST") {
       postsDias.push(rota.request().postDataJSON());
       return rota.fulfill({ json: { ok: true, gravadas: 1, maquinasTocadas: 1 } });
@@ -376,6 +402,27 @@ let postsSemana = [];
   ok("Grelha: 31 dias no mes", (await pagina.locator("thead th").count()) >= 32);
   ok("Grelha: legenda com 7 estados", (await pagina.locator("li:has-text('Pneumático')").count()) > 0);
   ok("Grelha: paradas neste momento mostra 2.5-01", (await pagina.locator("li span:has-text('2.5-01')").count()) > 0);
+  ok("Grelha: inactiva 99-99 fora da tabela por defeito", (await pagina.locator("th:has-text('99-99')").count()) === 0);
+  ok("Grelha: cabecalho conta a inactiva escondida", (await pagina.locator("text=/1 inactiva escondida/").count()) > 0);
+  const localizadorParadas = pagina.locator("div.card-sombra:has(h2:has-text('Paradas neste momento')) li");
+  ok("Grelha: paradas sem corte às 12 (14 visíveis)", (await localizadorParadas.count()) === 14, String(await localizadorParadas.count()));
+  const primeiraParada = (await localizadorParadas.first().innerText()).replace(/\s+/g, " ");
+  ok("Grelha: paradas ordenadas pela mais antiga primeiro", primeiraParada.includes("2.5-01") && primeiraParada.includes("02/08"), primeiraParada);
+  ok("Grelha: paradas mostram os dias de paragem", /\d+d/.test(primeiraParada), primeiraParada);
+  const paradasAbaixo = await pagina.evaluate(() => {
+    const tabela = document.querySelector("table");
+    const h = [...document.querySelectorAll("h2")].find((e) => (e.textContent || "").includes("Paradas neste momento"));
+    if (!tabela || !h) return false;
+    return !!(h.compareDocumentPosition(tabela) & Node.DOCUMENT_POSITION_PRECEDING);
+  });
+  ok("Grelha: paradas ficam abaixo da grelha em largura total", paradasAbaixo);
+  await pagina.locator("button:has-text('Inactivas')").click();
+  await pagina.waitForTimeout(500);
+  ok("Grelha: toggle Inactivas traz a 99-99 (modo auditoria)", (await pagina.locator("th:has-text('99-99')").count()) > 0);
+  ok("Grelha: nota de escondidas sai com o toggle ligado", (await pagina.locator("text=/escondida/").count()) === 0);
+  await pagina.locator("button:has-text('Inactivas')").click();
+  await pagina.waitForTimeout(500);
+  ok("Grelha: toggle desligado esconde a 99-99 outra vez", (await pagina.locator("th:has-text('99-99')").count()) === 0);
   ok("Grelha: resumo por semana (ISO)", (await pagina.locator("text=Semana 41").count()) > 0);
   ok("Grelha: horas do mes por estado", (await pagina.locator("h2:has-text('Horas do mês por estado')").count()) > 0);
 

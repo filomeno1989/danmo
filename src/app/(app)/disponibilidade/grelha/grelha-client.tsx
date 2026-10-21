@@ -10,8 +10,13 @@
  * repetir o estado até ao fim do mês (uma avaria de 5 dias marca-se uma
  * vez). As marcações ficam à espera e gravam-se todas num clique.
  *
- * Do lado direito: horas do mês por estado, resumo por semana, máquinas
- * paradas neste momento (transições em curso) e a legenda.
+ * Do lado direito: horas do mês por estado, resumo por semana e a
+ * legenda. As máquinas paradas neste momento (transições e obras em
+ * curso) ficam em largura total logo abaixo da grelha, sem corte, com
+ * os dias de paragem - a mais antiga primeiro. Máquinas inactivas não
+ * entram por defeito: o toggle Inactivas traz o histórico de volta
+ * (modo auditoria); a gestão delas continua nas configurações da
+ * oficina.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -57,6 +62,7 @@ type TransicaoAberta = {
 type GrelhaDados = {
   ok: boolean;
   equipamentos: EquipLinha[];
+  inactivasEscondidas?: number;
   dias: DiaLinha[];
   transicoesAbertas: TransicaoAberta[];
   resumoSemanal: { semana: number; pct: number; maquinas: number; dias: number }[];
@@ -79,6 +85,12 @@ type EditarDia = {
 
 const chaveDe = (equipmentId: number, data: string) => `${equipmentId}|${data}`;
 
+/** Dias de paragem contando o dia de entrada (a máquina conta 24h/dia desde que entra). */
+const diasParadosDe = (inicio: string) => {
+  const diff = Math.floor((Date.parse(hojeMaputo()) - Date.parse(inicio.slice(0, 10))) / 86400000) + 1;
+  return Math.max(1, diff);
+};
+
 export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; podeApagar: boolean }) {
   const agora = new Date();
   const [mes, setMes] = useState(
@@ -91,6 +103,7 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
   const [edits, setEdits] = useState<Map<string, EditarDia>>(new Map());
   const [gravarA, setGravarA] = useState(false);
   const [diaAberto, setDiaAberto] = useState<EditarDia | null>(null);
+  const [verInactivas, setVerInactivas] = useState(false);
 
   const ano = Number(mes.slice(0, 4));
   const nMes = Number(mes.slice(5, 7));
@@ -100,19 +113,21 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
     [mes, nDias]
   );
 
+  const sufixoInactivas = verInactivas ? "&inactivas=1" : "";
+
   const carregarDados = useCallback(() => {
     setCarregar(true);
     setFalha("");
-    pedir<GrelhaDados>(`/api/disponibilidade/dias?mes=${mes}&frota=${encodeURIComponent(frota)}`)
+    pedir<GrelhaDados>(`/api/disponibilidade/dias?mes=${mes}&frota=${encodeURIComponent(frota)}${sufixoInactivas}`)
       .then((d) => setDados(d))
       .catch((e: Error) => setFalha(e.message))
       .finally(() => setCarregar(false));
-  }, [mes, frota]);
+  }, [mes, frota, sufixoInactivas]);
 
   useEffect(() => {
     // Carregamento em cadeia de promessas (sem setState sincrono no efeito)
     let vivo = true;
-    pedir<GrelhaDados>(`/api/disponibilidade/dias?mes=${mes}&frota=${encodeURIComponent(frota)}`)
+    pedir<GrelhaDados>(`/api/disponibilidade/dias?mes=${mes}&frota=${encodeURIComponent(frota)}${sufixoInactivas}`)
       .then((d) => {
         if (vivo) setDados(d);
       })
@@ -125,7 +140,7 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
     return () => {
       vivo = false;
     };
-  }, [mes, frota, carregarDados]);
+  }, [mes, frota, sufixoInactivas, carregarDados]);
 
   // índice rápido: chave -> marcação existente (ou edição pendente)
   const mapa = useMemo(() => {
@@ -293,6 +308,15 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
     return (a.group_name || "").localeCompare(b.group_name || "") || a.code.localeCompare(b.code);
   });
 
+  // Paradas em curso: a que espera há mais tempo no topo (as esquecidas não se escondem no fundo)
+  const paradas = useMemo(
+    () =>
+      [...(dados?.transicoesAbertas || [])].sort(
+        (a, b) => a.inicio.slice(0, 10).localeCompare(b.inicio.slice(0, 10)) || a.code.localeCompare(b.code)
+      ),
+    [dados]
+  );
+
   return (
     <div className="space-y-4">
       <Cabeca
@@ -318,6 +342,19 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
             <option key={f.label} value={f.label}>{f.label}</option>
           ))}
         </select>
+        <button
+          type="button"
+          aria-pressed={verInactivas}
+          onClick={() => setVerInactivas(!verInactivas)}
+          className={cn(
+            "inline-flex h-9 items-center rounded-md border px-2.5 text-sm font-medium transition-colors",
+            verInactivas
+              ? "border-transparent bg-primario text-white"
+              : "border-input bg-background text-muted-foreground hover:bg-muted"
+          )}
+        >
+          Inactivas
+        </button>
         {podeEditar && edits.size > 0 && (
           <button
             onClick={gravarTudo}
@@ -342,14 +379,17 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
 
       {dados && (
         <div className="grid gap-3 xl:grid-cols-4">
-          {/* GRELHA */}
-          <div className="card-sombra overflow-hidden p-0 xl:col-span-3">
+          {/* GRELHA + PARADAS (coluna principal) */}
+          <div className="space-y-3 xl:col-span-3">
+          <div className="card-sombra overflow-hidden p-0">
             <div className="flex items-center justify-between gap-2 p-4 pb-2">
               <h2 className="text-sm font-semibold">
                 {MESES_PT[nMes - 1]} de {ano}
               </h2>
               <span className="text-xs text-muted-foreground">
                 {dados.resumoMes.diasMarcados} dias com marcação · {equipamentos.length} máquinas
+                {!verInactivas && !!dados.inactivasEscondidas &&
+                  ` · ${dados.inactivasEscondidas} inactiva${dados.inactivasEscondidas > 1 ? "s" : ""} escondida${dados.inactivasEscondidas > 1 ? "s" : ""}`}
               </span>
             </div>
             <div className="max-h-[70vh] overflow-auto">
@@ -436,6 +476,50 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
             )}
           </div>
 
+          {/* PARADAS EM CURSO - em largura total abaixo da grelha: a coluna lateral não
+              escalava e o corte às 12 escondia paradas reais sem ninguém saber */}
+          <div className="card-sombra p-4">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <Wrench className="size-4" /> Paradas neste momento
+              {paradas.length > 0 && (
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[0.65rem] font-semibold tabular-nums text-muted-foreground">
+                  {paradas.length}
+                </span>
+              )}
+            </h2>
+            {paradas.length === 0 ? (
+              <p className="mt-2 text-xs text-muted-foreground">Nenhuma máquina parada com estado aberto.</p>
+            ) : (
+              <ul className="mt-2 flex flex-wrap gap-1.5">
+                {paradas.map((t) => (
+                  <li
+                    key={t.id}
+                    title={`${t.code} parada desde ${t.inicio.slice(0, 10)} (${diasParadosDe(t.inicio)} dias contando o dia de entrada)`}
+                    className="flex max-w-full items-center gap-2 rounded-md border px-2 py-1 text-xs"
+                  >
+                    <span className="min-w-0">
+                      <span className="font-semibold">{t.code}</span>{" "}
+                      <span className="text-muted-foreground">{t.nome}</span>
+                    </span>
+                    <Etiqueta cor={COR_ESTADO_DIA[t.estado] || "bg-muted text-muted-foreground"}>{t.estado}</Etiqueta>
+                    {t.obra && (
+                      <a
+                        href={`/oficina/ordens/${t.os_id}`}
+                        className="shrink-0 text-primario hover:underline dark:text-primario-forte"
+                      >
+                        Obra {t.obra}
+                      </a>
+                    )}
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      desde {t.inicio.slice(8, 10)}/{t.inicio.slice(5, 7)} · {diasParadosDe(t.inicio)}d
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          </div>
+
           {/* LATERAL */}
           <div className="space-y-3">
             <div className="card-sombra p-4">
@@ -479,36 +563,6 @@ export function GrelhaClient({ podeEditar, podeApagar }: { podeEditar: boolean; 
                           {s.pct}%
                         </Etiqueta>
                       </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div className="card-sombra p-4">
-              <h2 className="flex items-center gap-2 text-sm font-semibold">
-                <Wrench className="size-4" /> Paradas neste momento
-              </h2>
-              {dados.transicoesAbertas.length === 0 ? (
-                <p className="mt-2 text-xs text-muted-foreground">Nenhuma máquina parada com estado aberto.</p>
-              ) : (
-                <ul className="mt-2 space-y-2">
-                  {dados.transicoesAbertas.slice(0, 12).map((t) => (
-                    <li key={t.id} className="flex items-center justify-between gap-2 text-xs">
-                      <span className="min-w-0">
-                        <span className="font-semibold">{t.code}</span>{" "}
-                        <span className="text-muted-foreground">{t.nome}</span>
-                        {t.obra && (
-                          <a
-                            href={`/oficina/ordens/${t.os_id}`}
-                            className="text-primario hover:underline dark:text-primario-forte"
-                          >
-                            {" "}
-                            Obra {t.obra}
-                          </a>
-                        )}
-                      </span>
-                      <Etiqueta cor={COR_ESTADO_DIA[t.estado] || "bg-muted text-muted-foreground"}>{t.estado}</Etiqueta>
                     </li>
                   ))}
                 </ul>

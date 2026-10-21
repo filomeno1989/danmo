@@ -273,13 +273,30 @@ describe("E. GET /api/disponibilidade/dias", () => {
     const sintetizados = dias.filter((d) => typeof d.id === "number" && d.id < 0);
     expect(sintetizados.length).toBeGreaterThan(0);
     expect(sintetizados.some((d) => d.data > HOJE)).toBe(false);
-    // 2 activas x DIA dias sintetizados + 2 marcações explícitas (inactiva + futura)
-    expect(dias.length).toBe(2 * DIA + 2);
+    // 2 activas x DIA dias sintetizados + a marcação futura da activa;
+    // a inactiva já não vem para a grelha (vê-se no modo auditoria)
+    expect(dias.length).toBe(2 * DIA + 1);
+    expect(dias.some((d) => d.equipment_id === 3)).toBe(false);
+    expect(j.inactivasEscondidas).toBe(1);
     const resumo = j.resumoMes as { horasDisponiveis: number; diasMarcados: number };
     if (DIA >= 8) {
-      // eq1: 4x24 (dias 1..4) + eq2: (DIA-7)x24 (dias 8..hoje) + inactiva: 0
+      // eq1: 4x24 (dias 1..4) + eq2: (DIA-7)x24 (dias 8..hoje)
       expect(resumo.horasDisponiveis).toBe(4 * 24 + (DIA - 7) * 24);
     }
+    // só a marcação futura da activa conta como dia marcado (a da inactiva ficou de fora)
+    expect(resumo.diasMarcados).toBe(1);
+  });
+
+  it("modo auditoria (inactivas=1): a inactiva volta com as suas marcações", async () => {
+    const j = await getJson(`../src/app/api/disponibilidade/dias/route?mes=${MES_STR}&frota=todos&inactivas=1`);
+    expect(j.ok).toBe(true);
+    const dias = j.dias as { equipment_id: number }[];
+    expect(dias.length).toBe(2 * DIA + 2);
+    expect(dias.some((d) => d.equipment_id === 3)).toBe(true);
+    const equipamentos = j.equipamentos as { id: number; active: boolean }[];
+    expect(equipamentos.some((e) => e.id === 3 && !e.active)).toBe(true);
+    expect(j.inactivasEscondidas).toBe(0);
+    const resumo = j.resumoMes as { diasMarcados: number };
     expect(resumo.diasMarcados).toBe(2);
   });
 

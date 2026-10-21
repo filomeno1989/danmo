@@ -133,9 +133,10 @@ const FATURACAO_GET = {
   // Disponível = (31-3) + (31-1) dias-máquina... m1: 28x24 + dia2 24 = 696; m2: 30x24 = 720 -> 1416
   const corpoA = normalizar(await pagina.textContent("body"));
   ok("Grelha: horas de Disponível contam dias automaticos (1416 h)", corpoA.includes("1416 h"));
-  const liAvariada = pagina.locator("li:has-text('Avariada')").first();
+  // (o cartão fica identificado pelo h2: as paradas em curso também têm li de estado e vêm antes no DOM)
+  const liAvariada = pagina.locator("div.card-sombra:has(h2:has-text('Horas do mês por estado')) li:has-text('Avariada')").first();
   ok("Grelha: horas de Avariada = 48 h (marcada + obra)", (await liAvariada.textContent() || "").includes("48 h"));
-  const liPneu = pagina.locator("li:has-text('Pneumático')").first();
+  const liPneu = pagina.locator("div.card-sombra:has(h2:has-text('Horas do mês por estado')) li:has-text('Pneumático')").first();
   ok("Grelha: horas de Pneumático = 24 h (obra)", (await liPneu.textContent() || "").includes("24 h"));
 
   await contextoA.close();

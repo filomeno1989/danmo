@@ -1,8 +1,14 @@
 /**
  * /api/disponibilidade/dias - Grelha diária de disponibilidade.
  *
- * GET ?mes=2026-02&frota=<macro-frota|todos>
+ * GET ?mes=2026-02&frota=<macro-frota|todos>[&inactivas=1]
  *   -> máquinas da frota + marcações diárias do mês + resumo semanal.
+ *      Por defeito só entram as máquinas ACTIVAS: a grelha é a operação
+ *      em curso e as contas (horas, semanas, paradas) contam só o que
+ *      aparece nela (pedido do Filomeno: as inactivas vêem-se nas
+ *      configurações da oficina). inactivas=1 é o modo auditoria que
+ *      traz de volta o histórico das desactivadas; a resposta traz
+ *      inactivasEscondidas para o cabeçalho contar o que ficou fora.
  *      PONTE COM AS ORDENS (ponte-os.ts): os dias sem marcação ficam
  *      preenchidos automaticamente - uma obra aberta interrompe a
  *      disponibilidade da máquina desde a data de abertura com o estado
@@ -148,6 +154,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const mesParam = url.searchParams.get("mes");
   const frota = url.searchParams.get("frota") || "todos";
+  const incluirInactivas = url.searchParams.get("inactivas") === "1";
   if (!mesParam || !/^\d{4}-\d{2}$/.test(mesParam)) {
     return NextResponse.json({ ok: false, erro: "Mês inválido (usar AAAA-MM)." }, { status: 400 });
   }
@@ -168,7 +175,8 @@ export async function GET(request: Request) {
     ]);
 
     const gruposFrota = gruposDaFrota(frota);
-    const eqs = equipamentos.filter((e) => !gruposFrota || gruposFrota.includes(e.group_name || ""));
+    const naFrota = (e: EquipLinha) => !gruposFrota || gruposFrota.includes(e.group_name || "");
+    const eqs = equipamentos.filter((e) => (incluirInactivas || e.active) && naFrota(e));
     const ids = new Set(eqs.map((e) => e.id));
 
     const hoje = hojeMaputo();
@@ -272,6 +280,10 @@ export async function GET(request: Request) {
       ok: true,
       mes: mesParam,
       equipamentos: eqs,
+      // quanto ficaram de fora por estar inactivas (o cabeçalho da grelha conta)
+      inactivasEscondidas: incluirInactivas
+        ? 0
+        : equipamentos.filter((e) => !e.active && naFrota(e)).length,
       dias: diasCompletos.filter((d) => ids.has(d.equipment_id)),
       transicoesAbertas: paradasDeHoje(segmentos, hoje, nomesMaquinas),
       resumoSemanal,

@@ -13,7 +13,7 @@ import { autorizadoDisp, eErro, erroBase } from "@/lib/guarda-api";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const auth = await autorizadoDisp("ver");
+  const auth = await autorizadoDisp("disponibilidade.config", "ver");
   if (eErro(auth)) return auth;
   try {
     const linhas = await query<{ meta_disponibilidade: number; atualizado_em: string; atualizado_por: string | null }>(
@@ -32,7 +32,7 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const auth = await autorizadoDisp("editar");
+  const auth = await autorizadoDisp("disponibilidade.config", "editar");
   if (eErro(auth)) return auth;
 
   let corpo: { meta_disponibilidade?: unknown };

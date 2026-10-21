@@ -5,13 +5,15 @@
  * 1. Valida a sessão (cookie httpOnly) com a base de dados;
  * 2. Sem sessão: manda para o login;
  * 3. Senha temporária: manda trocar a senha;
- * 4. Filtra o menu por permissões - só chega ao navegador o que o
- *    utilizador pode ver.
+ * 4. Envia o menu COMPLETO + a lista de páginas autorizadas da matriz
+ *    POR UTILIZADOR (Fase 7 R1): o menu nunca esconde, mostra bloqueado
+ *    o que a pessoa não pode usar. O servidor decide sempre - as páginas
+ *    e as APIs voltam a verificar do lado de lá.
  */
 
 import { redirect } from "next/navigation";
-import { obterSessao, pode } from "@/lib/auth";
-import { MODULOS } from "@/lib/permissoes";
+import { obterSessao } from "@/lib/auth";
+import { MODULOS, PAGINAS } from "@/lib/permissoes";
 import { Shell } from "@/components/shell";
 
 export default async function LayoutApp({
@@ -27,17 +29,16 @@ export default async function LayoutApp({
     redirect("/login?trocar=1");
   }
 
-  // Menu visível: admin vê tudo; os outros seguem a matriz da base de
-  // dados. O Painel Principal ("inicio") é visível para todos, como
-  // pediste (o utilizador entra e vê o painel, mesmo com módulos limitados).
-  const modulosVisiveis = MODULOS.filter((m) => {
-    if (m.id === "inicio") return true;
-    if (m.dev) return sessao.utilizador.nivel === "admin";
-    return pode(sessao, m.id, "ver");
-  });
+  // Páginas autorizadas desta pessoa: admin entra em tudo; os outros
+  // seguem a matriz (linha com "ver"). Início e o perfil próprio são
+  // garantidos a todos e nem entram na matriz.
+  const paginasAutorizadas =
+    sessao.utilizador.nivel === "admin"
+      ? PAGINAS.map((p) => p.pagina)
+      : sessao.matriz.filter((p) => p.ver).map((p) => p.pagina);
 
   return (
-    <Shell utilizador={sessao.utilizador} modulos={modulosVisiveis}>
+    <Shell utilizador={sessao.utilizador} modulos={MODULOS} paginas={paginasAutorizadas}>
       {children}
     </Shell>
   );

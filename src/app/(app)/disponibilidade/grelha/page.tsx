@@ -6,6 +6,7 @@
 
 import { redirect } from "next/navigation";
 import { obterSessao, pode } from "@/lib/auth";
+import { SemAcesso } from "@/components/sem-acesso";
 import { GrelhaClient } from "./grelha-client";
 
 export const metadata = { title: "Disponibilidade - Grelha Diária | Portal Danmo" };
@@ -13,12 +14,12 @@ export const metadata = { title: "Disponibilidade - Grelha Diária | Portal Danm
 export default async function PaginaGrelha() {
   const sessao = await obterSessao();
   if (!sessao) redirect("/login?motivo=sem_sessao");
-  if (!pode(sessao, "disponibilidade", "ver")) redirect("/");
+  if (!pode(sessao, "disponibilidade.grelha", "ver")) return <SemAcesso pagina="disponibilidade.grelha" />;
 
   return (
     <GrelhaClient
-      podeEditar={pode(sessao, "disponibilidade", "editar")}
-      podeApagar={pode(sessao, "disponibilidade", "apagar")}
+      podeEditar={pode(sessao, "disponibilidade.grelha", "editar")}
+      podeApagar={pode(sessao, "disponibilidade.grelha", "apagar")}
     />
   );
 }

@@ -15,8 +15,11 @@
  * Tema unificado: tudo muda junto no claro/escuro. Acento do tema claro
  * é o azul da marca; no escuro é o verde (como nos mockups).
  *
- * A lista de módulos chega pronta do SERVIDOR (já filtrada pelas
- * permissões). Quem não tem permissão nem vê a opção no menu.
+ * A lista de módulos chega COMPLETA do SERVIDOR, junto com as páginas
+ * autorizadas na matriz por utilizador: o menu nunca esconde - mostra
+ * bloqueado (círculo com a barra) o que a pessoa não pode usar, como nas
+ * fases por migrar. O servidor decide sempre (as páginas e as APIs
+ * verificam do lado de lá).
  */
 
 import { useEffect, useState } from "react";
@@ -49,10 +52,11 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   CircleCheck,
+  CircleSlash,
   UserRoundPlus,
+  UserRound,
   type LucideIcon
 } from "lucide-react";
-import { toast } from "sonner";
 import { useTheme } from "next-themes";
 import { trocarTemaInstantaneo } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
@@ -92,7 +96,10 @@ type Novidade = {
 
 type Props = {
   utilizador: Utilizador;
+  /** Menu completo (o servidor já decide; aqui só se marca bloqueado). */
   modulos: Modulo[];
+  /** Ids das páginas autorizadas na matriz por utilizador. */
+  paginas: string[];
   children: React.ReactNode;
 };
 
@@ -135,7 +142,7 @@ const MESES = [
   "Dezembro"
 ];
 
-export function Shell({ utilizador, modulos, children }: Props) {
+export function Shell({ utilizador, modulos, paginas, children }: Props) {
   const router = useRouter();
   const caminho = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
@@ -434,13 +441,11 @@ export function Shell({ utilizador, modulos, children }: Props) {
                   </Link>
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem
-                onClick={() =>
-                  toast.info("A troca da própria senha pelo perfil chega na próxima iteração.")
-                }
-                className="text-muted-foreground"
-              >
-                Trocar a minha senha (a seguir)
+              <DropdownMenuItem asChild>
+                <Link href="/perfil" className="cursor-pointer">
+                  <UserRound aria-hidden />
+                  Os meus dados
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -531,6 +536,71 @@ export function Shell({ utilizador, modulos, children }: Props) {
             const temDetalhe = Boolean(m.sub?.length || m.grupos?.length);
             const emCartaz = m.fase > 0 || m.dev;
             const activo = m.id === "inicio" && caminho === "/";
+
+            /* Página Permissões: só a administração entra; os outros
+               vê-la-ão bloqueada (é a cara da matriz por utilizador) */
+            if (m.id === "permissoes" && !eAdmin) {
+              return (
+                <div
+                  key={m.id}
+                  title={comRotulos ? undefined : "Permissões (só administração)"}
+                  className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-sidebar-foreground/45"
+                >
+                  <Icone className="size-5 shrink-0" aria-hidden />
+                  <span
+                    className={
+                      "min-w-0 flex-1 truncate text-[0.88rem] " +
+                      (!comRotulos ? "lg:hidden" : "")
+                    }
+                  >
+                    {m.label}
+                  </span>
+                  {comRotulos && (
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.62rem] font-bold text-muted-foreground uppercase">
+                      Admin
+                    </span>
+                  )}
+                </div>
+              );
+            }
+
+            /* Página Permissões (admin): link directo */
+            if (m.id === "permissoes") {
+              const permActiva = caminho.startsWith("/permissoes");
+              return (
+                <Link
+                  key={m.id}
+                  href="/permissoes"
+                  title="Permissões e contas"
+                  aria-current={permActiva ? "page" : undefined}
+                  className={
+                    "relative flex items-center gap-3 rounded-lg px-3 py-2 transition-colors " +
+                    (!mobileAberta && recolhida ? "lg:justify-center lg:px-0 " : "") +
+                    (permActiva
+                      ? "bg-sidebar-activo"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground")
+                  }
+                >
+                  {permActiva ? (
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primario text-white shadow-sm">
+                      <Icone className="size-4.5" aria-hidden />
+                    </span>
+                  ) : (
+                    <Icone className="size-5 shrink-0 text-sidebar-foreground/80" aria-hidden />
+                  )}
+                  <span
+                    className={
+                      "min-w-0 flex-1 truncate text-[0.88rem] " +
+                      (permActiva ? "font-semibold text-sidebar-activo-texto" : "") +
+                      " " +
+                      (!comRotulos ? "lg:hidden" : "")
+                    }
+                  >
+                    {m.label}
+                  </span>
+                </Link>
+              );
+            }
 
             /* Cartaz: módulo ainda por migrar ou em desenvolvimento */
             if (emCartaz) {
@@ -685,19 +755,41 @@ export function Shell({ utilizador, modulos, children }: Props) {
                             </div>
                           );
                         })
-                      : m.sub?.map((item) => (
-                          <Link
-                            key={item.label}
-                            href={item.href}
-                            className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[0.8rem] text-sidebar-secundario transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                          >
-                            <ChevronRight
-                              className="size-3 shrink-0 opacity-50"
-                              aria-hidden
-                            />
-                            <span className="truncate">{item.label}</span>
-                          </Link>
-                        ))}
+                      : m.sub?.map((item) => {
+                          const autorizada =
+                            !item.pagina || paginas.includes(item.pagina);
+                          if (!autorizada) {
+                            /* Página sem permissão: mostra bloqueada
+                               (círculo com a barra) - o servidor recusa
+                               de qualquer forma se abrirem por URL */
+                            return (
+                              <div
+                                key={item.label}
+                                title={`${item.label} (sem acesso)`}
+                                className="flex cursor-not-allowed items-center gap-2 rounded-lg px-2.5 py-2 text-[0.8rem] text-sidebar-foreground/40"
+                              >
+                                <CircleSlash
+                                  className="size-3 shrink-0 opacity-60"
+                                  aria-hidden
+                                />
+                                <span className="truncate">{item.label}</span>
+                              </div>
+                            );
+                          }
+                          return (
+                            <Link
+                              key={item.label}
+                              href={item.href}
+                              className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[0.8rem] text-sidebar-secundario transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                            >
+                              <ChevronRight
+                                className="size-3 shrink-0 opacity-50"
+                                aria-hidden
+                              />
+                              <span className="truncate">{item.label}</span>
+                            </Link>
+                          );
+                        })}
                   </div>
                 )}
               </div>

@@ -67,7 +67,7 @@ type MaquinaPainel = {
 const n = (v: number | string | null | undefined): number => Number(v) || 0;
 
 export async function GET(request: Request) {
-  const auth = await autorizadoDisp("ver");
+  const auth = await autorizadoDisp("disponibilidade", "ver");
   if (eErro(auth)) return auth;
 
   const url = new URL(request.url);

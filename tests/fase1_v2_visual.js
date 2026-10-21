@@ -55,7 +55,8 @@ const FOTOS = "/home/z/my-project/danmo/tests";
   const activo = await page.locator('a[aria-current="page"]').textContent();
   ok("Item activo é 'Início'", (activo || "").includes("Início"));
   ok("Admin vê 'Definições' no menu", corpo.includes("Definições"));
-  ok("Fases marcadas no menu (stock já não é futuro)", !corpo.includes("Fase 4") && corpo.includes("Fase 5") && corpo.includes("Fase 7"));
+  ok("Fases marcadas no menu (Permissões já no ar: fase 7 saiu do menu)",
+     !corpo.includes("Fase 4") && corpo.includes("Fase 5") && corpo.includes("Fase 6") && !corpo.includes("Fase 7"));
 
   // 4. Herói: saudação + selos + cartões de fase (nas cores do logo)
   ok("Herói tem 'Olá,'", corpo.includes("Olá,"));

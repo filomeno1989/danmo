@@ -148,7 +148,7 @@ async function recalcularMensal(equipmentId: number, ano: number, mes: number) {
 }
 
 export async function GET(request: Request) {
-  const auth = await autorizadoDisp("ver");
+  const auth = await autorizadoDisp("disponibilidade.grelha", "ver");
   if (eErro(auth)) return auth;
 
   const url = new URL(request.url);
@@ -311,7 +311,7 @@ type Marcacao = {
 };
 
 export async function POST(request: Request) {
-  const auth = await autorizadoDisp("editar");
+  const auth = await autorizadoDisp("disponibilidade.grelha", "editar");
   if (eErro(auth)) return auth;
   const nomeUtilizador = auth.utilizador.nome;
 
@@ -393,7 +393,7 @@ export async function POST(request: Request) {
 
 /** PATCH: apagar uma marcação (deixar o dia em branco). */
 export async function DELETE(request: Request) {
-  const auth = await autorizadoDisp("editar");
+  const auth = await autorizadoDisp("disponibilidade.grelha", "editar");
   if (eErro(auth)) return auth;
 
   const url = new URL(request.url);

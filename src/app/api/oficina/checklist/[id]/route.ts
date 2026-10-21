@@ -14,7 +14,7 @@
 
 import { NextResponse, NextRequest } from "next/server";
 import { insert, query, update } from "@/lib/supabase";
-import { autorizado, eErro, erroBase } from "@/lib/guarda-api";
+import { autorizadoOficina, eErro, erroBase } from "@/lib/guarda-api";
 import { dataHojeISO, proximaDataAssinatura } from "@/lib/oficina";
 import type {
   ChecklistPreenchido,
@@ -30,7 +30,7 @@ import type {
 type Contexto = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, ctx: Contexto) {
-  const auth = await autorizado("ver");
+  const auth = await autorizadoOficina("oficina.checklist", "ver");
   if (eErro(auth)) return auth;
   const { id: idBruto } = await ctx.params;
   const ckId = Number(idBruto);
@@ -125,7 +125,7 @@ type Corpo = {
 };
 
 export async function POST(req: NextRequest, ctx: Contexto) {
-  const auth = await autorizado("editar");
+  const auth = await autorizadoOficina("oficina.checklist", "editar");
   if (eErro(auth)) return auth;
   const { id: idBruto } = await ctx.params;
   const ckId = Number(idBruto);

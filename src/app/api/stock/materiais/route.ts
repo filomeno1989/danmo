@@ -17,13 +17,15 @@
 
 import { NextResponse, NextRequest } from "next/server";
 import { insert, query, queryTudo, update } from "@/lib/supabase";
-import { autorizadoStock, eErro, erroBase } from "@/lib/guarda-api";
+import { autorizadoEmAlguma, autorizadoStock, eErro, erroBase } from "@/lib/guarda-api";
 import { calcularPosicoes } from "@/lib/stock";
 import type { Material, MovimentoStock } from "@/lib/stock";
 import { unidadesValidas } from "@/app/api/stock/config/route";
 
 export async function GET() {
-  const auth = await autorizadoStock("ver");
+  const auth = await autorizadoEmAlguma(
+    ["stock", "stock.materiais", "stock.entradas", "stock.saidas", "stock.relatorios"]
+  );
   if (eErro(auth)) return auth;
   try {
     const [materiais, movimentos, categorias, unidades] = await Promise.all([
@@ -62,7 +64,9 @@ type Corpo = {
 const arred2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function POST(req: NextRequest) {
-  const auth0 = await autorizadoStock("ver");
+  const auth0 = await autorizadoEmAlguma(
+    ["stock", "stock.materiais", "stock.entradas", "stock.saidas", "stock.relatorios"]
+  );
   if (eErro(auth0)) return auth0;
 
   let corpo: Corpo;
@@ -73,7 +77,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (corpo.action === "desactivar") {
-    const auth = await autorizadoStock("editar");
+    const auth = await autorizadoStock("stock.materiais", "editar");
     if (eErro(auth)) return auth;
     if (!corpo.id) {
       return NextResponse.json({ ok: false, erro: "Material não indicado." }, { status: 400 });
@@ -86,7 +90,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const auth = await autorizadoStock(corpo.action === "criar" ? "criar" : "editar");
+  const auth = await autorizadoStock("stock.materiais", corpo.action === "criar" ? "criar" : "editar");
   if (eErro(auth)) return auth;
 
   try {

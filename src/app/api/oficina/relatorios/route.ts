@@ -8,11 +8,11 @@
 
 import { NextResponse } from "next/server";
 import { queryTudo } from "@/lib/supabase";
-import { autorizado, eErro, erroBase } from "@/lib/guarda-api";
+import { autorizadoOficina, eErro, erroBase } from "@/lib/guarda-api";
 import type { Equipamento, LogEstado, OrdemServico } from "@/lib/oficina";
 
 export async function GET() {
-  const auth = await autorizado("ver");
+  const auth = await autorizadoOficina("oficina.relatorios", "ver");
   if (eErro(auth)) return auth;
   try {
     const [equipamentos, ordens, logs] = await Promise.all([

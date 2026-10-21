@@ -39,7 +39,7 @@ const n = (v: unknown): number | null => {
 };
 
 export async function GET(request: Request) {
-  const auth = await autorizadoDisp("ver");
+  const auth = await autorizadoDisp("disponibilidade.horometro", "ver");
   if (eErro(auth)) return auth;
 
   const url = new URL(request.url);
@@ -88,7 +88,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const auth = await autorizadoDisp("editar");
+  const auth = await autorizadoDisp("disponibilidade.horometro", "editar");
   if (eErro(auth)) return auth;
 
   let corpo: {

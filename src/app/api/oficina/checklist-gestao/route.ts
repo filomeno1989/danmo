@@ -14,7 +14,7 @@
 
 import { NextResponse, NextRequest } from "next/server";
 import { del, insert, query, update } from "@/lib/supabase";
-import { autorizado, eErro, erroBase, type AccaoOficina } from "@/lib/guarda-api";
+import { autorizadoOficina, eErro, erroBase, type AccaoOficina } from "@/lib/guarda-api";
 import { FILTRO_ITEM_RESPONDIDO } from "@/lib/oficina";
 import type {
   CategoriaEquip,
@@ -24,7 +24,7 @@ import type {
 } from "@/lib/oficina";
 
 export async function GET(req: NextRequest) {
-  const auth = await autorizado("ver");
+  const auth = await autorizadoOficina("oficina.checklist", "ver");
   if (eErro(auth)) return auth;
 
   const url = new URL(req.url);
@@ -134,7 +134,7 @@ const PERMISSOES: Record<string, AccaoOficina> = {
 };
 
 export async function POST(req: NextRequest) {
-  const auth0 = await autorizado("ver");
+  const auth0 = await autorizadoOficina("oficina.checklist", "ver");
   if (eErro(auth0)) return auth0;
 
   let corpo: Corpo;
@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
   if (!accao) {
     return NextResponse.json({ ok: false, erro: "Acção desconhecida." }, { status: 400 });
   }
-  const auth = await autorizado(accao);
+  const auth = await autorizadoOficina("oficina.checklist", accao);
   if (eErro(auth)) return auth;
 
   try {

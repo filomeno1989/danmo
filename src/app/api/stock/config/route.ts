@@ -48,7 +48,7 @@ export async function carregarUnidades(): Promise<{ unidades: UnidadeMedida[]; o
 }
 
 export async function GET() {
-  const auth = await autorizadoStock("ver");
+  const auth = await autorizadoStock("stock.config", "ver");
   if (eErro(auth)) return auth;
   try {
     const [fornecedores, departamentos, finalidades, categorias, responsaveis, unidades] =
@@ -105,7 +105,7 @@ type Corpo = {
 };
 
 export async function POST(req: NextRequest) {
-  const auth0 = await autorizadoStock("ver");
+  const auth0 = await autorizadoStock("stock.config", "ver");
   if (eErro(auth0)) return auth0;
 
   let corpo: Corpo;
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
   }
 
   const accao = corpo.action === "criar" ? "criar" : "editar";
-  const auth = await autorizadoStock(accao);
+  const auth = await autorizadoStock("stock.config", accao);
   if (eErro(auth)) return auth;
 
   const tipo = corpo.tipo;

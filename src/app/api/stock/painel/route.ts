@@ -29,7 +29,7 @@ function hojeISO(): string {
 }
 
 export async function GET() {
-  const auth = await autorizadoStock("ver");
+  const auth = await autorizadoStock("stock", "ver");
   if (eErro(auth)) return auth;
   try {
     const [movimentos, materiais] = await Promise.all([

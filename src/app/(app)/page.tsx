@@ -1,11 +1,12 @@
 /**
  * Painel Principal (o "Início" dos mockups do Filomeno).
  *
- * Servidor: lê a sessão e passa o nome/cargo ao bloco partilhado
- * (PainelInicio). A saudação usa a hora de Maputo.
+ * Servidor: lê a sessão e passa o nome/cargo + as permissões da pessoa
+ * (matriz por utilizador) ao bloco partilhado (PainelInicio). A saudação
+ * usa a hora de Maputo.
  */
 
-import { obterSessao, NIVEL_LABEL } from "@/lib/auth";
+import { obterSessao, pode, NIVEL_LABEL } from "@/lib/auth";
 import { PainelInicio } from "@/components/painel-inicio";
 
 /** Cumprimento certo à hora local de Moçambique (UTC+2). */
@@ -29,6 +30,9 @@ export default async function PaginaInicio() {
     <PainelInicio
       nome={nome ? `${cumprimento()}, ${nome}.` : "Bem-vindo ao portal Danmo"}
       quem={quem}
+      podeOficina={pode(sessao, "oficina", "ver")}
+      podeStock={pode(sessao, "stock", "ver")}
+      eAdmin={sessao?.utilizador.nivel === "admin"}
     />
   );
 }

@@ -68,7 +68,7 @@ type EquipTotalLinha = { id: number; group_name: string | null; active: boolean 
 const int = (v: unknown): number => Math.max(0, Math.trunc(Number(v) || 0));
 
 export async function GET(request: Request) {
-  const auth = await autorizadoDisp("ver");
+  const auth = await autorizadoDisp("disponibilidade.semana", "ver");
   if (eErro(auth)) return auth;
 
   const url = new URL(request.url);
@@ -263,7 +263,7 @@ type MelhoriaEntrada = {
 };
 
 export async function POST(request: Request) {
-  const auth = await autorizadoDisp("editar");
+  const auth = await autorizadoDisp("disponibilidade.semana", "editar");
   if (eErro(auth)) return auth;
   const nomeUtilizador = auth.utilizador.nome;
 

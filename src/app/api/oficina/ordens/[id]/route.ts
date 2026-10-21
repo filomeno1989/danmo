@@ -17,7 +17,7 @@
 
 import { NextResponse, NextRequest } from "next/server";
 import { del, insert, query, queryTudo, update } from "@/lib/supabase";
-import { autorizado, eErro, erroBase, type AccaoOficina } from "@/lib/guarda-api";
+import { autorizadoOficina, eErro, erroBase, type AccaoOficina } from "@/lib/guarda-api";
 import {
   arredondarHoras,
   calcularHorasExcluindoAlmoco,
@@ -43,7 +43,7 @@ type Contexto = { params: Promise<{ id: string }> };
 /* ============ GET: ficha completa ============ */
 
 export async function GET(_req: NextRequest, ctx: Contexto) {
-  const auth = await autorizado("ver");
+  const auth = await autorizadoOficina("oficina.ordens", "ver");
   if (eErro(auth)) return auth;
   const { id: idBruto } = await ctx.params;
   const osId = Number(idBruto);
@@ -239,7 +239,7 @@ type Corpo = {
 };
 
 export async function POST(req: NextRequest, ctx: Contexto) {
-  const auth0 = await autorizado("ver");
+  const auth0 = await autorizadoOficina("oficina.ordens", "ver");
   if (eErro(auth0)) return auth0;
   const sessao = auth0;
 
@@ -276,7 +276,7 @@ export async function POST(req: NextRequest, ctx: Contexto) {
   if (!accaoNecessaria) {
     return NextResponse.json({ ok: false, erro: "Acção desconhecida." }, { status: 400 });
   }
-  const auth = await autorizado(accaoNecessaria);
+  const auth = await autorizadoOficina("oficina.ordens", accaoNecessaria);
   if (eErro(auth)) return auth;
 
   try {

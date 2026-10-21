@@ -17,12 +17,21 @@ export type Utilizador = {
   precisa_trocar: boolean;
 };
 
+/**
+ * A matriz por UTILIZADOR (Fase 7 R1): uma linha por pessoa x pagina,
+ * com as 3 marcas que o Filomeno aprovou. Nao ha linha = bloqueado.
+ * "Mexer" cobre criar, editar e arquivar; "Apagar" e so da administracao
+ * na pratica, mas a marca existe para contas de confianca.
+ */
 export type LinhaPermissao = {
-  nivel: string;
-  modulo: string;
-  acao: string;
-  permitido: boolean;
+  pagina: string;
+  ver: boolean;
+  mexer: boolean;
+  apagar: boolean;
 };
+
+/** As 3 acoes que o servidor entende (igual às 3 colunas da matriz). */
+export type AccaoPagina = "ver" | "mexer" | "apagar";
 
 /** Rótulos de nível usados na topbar/perfil (iguais ao hub). */
 export const NIVEL_LABEL: Record<string, string> = {

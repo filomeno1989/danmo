@@ -8,7 +8,7 @@
 
 import { NextResponse, NextRequest } from "next/server";
 import { query, queryTudo } from "@/lib/supabase";
-import { autorizado, eErro, erroBase } from "@/lib/guarda-api";
+import { autorizadoOficina, eErro, erroBase } from "@/lib/guarda-api";
 import type {
   ColaboradorLinha,
   Equipamento,
@@ -20,7 +20,7 @@ import type {
 type Contexto = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, ctx: Contexto) {
-  const auth = await autorizado("ver");
+  const auth = await autorizadoOficina("oficina.equipamentos", "ver");
   if (eErro(auth)) return auth;
   const { id: idBruto } = await ctx.params;
   const equipId = Number(idBruto);

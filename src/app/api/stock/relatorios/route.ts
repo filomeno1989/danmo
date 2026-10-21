@@ -23,7 +23,7 @@ import type { Material, MovimentoStock } from "@/lib/stock";
 const arred2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function GET(req: NextRequest) {
-  const auth = await autorizadoStock("ver");
+  const auth = await autorizadoStock("stock.relatorios", "ver");
   if (eErro(auth)) return auth;
 
   const url = new URL(req.url);

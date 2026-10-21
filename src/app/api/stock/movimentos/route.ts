@@ -18,7 +18,7 @@
 
 import { NextResponse, NextRequest } from "next/server";
 import { del, insert, query, queryTudo, update } from "@/lib/supabase";
-import { autorizadoStock, eErro, erroBase } from "@/lib/guarda-api";
+import { autorizadoEmAlguma, autorizadoStock, eErro, erroBase } from "@/lib/guarda-api";
 import {
   calcularPosicoes,
   motivoBloqueioApagarEntrada,
@@ -34,7 +34,9 @@ function hojeISO(): string {
 const arred2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function GET() {
-  const auth = await autorizadoStock("ver");
+  const auth = await autorizadoEmAlguma(
+    ["stock", "stock.entradas", "stock.saidas", "stock.relatorios"]
+  );
   if (eErro(auth)) return auth;
   try {
     const [movimentos, materiais, colaboradores] = await Promise.all([
@@ -81,7 +83,9 @@ type Corpo = {
 };
 
 export async function POST(req: NextRequest) {
-  const auth0 = await autorizadoStock("ver");
+  const auth0 = await autorizadoEmAlguma(
+    ["stock", "stock.entradas", "stock.saidas", "stock.relatorios"]
+  );
   if (eErro(auth0)) return auth0;
 
   let corpo: Corpo;
@@ -94,8 +98,6 @@ export async function POST(req: NextRequest) {
   try {
     /* ---------- confirmar pendente antigo ---------- */
     if (corpo.action === "confirmar-pendente") {
-      const auth = await autorizadoStock("editar");
-      if (eErro(auth)) return auth;
       const id = corpo.id;
       if (!id) {
         return NextResponse.json({ ok: false, erro: "Movimento não indicado." }, { status: 400 });
@@ -105,6 +107,11 @@ export async function POST(req: NextRequest) {
       if (!m) {
         return NextResponse.json({ ok: false, erro: "Movimento não encontrado." }, { status: 404 });
       }
+      const auth = await autorizadoStock(
+        m.tipo === "saida" ? "stock.saidas" : "stock.entradas",
+        "editar"
+      );
+      if (eErro(auth)) return auth;
       if (m.estado !== "pendente") {
         return NextResponse.json(
           { ok: false, erro: "Este movimento já está confirmado." },
@@ -128,18 +135,22 @@ export async function POST(req: NextRequest) {
 
     /* ---------- rejeitar pendente antigo ---------- */
     if (corpo.action === "rejeitar-pendente") {
-      const auth = await autorizadoStock("apagar");
-      if (eErro(auth)) return auth;
       if (!corpo.id) {
         return NextResponse.json({ ok: false, erro: "Movimento não indicado." }, { status: 400 });
       }
       const linhas = await query<MovimentoStock>(
         "stock_movimentos",
-        `select=id,estado&id=eq.${corpo.id}&limit=1`
+        `select=*&id=eq.${corpo.id}&limit=1`
       );
-      if (!linhas[0]) {
+      const mPend = linhas[0];
+      if (!mPend) {
         return NextResponse.json({ ok: false, erro: "Movimento não encontrado." }, { status: 404 });
       }
+      const auth = await autorizadoStock(
+        mPend.tipo === "saida" ? "stock.saidas" : "stock.entradas",
+        "apagar"
+      );
+      if (eErro(auth)) return auth;
       if (linhas[0].estado !== "pendente") {
         return NextResponse.json(
           { ok: false, erro: "Só um movimento pendente pode ser rejeitado." },
@@ -152,8 +163,6 @@ export async function POST(req: NextRequest) {
 
     /* ---------- apagar movimento ---------- */
     if (corpo.action === "apagar") {
-      const auth = await autorizadoStock("apagar");
-      if (eErro(auth)) return auth;
       if (!corpo.id) {
         return NextResponse.json({ ok: false, erro: "Movimento não indicado." }, { status: 400 });
       }
@@ -165,6 +174,11 @@ export async function POST(req: NextRequest) {
       if (!m) {
         return NextResponse.json({ ok: false, erro: "Movimento não encontrado." }, { status: 404 });
       }
+      const auth = await autorizadoStock(
+        m.tipo === "saida" ? "stock.saidas" : "stock.entradas",
+        "apagar"
+      );
+      if (eErro(auth)) return auth;
       if (m.tipo === "entrada" && m.estado === "confirmado") {
         const pos = await posicoesActuais();
         const bloqueio = motivoBloqueioApagarEntrada(m, pos);
@@ -177,9 +191,12 @@ export async function POST(req: NextRequest) {
     }
 
     /* ---------- criar (registo directo) ---------- */
-    const auth = await autorizadoStock("criar");
-    if (eErro(auth)) return auth;
     const mv = corpo.movimento;
+    const auth = await autorizadoStock(
+      mv && mv.tipo === "saida" ? "stock.saidas" : "stock.entradas",
+      "criar"
+    );
+    if (eErro(auth)) return auth;
     if (!mv) {
       return NextResponse.json({ ok: false, erro: "Faltam os dados do movimento." }, { status: 400 });
     }

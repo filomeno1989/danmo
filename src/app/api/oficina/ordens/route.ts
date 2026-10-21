@@ -14,7 +14,7 @@
 
 import { NextResponse, NextRequest } from "next/server";
 import { del, insert, query, queryTudo } from "@/lib/supabase";
-import { autorizado, eErro, erroBase } from "@/lib/guarda-api";
+import { autorizadoOficina, eErro, erroBase } from "@/lib/guarda-api";
 import type {
   ColaboradorLinha,
   Equipamento,
@@ -22,7 +22,7 @@ import type {
 } from "@/lib/oficina";
 
 export async function GET() {
-  const auth = await autorizado("ver");
+  const auth = await autorizadoOficina("oficina.ordens", "ver");
   if (eErro(auth)) return auth;
 
   try {
@@ -57,7 +57,7 @@ type CorpoCriar = {
 };
 
 export async function POST(req: NextRequest) {
-  const auth = await autorizado("criar");
+  const auth = await autorizadoOficina("oficina.ordens", "criar");
   if (eErro(auth)) return auth;
   const sessao = auth;
 

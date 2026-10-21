@@ -1,9 +1,11 @@
 /**
  * PainelInicio - Conteúdo do "Início" (herói + cartões de fase + sobre).
  *
- * Componente de servidor, sem acesso a sessão: quem o chama fornece
- * nome e cargo/nível. Assim o mesmo bloco serve a página real e os
- * testes visuais.
+ * Componente de servidor: quem o chama fornece nome, cargo/nível e as
+ * permissões da pessoa (matriz por utilizador, Fase 7 R1). Módulo sem
+ * "ver" aparece DESFOCADO com etiqueta "Sem acesso" (o pedido do
+ * Filomeno: no celular/tablet vê-se o home com as páginas desfocadas) -
+ * o servidor das páginas/APIs decide sempre.
  */
 
 import Link from "next/link";
@@ -11,7 +13,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { HeroiSaudacao } from "@/components/heroi-saudacao";
 import {
   CircleCheck,
+  CircleSlash,
   Shield,
+  KeyRound,
   Cog,
   Package,
   Layers,
@@ -98,23 +102,62 @@ function CartaoFase({
   );
 }
 
+/**
+ * Sem permissão: o cartão fica desbotado e desfocado, impossível de
+ * clicar, com a etiqueta "Sem acesso" por cima (visual só - o servidor
+ * é quem recusa a sério).
+ */
+function SemPermissao({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative h-full">
+      <div aria-hidden className="pointer-events-none h-full select-none blur-[4px] saturate-[0.55]">
+        {children}
+      </div>
+      <span className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full border border-border bg-card/95 px-3 py-1 text-[0.72rem] font-bold text-muted-foreground shadow-sm">
+        <CircleSlash className="size-3.5" aria-hidden />
+        Sem acesso
+      </span>
+    </div>
+  );
+}
+
 export function PainelInicio({
   nome,
   quem,
+  podeOficina,
+  podeStock,
+  eAdmin,
   fundos
 }: {
   nome: string;
   quem: string;
+  podeOficina: boolean;
+  podeStock: boolean;
+  eAdmin: boolean;
   fundos?: Parameters<typeof HeroiSaudacao>[0]["fundosIniciais"];
 }) {
+  const pillNoAr = (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600/15 px-3 py-1 text-[0.72rem] font-bold text-emerald-700 dark:bg-white/15 dark:text-emerald-200">
+      <CircleCheck className="size-3.5" aria-hidden />
+      No ar
+    </span>
+  );
+  const pillConcluida = (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600/15 px-3 py-1 text-[0.72rem] font-bold text-emerald-700 dark:bg-white/15 dark:text-emerald-200">
+      <CircleCheck className="size-3.5" aria-hidden />
+      Concluída
+    </span>
+  );
+
   return (
     <div className="space-y-5">
       {/* 1. Herói: saudação + foto da empresa (as fotos que carregas em
           Personalizar portal aparecem aqui também, em crossfade suave) */}
       <HeroiSaudacao nome={nome} quem={quem} fundosIniciais={fundos} />
 
-      {/* 2. Estado da migração (cartões de fase) */}
-      <section aria-label="Estado da migração" className="grid gap-4 md:grid-cols-3">
+      {/* 2. Estado da migração (cartões de fase; os sem permissão ficam
+          desfocados, como o Filomeno pediu) */}
+      <section aria-label="Estado da migração" className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <CartaoFase
           classeFundo="fase-verde text-emerald-950 dark:text-white"
           icone={Shield}
@@ -122,57 +165,65 @@ export function PainelInicio({
           marcaAgua={Shield}
           titulo="Fundação"
           corTitulo="text-emerald-950 dark:text-white"
-          texto="Login protegido no servidor, menu por permissões, tema claro/escuro unificado e auto-registo dos colegas."
+          texto="Login protegido no servidor, tema claro/escuro unificado e auto-registo dos colegas."
           corTexto="text-emerald-900/75 dark:text-white/75"
-          pill={
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600/15 px-3 py-1 text-[0.72rem] font-bold text-emerald-700 dark:bg-white/15 dark:text-emerald-200">
-              <CircleCheck className="size-3.5" aria-hidden />
-              Concluída
-            </span>
-          }
+          pill={pillConcluida}
           seta="border-emerald-700/30 text-emerald-900 hover:bg-emerald-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
           href="#sobre"
           rotulo="Fundação concluída: ver detalhes em Sobre este painel"
         />
 
-        <CartaoFase
-          classeFundo="fase-ambar text-amber-950 dark:text-white"
-          icone={Cog}
-          tile="bg-ambar text-[#101b2d] dark:bg-white/15 dark:text-white"
-          marcaAgua={Cog}
-          titulo="Oficina & Manutenção"
-          corTitulo="text-amber-950 dark:text-white"
-          texto="Já está no ar: Ordens de Serviço, Checklist, Equipamentos, Faturação CdM e Relatórios, com exportações Excel e PDF ao padrão da marca."
-          corTexto="text-amber-900/80 dark:text-white/75"
-          pill={
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600/15 px-3 py-1 text-[0.72rem] font-bold text-emerald-700 dark:bg-white/15 dark:text-emerald-200">
-              <CircleCheck className="size-3.5" aria-hidden />
-              No ar
-            </span>
-          }
-          seta="border-amber-700/40 text-amber-950 hover:bg-amber-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
-          href="/oficina"
-          rotulo="Abrir a Oficina e Manutenção"
-        />
+        <SemPermissaoAplicada permitido={podeOficina}>
+          <CartaoFase
+            classeFundo="fase-ambar text-amber-950 dark:text-white"
+            icone={Cog}
+            tile="bg-ambar text-[#101b2d] dark:bg-white/15 dark:text-white"
+            marcaAgua={Cog}
+            titulo="Oficina & Manutenção"
+            corTitulo="text-amber-950 dark:text-white"
+            texto="Já está no ar: Ordens de Serviço, Checklist, Equipamentos, Faturação CdM e Relatórios, com exportações Excel e PDF ao padrão da marca."
+            corTexto="text-amber-900/80 dark:text-white/75"
+            pill={pillNoAr}
+            seta="border-amber-700/40 text-amber-950 hover:bg-amber-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
+            href="/oficina"
+            rotulo="Abrir a Oficina e Manutenção"
+          />
+        </SemPermissaoAplicada>
+
+        <SemPermissaoAplicada permitido={podeStock}>
+          <CartaoFase
+            classeFundo="fase-vermelha text-red-950 dark:text-white"
+            icone={Package}
+            tile="bg-red-600 text-white dark:bg-white/15 dark:text-white"
+            marcaAgua={Package}
+            titulo="Gestão de Stock"
+            corTitulo="text-red-950 dark:text-white"
+            texto="Já está no ar: Materiais, Entradas, Saídas, Painel, Relatórios e Configurações, com stock calculado no servidor e o stock nunca negativo. Depois: Ferramentaria, HST e RH."
+            corTexto="text-red-900/75 dark:text-white/75"
+            pill={pillNoAr}
+            seta="border-red-700/30 text-red-900 hover:bg-red-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
+            href="/stock"
+            rotulo="Abrir a Gestão de Stock"
+          />
+        </SemPermissaoAplicada>
 
         <CartaoFase
-          classeFundo="fase-vermelha text-red-950 dark:text-white"
-          icone={Package}
-          tile="bg-red-600 text-white dark:bg-white/15 dark:text-white"
-          marcaAgua={Package}
-          titulo="Gestão de Stock"
-          corTitulo="text-red-950 dark:text-white"
-          texto="Já está no ar: Materiais, Entradas, Saídas, Painel, Relatórios e Configurações, com stock calculado no servidor e o stock nunca negativo. Depois: Ferramentaria, HST, RH e a matriz de permissões."
-          corTexto="text-red-900/75 dark:text-white/75"
-          pill={
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600/15 px-3 py-1 text-[0.72rem] font-bold text-emerald-700 dark:bg-white/15 dark:text-emerald-200">
-              <CircleCheck className="size-3.5" aria-hidden />
-              No ar
-            </span>
+          classeFundo="fase-azul text-blue-950 dark:text-white"
+          icone={KeyRound}
+          tile="bg-blue-600 text-white dark:bg-white/15 dark:text-white"
+          marcaAgua={KeyRound}
+          titulo="Permissões & Contas"
+          corTitulo="text-blue-950 dark:text-white"
+          texto={
+            eAdmin
+              ? "No ar: aprova registos, cria contas, desactiva, faz reset de senha e dá a cada pessoa as suas permissões, página a página (Ver / Mexer / Apagar)."
+              : "No ar: os teus dados ficam em Os meus dados (menu do teu nome), com troca de senha e pedidos de alteração para a administração."
           }
-          seta="border-red-700/30 text-red-900 hover:bg-red-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
-          href="/stock"
-          rotulo="Abrir a Gestão de Stock"
+          corTexto="text-blue-900/75 dark:text-white/75"
+          pill={pillNoAr}
+          seta="border-blue-700/30 text-blue-900 hover:bg-blue-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
+          href={eAdmin ? "/permissoes" : "/perfil"}
+          rotulo={eAdmin ? "Abrir a página Permissões" : "Abrir Os meus dados"}
         />
       </section>
 
@@ -194,9 +245,11 @@ export function PainelInicio({
                 estado do caminho.
               </p>
               <p>
-                O menu lateral já está a funcionar com as permissões da base de
-                dados: cada colega vê apenas o que pode usar. Os módulos que
-                ainda não migraram aparecem marcados com a fase em que chegam.
+                As permissões são por utilizador, página a página: o menu mostra
+                toda a estrutura do portal e fica bloqueado (círculo com a barra)
+                onde a administração ainda não te deu acesso - os módulos por
+                migrar continuam marcados com a fase em que chegam. Tudo o que
+                for teu de trabalhar aparece destravado.
               </p>
             </div>
           </CardContent>
@@ -215,4 +268,16 @@ export function PainelInicio({
       </Card>
     </div>
   );
+}
+
+/** Aplica o desfocado quando a pessoa não pode ver o módulo. */
+function SemPermissaoAplicada({
+  permitido,
+  children
+}: {
+  permitido: boolean;
+  children: React.ReactNode;
+}) {
+  if (permitido) return <>{children}</>;
+  return <SemPermissao>{children}</SemPermissao>;
 }

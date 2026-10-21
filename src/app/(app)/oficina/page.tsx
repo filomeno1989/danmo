@@ -7,6 +7,7 @@
 
 import { redirect } from "next/navigation";
 import { obterSessao, pode } from "@/lib/auth";
+import { SemAcesso } from "@/components/sem-acesso";
 import { PainelOficina } from "./painel-client";
 
 export const metadata = { title: "Oficina - Visão Geral | Portal Danmo" };
@@ -14,7 +15,7 @@ export const metadata = { title: "Oficina - Visão Geral | Portal Danmo" };
 export default async function PaginaOficina() {
   const sessao = await obterSessao();
   if (!sessao) redirect("/login?motivo=sem_sessao");
-  if (!pode(sessao, "oficina", "ver")) redirect("/");
+  if (!pode(sessao, "oficina", "ver")) return <SemAcesso pagina="oficina" />;
 
   return (
     <PainelOficina

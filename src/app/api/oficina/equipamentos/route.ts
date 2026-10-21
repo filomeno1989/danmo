@@ -8,7 +8,7 @@
 
 import { NextResponse, NextRequest } from "next/server";
 import { insert, query, update } from "@/lib/supabase";
-import { autorizado, eErro, erroBase } from "@/lib/guarda-api";
+import { autorizadoOficina, eErro, erroBase } from "@/lib/guarda-api";
 import type {
   CategoriaEquip,
   Equipamento,
@@ -16,7 +16,7 @@ import type {
 } from "@/lib/oficina";
 
 export async function GET() {
-  const auth = await autorizado("ver");
+  const auth = await autorizadoOficina("oficina.equipamentos", "ver");
   if (eErro(auth)) return auth;
   try {
     const [equipamentos, categorias, grupos] = await Promise.all([
@@ -49,7 +49,7 @@ type Corpo = {
 };
 
 export async function POST(req: NextRequest) {
-  const auth0 = await autorizado("ver");
+  const auth0 = await autorizadoOficina("oficina.equipamentos", "ver");
   if (eErro(auth0)) return auth0;
 
   let corpo: Corpo;
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, erro: "Pedido inválido." }, { status: 400 });
   }
 
-  const auth = await autorizado(corpo.action === "criar" ? "criar" : "editar");
+  const auth = await autorizadoOficina("oficina.equipamentos", corpo.action === "criar" ? "criar" : "editar");
   if (eErro(auth)) return auth;
 
   try {

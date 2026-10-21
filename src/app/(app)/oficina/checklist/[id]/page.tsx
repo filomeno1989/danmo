@@ -7,6 +7,7 @@
 
 import { redirect } from "next/navigation";
 import { obterSessao, pode } from "@/lib/auth";
+import { SemAcesso } from "@/components/sem-acesso";
 import { PreencherChecklist } from "./preencher-client";
 
 export const metadata = { title: "Checklist de Manutenção | Portal Danmo" };
@@ -18,7 +19,7 @@ export default async function PaginaChecklistPreencher({
 }) {
   const sessao = await obterSessao();
   if (!sessao) redirect("/login?motivo=sem_sessao");
-  if (!pode(sessao, "oficina", "ver")) redirect("/");
+  if (!pode(sessao, "oficina.checklist", "ver")) return <SemAcesso pagina="oficina.checklist" />;
 
   const { id } = await params;
   const ckId = Number(id);
@@ -27,7 +28,7 @@ export default async function PaginaChecklistPreencher({
   return (
     <PreencherChecklist
       checklistId={ckId}
-      podeEditar={pode(sessao, "oficina", "editar")}
+      podeEditar={pode(sessao, "oficina.checklist", "editar")}
     />
   );
 }

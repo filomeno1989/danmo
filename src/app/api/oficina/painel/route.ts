@@ -13,7 +13,7 @@
 
 import { NextResponse } from "next/server";
 import { query, queryTudo } from "@/lib/supabase";
-import { autorizado, eErro, erroBase } from "@/lib/guarda-api";
+import { autorizadoOficina, eErro, erroBase } from "@/lib/guarda-api";
 import type {
   CategoriaEquip,
   ColaboradorLinha,
@@ -23,7 +23,7 @@ import type {
 } from "@/lib/oficina";
 
 export async function GET() {
-  const auth = await autorizado("ver");
+  const auth = await autorizadoOficina("oficina", "ver");
   if (eErro(auth)) return auth;
 
   try {

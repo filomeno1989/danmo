@@ -11,7 +11,7 @@
  */
 
 import { NextResponse, NextRequest } from "next/server";
-import { del, insert, query, queryTudo, update } from "@/lib/supabase";
+import { delFiltro, insert, query, queryTudo, update } from "@/lib/supabase";
 import { autorizado, eErro, erroBase } from "@/lib/guarda-api";
 import {
   validarDocEntrada,
@@ -114,13 +114,13 @@ export async function PATCH(req: NextRequest, ctx: Contexto) {
     };
     await update<DocFaturacao>("documentos", `id=eq.${docId}`, docLimpo);
 
-    // Linhas: apagar as antigas (uma a uma, padrão do portal) e
-    // reinserir com autor e totais decididos no servidor.
-    const antigas = await query<{ id: string }>(
-      "documento_itens",
-      `select=id&documento_id=eq.${docId}`
-    );
-    for (const a of antigas) await del("documento_itens", a.id);
+    // Linhas: apagar TODAS as antigas num único pedido (delFiltro) e
+    // reinserir com autor e totais decididos no servidor. Antes era uma
+    // a uma: com dois PATCH em concorrência (duplo clique no Guardar)
+    // cada um lia a mesma lista, apagava e inseria, e o documento ficava
+    // com linhas DUPLICADAS - foi o que aconteceu à cotação 008/26
+    // (2 linhas iguais, ordem 0, e o total do cabeçalho a contar uma só).
+    await delFiltro("documento_itens", `documento_id=eq.${docId}`);
     if (dados.itens.length) {
       await insert(
         "documento_itens",
@@ -146,12 +146,8 @@ export async function DELETE(_req: NextRequest, ctx: Contexto) {
   }
 
   try {
-    const antigas = await query<{ id: string }>(
-      "documento_itens",
-      `select=id&documento_id=eq.${docId}`
-    );
-    for (const a of antigas) await del("documento_itens", a.id);
-    await del("documentos", docId);
+    await delFiltro("documento_itens", `documento_id=eq.${docId}`);
+    await delFiltro("documentos", `id=eq.${docId}`);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return erroBase(e, "faturacao documento DELETE");

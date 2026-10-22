@@ -192,6 +192,10 @@ const docPorId = (id) =>
     const id = url.split("/").pop().split("?")[0];
     if (rota.request().method() !== "GET") {
       metodosDoc.push({ m: rota.request().method(), corpo: rota.request().postDataJSON() });
+      /* PATCH lento (400ms) para o duplo clique cair DENTRO da gravação,
+         como na rede real - é exactamente a janela onde dois PATCH em
+         concorrência duplicavam linhas na base (caso da cotação 008/26). */
+      if (rota.request().method() === "PATCH") await new Promise((r) => setTimeout(r, 400));
       return rota.fulfill({ json: { ok: true, id, numero: "012/2026" } });
     }
     const doc = docPorId(id);
@@ -414,6 +418,24 @@ const docPorId = (id) =>
     "Editor edição: PATCH mantém a descrição (não apaga na base)",
     String(patchCorpo?.assunto || "").includes("mão de obra") && String(patchCorpo?.assunto || "").includes("reparações"),
     JSON.stringify(String(patchCorpo?.assunto || "").slice(0, 80))
+  );
+
+  /* Duplo clique no Guardar com gravação lenta (400ms no mock): dois
+     PATCH em concorrência liam as mesmas linhas antigas, apagavam e
+     inseriam cada um as suas - o documento ficava com linhas DUPLICADAS
+     na base (caso real da cotação 008/26: 2 linhas iguais com ordem 0 e
+     o cabeçalho a contar uma só). Botão desactivado + trava síncrona no
+     guardar: UM PATCH só. */
+  const patchesAntes = metodosDoc.filter((x) => x.m === "PATCH").length;
+  await pg.locator('button:has-text("Guardar") >> nth=0').click();
+  await pg.waitForTimeout(80);
+  await pg.locator('button:has-text("Guardar") >> nth=0').click({ force: true }).catch(() => {});
+  await pg.waitForTimeout(900);
+  const patchesDepois = metodosDoc.filter((x) => x.m === "PATCH").length;
+  ok(
+    "Editor edição: duplo clique manda UM PATCH só (trava anti-duplicação)",
+    patchesDepois - patchesAntes === 1,
+    `${patchesAntes} -> ${patchesDepois}`
   );
 
   /* ---------- 7. Clientes / Técnicos / Tarifas ---------- */

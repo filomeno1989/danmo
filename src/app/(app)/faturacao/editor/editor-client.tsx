@@ -83,6 +83,7 @@ export function EditorClient({
 }) {
   const router = useRouter();
   const richRef = useRef<HTMLDivElement>(null);
+  const aGravarRef = useRef(false);
 
   const [aCarregar, setACarregar] = useState(true);
   const [falha, setFalha] = useState("");
@@ -427,9 +428,18 @@ export function EditorClient({
   };
 
   const guardar = async (): Promise<string> => {
+    /* Trava SÍNCRONA: o disabled={aGravar} depende do React re-render, e
+       um duplo clique rápido (ou Guardar + Guardar e Imprimir em seguida)
+       dispara dois gravar antes do botão desactivar - dois PATCH em
+       concorrência duplicavam as linhas na base (caso real da cotação
+       008/26: duas linhas iguais com ordem 0). O ref trava no mesmo
+       instante, sem esperar render. */
+    if (aGravarRef.current) return "";
+    aGravarRef.current = true;
     const erro = validarLocal();
     if (erro) {
       toast.error(erro);
+      aGravarRef.current = false;
       return "";
     }
     setAGravar(true);
@@ -452,6 +462,7 @@ export function EditorClient({
     } catch {
       return "";
     } finally {
+      aGravarRef.current = false;
       setAGravar(false);
     }
   };

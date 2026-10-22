@@ -21,6 +21,7 @@ import {
   fmtData,
   fmtNum,
   numPorExtenso,
+  renderAssuntoImpresso,
   textoSemTags,
   type DocFaturacao,
   type ItemFaturacao,
@@ -255,8 +256,10 @@ export function FaturaImprimir({ docId, anexo }: { docId: string; anexo: boolean
                         className="doc-assunto"
                         dangerouslySetInnerHTML={{
                           /* Rótulo a negrito como no hub (era Assunto:),
-                             agora com a palavra que o Filomeno pediu. */
-                          __html: `<strong>Descrição:</strong><br>${doc.assunto}`
+                             agora com a palavra que o Filomeno pediu; o
+                             conteúdo passa pelo renderAssunto do hub: HTML
+                             rico limpo e texto antigo com \n virado <br>. */
+                          __html: `<strong>Descrição:</strong><br>${renderAssuntoImpresso(doc.assunto)}`
                         }}
                       />
                     ) : null}

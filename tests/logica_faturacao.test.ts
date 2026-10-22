@@ -18,6 +18,7 @@ const {
   numPorExtenso,
   fmtNum,
   sanitizarHTMLRico,
+  renderAssuntoImpresso,
   textoSemTags,
   validarDocEntrada,
   fmtData,
@@ -225,6 +226,29 @@ describe("sanitizarHTMLRico (servidor, sem DOMParser)", () => {
 
   test("textoSemTags devolve texto simples", () => {
     expect(textoSemTags("<p>Exmos <b>Senhores</b>,</p>")).toBe("Exmos Senhores,");
+  });
+});
+
+describe("renderAssuntoImpresso (papel A4, igual ao renderAssunto do hub)", () => {
+  test("HTML rico passa limpo: mantém o permitido e remove o perigoso", () => {
+    expect(renderAssuntoImpresso("<p>Trabalho <b>concluído</b></p>")).toBe(
+      "<p>Trabalho <b>concluído</b></p>"
+    );
+    expect(renderAssuntoImpresso("<p>a</p><script>ruim()</script>")).toBe("<p>a</p>");
+  });
+
+  test("texto simples antigo com quebras de linha vira <br> (documentos do billing)", () => {
+    expect(renderAssuntoImpresso("linha 1\nlinha 2\nlinha 3")).toBe(
+      "linha 1<br>linha 2<br>linha 3"
+    );
+  });
+
+  test("texto simples com < não injeta etiqueta", () => {
+    expect(renderAssuntoImpresso("preço a < 100")).toBe("preço a &lt; 100");
+  });
+
+  test("vazio devolve vazio", () => {
+    expect(renderAssuntoImpresso("")).toBe("");
   });
 });
 

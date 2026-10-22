@@ -433,6 +433,20 @@ export function escaparHTML(str: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * Descrição no papel do impresso, igual ao renderAssunto do print.html
+ * do hub: HTML rico passa pelo allowlist (o servidor já limpa ao gravar,
+ * na impressão a limpeza repete-se como no hub) e TEXTO SIMPLES antigo
+ * (documentos do tempo do billing, com quebras de linha) é escapado com
+ * as quebras viradas <br> - sem isto a descrição antiga sai colapsada
+ * num parágrafo só no papel.
+ */
+export function renderAssuntoImpresso(raw: string): string {
+  const s = String(raw || "");
+  if (/<[a-z][^>]*>/i.test(s)) return sanitizarHTMLRico(s);
+  return escaparHTML(s).replace(/\n/g, "<br>");
+}
+
 /* ------------------------------------------------------------------
  * Datas e formatação para a impressão
  * ------------------------------------------------------------------ */

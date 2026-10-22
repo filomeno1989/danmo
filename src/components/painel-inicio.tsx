@@ -12,6 +12,8 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { HeroiSaudacao } from "@/components/heroi-saudacao";
 import {
+  Cake,
+  CalendarClock,
   CircleCheck,
   CircleSlash,
   Shield,
@@ -23,6 +25,41 @@ import {
   ArrowRight,
   type LucideIcon
 } from "lucide-react";
+import {
+  EMPRESA_LABEL,
+  formatoData,
+  iniciais,
+  textoAlertaDoc,
+  type AlertaDoc,
+  type Aniversariante
+} from "@/lib/rh";
+
+/** Avisos do Quadro de Pessoal que o home mostra a quem tem acesso. */
+export type AvisosHome = {
+  aniversariantes: Aniversariante[];
+  mesNome: string;
+  alertas: AlertaDoc[];
+};
+
+const CORES_AVATAR_HOME = [
+  "bg-emerald-600/15 text-emerald-800 dark:text-emerald-200",
+  "bg-amber-500/20 text-amber-800 dark:text-amber-200",
+  "bg-sky-600/15 text-sky-800 dark:text-sky-200",
+  "bg-red-600/12 text-red-800 dark:text-red-200",
+  "bg-neutral-900/10 text-neutral-800 dark:bg-white/10 dark:text-neutral-100"
+];
+
+function corAvatarHome(nome: string): string {
+  let h = 0;
+  for (const letra of nome || "x") h = (h * 31 + letra.charCodeAt(0)) % 997;
+  return CORES_AVATAR_HOME[h % CORES_AVATAR_HOME.length];
+}
+
+const COR_SITUACAO_HOME: Record<AlertaDoc["situacao"], string> = {
+  vencido: "bg-red-600/12 text-red-700 dark:text-red-300",
+  urgente: "bg-amber-500/20 text-amber-700 dark:text-amber-300",
+  proximo: "bg-amber-500/10 text-amber-700 dark:text-amber-200/90"
+};
 
 type CartaoFaseProps = {
   classeFundo: string;
@@ -130,7 +167,8 @@ export function PainelInicio({
   podeFaturacao,
   podeQuadro,
   eAdmin,
-  fundos
+  fundos,
+  avisos
 }: {
   nome: string;
   quem: string;
@@ -140,6 +178,7 @@ export function PainelInicio({
   podeQuadro: boolean;
   eAdmin: boolean;
   fundos?: Parameters<typeof HeroiSaudacao>[0]["fundosIniciais"];
+  avisos?: AvisosHome | null;
 }) {
   const pillNoAr = (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600/15 px-3 py-1 text-[0.72rem] font-bold text-emerald-700 dark:bg-white/15 dark:text-emerald-200">
@@ -252,6 +291,112 @@ export function PainelInicio({
           rotulo={eAdmin ? "Abrir a página Permissões" : "Abrir Os meus dados"}
         />
       </section>
+
+      {/* 2b. Avisos vivos do Quadro de Pessoal: aniversariantes do mes
+          e documentos a vencer (so para quem tem acesso ao Quadro) */}
+      {avisos && (avisos.aniversariantes.length > 0 || avisos.alertas.length > 0) && (
+        <section aria-label="Avisos do Quadro de Pessoal" className="grid gap-4 lg:grid-cols-2">
+          {avisos.aniversariantes.length > 0 && (
+            <div className="card-sombra p-5" data-avisos-aniversarios>
+              <div className="flex items-center gap-3">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-ambar-claro text-ambar-texto">
+                  <Cake className="size-5.5" aria-hidden />
+                </span>
+                <div>
+                  <h3 className="text-[1.05rem] font-bold leading-tight">
+                    Aniversariantes de {avisos.mesNome}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {avisos.aniversariantes.length}{" "}
+                    {avisos.aniversariantes.length === 1 ? "pessoa faz anos" : "pessoas fazem anos"} este mês
+                  </p>
+                </div>
+              </div>
+              <ul className="mt-4 max-h-80 space-y-0.5 overflow-y-auto">
+                {avisos.aniversariantes.map((an) => (
+                  <li key={an.id} className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-accent/40">
+                    <span
+                      className={
+                        "flex size-8 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-bold " +
+                        corAvatarHome(an.nome)
+                      }
+                    >
+                      {iniciais(an.nome)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold leading-tight">{an.nome}</p>
+                      <p className="text-[0.68rem] text-muted-foreground">
+                        {an.empresa ? EMPRESA_LABEL[an.empresa] : "Sem classificar"} · faz {an.idadeFaz} anos
+                      </p>
+                    </div>
+                    {an.hoje ? (
+                      <span className="inline-flex items-center whitespace-nowrap rounded-full bg-red-600/12 px-2.5 py-0.5 text-[0.7rem] font-bold text-red-700 dark:text-red-300">
+                        Hoje!
+                      </span>
+                    ) : (
+                      <span className="whitespace-nowrap text-xs font-semibold tabular-nums text-muted-foreground">
+                        Dia {an.dia}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {avisos.alertas.length > 0 && (
+            <div className="card-sombra p-5" data-avisos-documentos>
+              <div className="flex items-center gap-3">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-erro-bg text-erro">
+                  <CalendarClock className="size-5.5" aria-hidden />
+                </span>
+                <div>
+                  <h3 className="text-[1.05rem] font-bold leading-tight">Documentos a vencer</h3>
+                  <p className="text-xs text-muted-foreground">
+                    B.I. e carta de condução nos próximos 60 dias
+                  </p>
+                </div>
+              </div>
+              <ul className="mt-4 max-h-80 space-y-0.5 overflow-y-auto">
+                {avisos.alertas.map((a) => (
+                  <li
+                    key={`${a.colaborador_id}-${a.documento}`}
+                    className="flex flex-wrap items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-accent/40"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold leading-tight">{a.nome}</p>
+                      <p className="text-[0.68rem] text-muted-foreground">
+                        {formatoData(a.validade)} ·{" "}
+                        {a.empresa ? EMPRESA_LABEL[a.empresa] : "Sem classificar"}
+                      </p>
+                    </div>
+                    <span className="inline-flex items-center whitespace-nowrap rounded-full bg-neutral-900/8 px-2 py-0.5 text-[0.68rem] font-semibold text-neutral-700 dark:bg-white/10 dark:text-neutral-200">
+                      {a.documento}
+                    </span>
+                    <span
+                      className={
+                        "inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[0.7rem] font-bold " +
+                        COR_SITUACAO_HOME[a.situacao]
+                      }
+                    >
+                      {textoAlertaDoc(a)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-4 border-t pt-3">
+                <Link
+                  href="/rh/quadro"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-primario hover:underline"
+                >
+                  Abrir o Quadro de Pessoal
+                  <ArrowRight className="size-4" aria-hidden />
+                </Link>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* 3. Sobre este painel */}
       <Card id="sobre" className="card-sombra overflow-hidden py-0">

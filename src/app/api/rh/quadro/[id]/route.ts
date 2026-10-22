@@ -40,7 +40,8 @@ const CAMPOS_RH = [
   "tipo_vinculo", "empresa_origem", "data_admissao_danmo", "data_admissao_grupo",
   "estagio_instituicao", "estagio_orientador", "estagio_data_inicio", "estagio_data_fim",
   "active", "data_inativo", "data_nascimento", "naturalidade", "estado_civil",
-  "endereco", "num_dependentes", "mes_ferias", "bi_numero", "inss_numero",
+  "endereco", "num_dependentes", "mes_ferias", "bi_numero", "bi_validade",
+  "carta_conducao", "carta_conducao_validade", "inss_numero",
   "nuit_numero", "contacto_1", "contacto_2", "email", "grupo_sanguineo",
   "doenca_cronica", "altura_cm", "observacoes_gerais"
 ];

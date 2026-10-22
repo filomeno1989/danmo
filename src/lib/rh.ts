@@ -42,6 +42,9 @@ export type Colaborador = {
   num_dependentes: number | null;
   mes_ferias: string | null;
   bi_numero: string | null;
+  bi_validade: string | null; // AAAA-MM-DD; alimenta os alertas
+  carta_conducao: string | null;
+  carta_conducao_validade: string | null;
   inss_numero: string | null;
   nuit_numero: string | null;
   contacto_1: string | null;
@@ -347,6 +350,9 @@ export type DadosFicha = {
   num_dependentes: string; // texto do input; converte-se no payload
   mes_ferias: string;
   bi_numero: string;
+  bi_validade: string;
+  carta_conducao: string;
+  carta_conducao_validade: string;
   inss_numero: string;
   nuit_numero: string;
   contacto_1: string;
@@ -429,6 +435,9 @@ export function payloadDaFicha(f: DadosFicha): Record<string, unknown> {
     num_dependentes: Number.isFinite(dependentes) && dependentes > 0 ? dependentes : 0,
     mes_ferias: limpo(f.mes_ferias),
     bi_numero: limpo(f.bi_numero),
+    bi_validade: limpo(f.bi_validade),
+    carta_conducao: limpo(f.carta_conducao),
+    carta_conducao_validade: limpo(f.carta_conducao_validade),
     inss_numero: limpo(f.inss_numero),
     nuit_numero: limpo(f.nuit_numero),
     contacto_1: limpo(f.contacto_1),
@@ -540,4 +549,198 @@ export function fotosParaGrelha(
   return [...mapa]
     .map(([id, img]) => ({ id, img }))
     .sort((a, b) => a.id - b.id);
+}
+
+/* ------------------------------------------------------------------
+ * Aniversariantes do mes (widget do home)
+ * ------------------------------------------------------------------ */
+
+export type Aniversariante = {
+  id: number;
+  nome: string;
+  dia: number; // dia do mes em que faz anos
+  idadeFaz: number; // anos que faz neste aniversario
+  empresa: string | null;
+  hoje: boolean; // faz anos exactamente hoje
+};
+
+/**
+ * Quem faz anos NESTE mes (data de hoje no fuso de Maputo), ordenado
+ * pelo dia. So activos. Fev/29 entra no mes 2 sempre: quando o ano
+ * nao e bissexto a pessoa continua a aparecer com o dia 29.
+ */
+export function aniversariantesDoMes(
+  cols: Pick<Colaborador, "id" | "name" | "active" | "data_nascimento" | "empresa">[],
+  hojeISO?: string
+): Aniversariante[] {
+  const hoje = paraData(hojeISO || dataHojeISO())!;
+  const mes = hoje.getUTCMonth() + 1;
+  const diaHoje = hoje.getUTCDate();
+  const ano = hoje.getUTCFullYear();
+  const lista: Aniversariante[] = [];
+  for (const c of cols) {
+    if (c.active === false) continue;
+    const nasc = paraData(c.data_nascimento);
+    if (!nasc || nasc.getUTCMonth() + 1 !== mes) continue;
+    lista.push({
+      id: c.id,
+      nome: c.name || "?",
+      dia: nasc.getUTCDate(),
+      idadeFaz: ano - nasc.getUTCFullYear(),
+      empresa: c.empresa || null,
+      hoje: nasc.getUTCDate() === diaHoje
+    });
+  }
+  return lista.sort((a, b) => a.dia - b.dia || a.nome.localeCompare(b.nome, "pt"));
+}
+
+/* ------------------------------------------------------------------
+ * Alertas de documentos a vencer (B.I. e Carta de Conducao)
+ * ------------------------------------------------------------------ */
+
+/** Janela do alerta: documento com validade dentro de 60 dias avisa. */
+export const DIAS_ALERTA_DOC = 60;
+
+/** A partir daqui o aviso passa de "proximo" para "urgente". */
+export const DIAS_URGENTE_DOC = 15;
+
+export type SituacaoDoc = "vencido" | "urgente" | "proximo";
+
+export type AlertaDoc = {
+  colaborador_id: number;
+  nome: string;
+  empresa: string | null;
+  documento: string; // "B.I." ou "Carta de condução"
+  validade: string; // AAAA-MM-DD, a mais recente das fontes
+  dias: number; // negativo = ja venceu
+  situacao: SituacaoDoc;
+};
+
+/** Uma validade registada num documento anexado (scan) da tabela a parte. */
+export type ValidadeDoc = { colaborador_id: number; tipo: string; validade: string };
+
+/** Situacao de UMA validade: alerta, ou "ok" quando ainda esta longe. */
+export type ValidadeCor = SituacaoDoc | "ok";
+
+/**
+ * Classifica uma validade contra a data de hoje (Maputo): vencido,
+ * urgente (ate 15 dias), proximo (ate 60) ou ok (mais longe que isso).
+ */
+export function situacaoPorValidade(
+  validade: string | null | undefined,
+  hojeISO?: string
+): ValidadeCor | null {
+  const v = paraData(validade);
+  if (!v) return null;
+  const hoje = paraData(hojeISO || dataHojeISO())!;
+  const dias = Math.round((v.getTime() - hoje.getTime()) / 86400000);
+  if (dias < 0) return "vencido";
+  if (dias <= DIAS_URGENTE_DOC) return "urgente";
+  if (dias <= DIAS_ALERTA_DOC) return "proximo";
+  return "ok";
+}
+
+/**
+ * Documentos a vencer, juntando as DUAS fontes de verdade: as datas
+ * na ficha (bi_validade / carta_conducao_validade) e as datas nos
+ * scans anexados do mesmo tipo. Quando as duas existem vence a MAIS
+ * RECENTE (renovou e anexou o scan novo? o alerta cala-se mesmo que
+ * a ficha ainda esteja com a data velha). So activos.
+ */
+export function alertasDocumentos(
+  cols: Colaborador[],
+  docsValidades: ValidadeDoc[] = [],
+  hojeISO?: string,
+  limiteDias = DIAS_ALERTA_DOC
+): AlertaDoc[] {
+  const hoje = paraData(hojeISO || dataHojeISO())!;
+  const maisRecente = new Map<string, string>();
+  const chave = (id: number, tipo: string) => `${id}|${tipo}`;
+  for (const d of docsValidades || []) {
+    if (!d.validade || !d.colaborador_id) continue;
+    const k = chave(Number(d.colaborador_id), d.tipo);
+    const actual = maisRecente.get(k);
+    if (!actual || d.validade > actual) maisRecente.set(k, d.validade);
+  }
+  const junta = (id: number, tipo: string, ficha: string | null): string | null => {
+    const doc = maisRecente.get(chave(id, tipo));
+    if (ficha && doc) return doc > ficha ? doc : ficha;
+    return doc || ficha || null;
+  };
+  const diasDe = (validade: string): number => {
+    const v = paraData(validade);
+    return v ? Math.round((v.getTime() - hoje.getTime()) / 86400000) : Number.POSITIVE_INFINITY;
+  };
+
+  const alertas: AlertaDoc[] = [];
+  for (const c of cols) {
+    if (c.active === false) continue;
+    const pares: [string, string | null][] = [
+      ["B.I.", junta(c.id, "B.I.", c.bi_validade)],
+      ["Carta de condução", junta(c.id, "Carta de condução", c.carta_conducao_validade)]
+    ];
+    for (const [documento, validade] of pares) {
+      if (!validade) continue;
+      const dias = diasDe(validade);
+      if (!Number.isFinite(dias) || dias > limiteDias) continue;
+      const situacao: SituacaoDoc =
+        dias < 0 ? "vencido" : dias <= DIAS_URGENTE_DOC ? "urgente" : "proximo";
+      alertas.push({
+        colaborador_id: c.id,
+        nome: c.name || "?",
+        empresa: c.empresa || null,
+        documento,
+        validade,
+        dias,
+        situacao
+      });
+    }
+  }
+  const ordem: Record<SituacaoDoc, number> = { vencido: 0, urgente: 1, proximo: 2 };
+  return alertas.sort(
+    (a, b) => ordem[a.situacao] - ordem[b.situacao] || a.dias - b.dias || a.nome.localeCompare(b.nome, "pt")
+  );
+}
+
+/** Texto do alerta pronto a mostrar: "Venceu ha 3 dias", "Vence hoje"... */
+export function textoAlertaDoc(a: Pick<AlertaDoc, "dias" | "situacao">): string {
+  if (a.dias < 0) {
+    const d = -a.dias;
+    return d === 1 ? "Venceu há 1 dia" : `Venceu há ${d} dias`;
+  }
+  if (a.dias === 0) return "Vence hoje";
+  if (a.dias === 1) return "Falta 1 dia";
+  return `Faltam ${a.dias} dias`;
+}
+
+/* ------------------------------------------------------------------
+ * Arquivo de documentos (scans anexados a ficha)
+ * ------------------------------------------------------------------ */
+
+/** Tipos que a ficha aceita anexar (o select do anexo). */
+export const TIPOS_DOCUMENTOS = [
+  "B.I.",
+  "NIF/NUIT",
+  "Contrato",
+  "Carta de condução",
+  "Certificado",
+  "Atestado médico",
+  "Recibo",
+  "Outro"
+];
+
+/** Tamanho maximo por ficheiro: PDFs passam pela API (limite do Vercel). */
+export const MAX_DOC_BYTES = 3_000_000;
+
+/** "2304821" -> "2.2 MB"; "900" -> "900 B". */
+export function formatoBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return "";
+  if (n >= 1_048_576) return `${(n / 1_048_576).toFixed(1)} MB`;
+  if (n >= 1024) return `${Math.round(n / 1024)} KB`;
+  return `${n} B`;
+}
+
+/** Rotulo bonito do mes guardado na ficha ("Marco" -> "Março"). */
+export function mesLabel(mes: string | null | undefined): string {
+  return mes === "Marco" ? "Março" : mes || "";
 }

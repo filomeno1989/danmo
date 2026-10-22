@@ -26,7 +26,14 @@ const {
   filtrarQuadro,
   iniciais,
   ESTADOS_CIVIS,
-  fotosParaGrelha
+  fotosParaGrelha,
+  aniversariantesDoMes,
+  alertasDocumentos,
+  textoAlertaDoc,
+  situacaoPorValidade,
+  formatoBytes,
+  mesLabel,
+  MAX_DOC_BYTES
 } = await import("@/lib/rh");
 import type { Colaborador, DadosFicha } from "@/lib/rh";
 
@@ -55,6 +62,9 @@ const fichaBase = (parcial: Partial<Colaborador> = {}): Colaborador => ({
   num_dependentes: 0,
   mes_ferias: null,
   bi_numero: null,
+  bi_validade: null,
+  carta_conducao: null,
+  carta_conducao_validade: null,
   inss_numero: null,
   nuit_numero: null,
   contacto_1: null,
@@ -101,6 +111,9 @@ const dadosBase = (parcial: Partial<DadosFicha> = {}): DadosFicha => ({
   num_dependentes: "",
   mes_ferias: "",
   bi_numero: "",
+  bi_validade: "",
+  carta_conducao: "",
+  carta_conducao_validade: "",
   inss_numero: "",
   nuit_numero: "",
   contacto_1: "",
@@ -364,6 +377,19 @@ describe("Validacao da ficha", () => {
     expect(t.altura_cm).toBe(172.5);
     expect(t.empresa).toBe("porto");
   });
+
+  test("payload leva as datas dos documentos e limpa o que vem vazio", () => {
+    const p = payloadDaFicha(
+      dadosBase({
+        bi_validade: " 2027-05-31 ",
+        carta_conducao: " AB12345 ",
+        carta_conducao_validade: ""
+      })
+    );
+    expect(p.bi_validade).toBe("2027-05-31");
+    expect(p.carta_conducao).toBe("AB12345");
+    expect(p.carta_conducao_validade).toBe(null);
+  });
 });
 
 describe("Resumo e filtros do painel", () => {
@@ -474,5 +500,184 @@ describe("Fotos da grelha e estados civis", () => {
         [{ colaborador_id: 4, foto: null }]
       )
     ).toEqual([]);
+  });
+});
+
+describe("Aniversariantes do mes", () => {
+  test("so quem faz anos no mes de hoje, ordenado pelo dia", () => {
+    const lista = [
+      fichaBase({ id: 1, name: "Ana Outubro", data_nascimento: "1995-10-20" }),
+      fichaBase({ id: 2, name: "Bruno Outubro", data_nascimento: "1990-10-05" }),
+      fichaBase({ id: 3, name: "Claudia Novembro", data_nascimento: "1992-11-03" }),
+      fichaBase({ id: 4, name: "Diana Sem Data", data_nascimento: null })
+    ];
+    const r = aniversariantesDoMes(lista, HOJE);
+    expect(r.map((x) => x.id)).toEqual([2, 1]);
+    expect(r[0].dia).toBe(5);
+    expect(r[0].idadeFaz).toBe(36);
+    expect(r[0].hoje).toBe(false);
+  });
+
+  test("aniversario hoje fica marcado", () => {
+    const r = aniversariantesDoMes(
+      [fichaBase({ id: 9, name: "Zeca do Dia", data_nascimento: "1988-10-22" })],
+      HOJE
+    );
+    expect(r).toHaveLength(1);
+    expect(r[0].hoje).toBe(true);
+    expect(r[0].dia).toBe(22);
+  });
+
+  test("inactivo e data invalida ficam de fora", () => {
+    const r = aniversariantesDoMes(
+      [
+        fichaBase({ id: 1, name: "Saiu", active: false, data_nascimento: "1990-10-01" }),
+        fichaBase({ id: 2, name: "Data Estragada", data_nascimento: "10/1990" })
+      ],
+      HOJE
+    );
+    expect(r).toEqual([]);
+  });
+
+  test("anos distintos no mesmo dia dao idades certas", () => {
+    const r = aniversariantesDoMes(
+      [
+        fichaBase({ id: 1, name: "A", data_nascimento: "2000-10-30" }),
+        fichaBase({ id: 2, name: "B", data_nascimento: "2004-10-30" })
+      ],
+      HOJE
+    );
+    expect(r.map((x) => x.idadeFaz)).toEqual([26, 22]);
+  });
+});
+
+describe("Alertas de documentos a vencer", () => {
+  test("vencido, urgente e proximo nas duas fontes da ficha", () => {
+    const cols = [
+      fichaBase({ id: 1, name: "Ana", bi_validade: "2026-10-12" }),
+      fichaBase({ id: 2, name: "Bruno", carta_conducao_validade: "2026-10-30" }),
+      fichaBase({ id: 3, name: "Claudia", bi_validade: "2026-12-01" })
+    ];
+    const r = alertasDocumentos(cols, [], HOJE);
+    expect(r.map((x) => x.situacao)).toEqual(["vencido", "urgente", "proximo"]);
+    expect(r[0].documento).toBe("B.I.");
+    expect(r[0].dias).toBe(-10);
+    expect(r[1].documento).toBe("Carta de condução");
+  });
+
+  test("fora da janela de 60 dias nao avisa", () => {
+    const r = alertasDocumentos(
+      [fichaBase({ id: 1, bi_validade: "2026-12-22" })],
+      [],
+      HOJE
+    );
+    expect(r).toEqual([]);
+  });
+
+  test("limites exactos: dia 60 entra, dia 61 fica fora, hoje e urgente", () => {
+    const r = alertasDocumentos(
+      [
+        fichaBase({ id: 1, bi_validade: "2026-12-21" }),
+        fichaBase({ id: 2, bi_validade: "2026-12-22" }),
+        fichaBase({ id: 3, bi_validade: "2026-10-22" })
+      ],
+      [],
+      HOJE
+    );
+    expect(r).toHaveLength(2);
+    expect(r[0].situacao).toBe("urgente");
+    expect(textoAlertaDoc(r[0])).toBe("Vence hoje");
+    expect(r[1].situacao).toBe("proximo");
+  });
+
+  test("inactivo nunca avisa", () => {
+    const r = alertasDocumentos(
+      [fichaBase({ id: 1, active: false, bi_validade: "2026-10-12" })],
+      [],
+      HOJE
+    );
+    expect(r).toEqual([]);
+  });
+
+  test("scan anexado com validade mais recente cala o alerta da ficha velha", () => {
+    const cols = [fichaBase({ id: 1, name: "Ana", bi_validade: "2026-10-12" })];
+    const docs = [{ colaborador_id: 1, tipo: "B.I.", validade: "2031-05-10" }];
+    const r = alertasDocumentos(cols, docs, HOJE);
+    expect(r).toEqual([]);
+  });
+
+  test("scan antigo NAO desfaz a data nova da ficha", () => {
+    const cols = [fichaBase({ id: 1, name: "Ana", bi_validade: "2026-11-15" })];
+    const docs = [{ colaborador_id: 1, tipo: "B.I.", validade: "2026-10-01" }];
+    const r = alertasDocumentos(cols, docs, HOJE);
+    expect(r).toHaveLength(1);
+    expect(r[0].validade).toBe("2026-11-15");
+    expect(r[0].situacao).toBe("proximo");
+  });
+
+  test("scan novo na carta quando a ficha nao tem data nenhuma", () => {
+    const cols = [fichaBase({ id: 1, name: "Bruno" })];
+    const docs = [
+      { colaborador_id: 1, tipo: "Carta de condução", validade: "2026-11-01" }
+    ];
+    const r = alertasDocumentos(cols, docs, HOJE);
+    expect(r).toHaveLength(1);
+    expect(r[0].documento).toBe("Carta de condução");
+  });
+
+  test("mesma pessoa com BI e carta a vencer da DUAS linhas", () => {
+    const cols = [
+      fichaBase({ id: 1, bi_validade: "2026-10-12", carta_conducao_validade: "2026-10-25" })
+    ];
+    const r = alertasDocumentos(cols, [], HOJE);
+    expect(r).toHaveLength(2);
+    expect(r.map((x) => x.documento)).toEqual(["B.I.", "Carta de condução"]);
+  });
+
+  test("validade podre no scan nao rebenta nada", () => {
+    const r = alertasDocumentos(
+      [fichaBase({ id: 1 })],
+      [{ colaborador_id: 1, tipo: "B.I.", validade: "31/12/2027" }],
+      HOJE
+    );
+    expect(r).toEqual([]);
+  });
+});
+
+describe("Situacao por validade, bytes e meses", () => {
+  test("situacaoPorValidade cobre os quatro estados", () => {
+    expect(situacaoPorValidade("2026-10-12", HOJE)).toBe("vencido");
+    expect(situacaoPorValidade("2026-10-25", HOJE)).toBe("urgente");
+    expect(situacaoPorValidade("2026-12-01", HOJE)).toBe("proximo");
+    expect(situacaoPorValidade("2027-06-01", HOJE)).toBe("ok");
+    expect(situacaoPorValidade(null, HOJE)).toBe(null);
+    expect(situacaoPorValidade("", HOJE)).toBe(null);
+  });
+
+  test("texto do alerta nos dias singulares e plurais", () => {
+    expect(textoAlertaDoc({ dias: -1, situacao: "vencido" })).toBe("Venceu há 1 dia");
+    expect(textoAlertaDoc({ dias: -3, situacao: "vencido" })).toBe("Venceu há 3 dias");
+    expect(textoAlertaDoc({ dias: 0, situacao: "urgente" })).toBe("Vence hoje");
+    expect(textoAlertaDoc({ dias: 1, situacao: "urgente" })).toBe("Falta 1 dia");
+    expect(textoAlertaDoc({ dias: 7, situacao: "urgente" })).toBe("Faltam 7 dias");
+  });
+
+  test("formatoBytes nos tres tamanhos", () => {
+    expect(formatoBytes(900)).toBe("900 B");
+    expect(formatoBytes(2048)).toBe("2 KB");
+    expect(formatoBytes(2304821)).toBe("2.2 MB");
+    expect(formatoBytes(-5)).toBe("");
+  });
+
+  test("mesLabel so troca o Marco sem cedilha", () => {
+    expect(mesLabel("Marco")).toBe("Março");
+    expect(mesLabel("Outubro")).toBe("Outubro");
+    expect(mesLabel(null)).toBe("");
+  });
+
+  test("limite do ficheiro cabe no pedido do Vercel", () => {
+    // base64 + 33% de 3 MB ~ 4 MB, abaixo dos 4.5 MB do limite
+    expect(MAX_DOC_BYTES).toBe(3_000_000);
+    expect(MAX_DOC_BYTES * 4 / 3).toBeLessThan(4_500_000);
   });
 });

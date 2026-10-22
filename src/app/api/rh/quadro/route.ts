@@ -24,7 +24,8 @@ const CAMPOS_RH = [
   "tipo_vinculo", "empresa_origem", "data_admissao_danmo", "data_admissao_grupo",
   "estagio_instituicao", "estagio_orientador", "estagio_data_inicio", "estagio_data_fim",
   "active", "data_inativo", "data_nascimento", "naturalidade", "estado_civil",
-  "endereco", "num_dependentes", "mes_ferias", "bi_numero", "inss_numero",
+  "endereco", "num_dependentes", "mes_ferias", "bi_numero", "bi_validade",
+  "carta_conducao", "carta_conducao_validade", "inss_numero",
   "nuit_numero", "contacto_1", "contacto_2", "email", "grupo_sanguineo",
   "doenca_cronica", "altura_cm", "observacoes_gerais"
 ];
@@ -37,7 +38,19 @@ export async function GET() {
       "collaborators",
       "select=*&order=name.asc"
     );
-    return NextResponse.json({ ok: true, colaboradores });
+    // Validades nos scans anexados (2a fonte dos alertas). Se a tabela
+    // ainda nao existir (SQL do arquivo por colar), a lista abre na
+    // mesma: os alertas ficam so com as datas da ficha.
+    let docsValidades: { colaborador_id: number; tipo: string; validade: string }[] = [];
+    try {
+      docsValidades = await query(
+        "rh_colaborador_documentos",
+        "select=colaborador_id,tipo,validade&validade=not.is.null"
+      );
+    } catch {
+      docsValidades = [];
+    }
+    return NextResponse.json({ ok: true, colaboradores, docsValidades });
   } catch (e) {
     return erroBase(e, "rh quadro GET");
   }

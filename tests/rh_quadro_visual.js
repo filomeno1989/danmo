@@ -41,7 +41,8 @@ const COLS = [
     empresa_origem: "Porto", data_admissao_danmo: "2013-04-14", data_admissao_grupo: null,
     data_admissao: null, data_inativo: null, data_nascimento: "1990-05-10",
     naturalidade: "Beira", estado_civil: "Casado(a)", endereco: null, num_dependentes: 2,
-    mes_ferias: "Outubro", bi_numero: "110100123456", inss_numero: null, nuit_numero: null,
+    mes_ferias: "Outubro", bi_numero: "110100123456", bi_validade: isoEmDias(30),
+    carta_conducao: null, carta_conducao_validade: null, inss_numero: null, nuit_numero: null,
     contacto_1: "842760964", contacto_2: null, contacto: null, email: null,
     grupo_sanguineo: "O+", doenca_cronica: null, altura_cm: null,
     observacoes_gerais: null, estagio_instituicao: null, estagio_orientador: null,
@@ -55,7 +56,8 @@ const COLS = [
     empresa_origem: "TCM", data_admissao_danmo: "2022-03-10", data_admissao_grupo: "2018-03-10",
     data_admissao: null, data_inativo: null, data_nascimento: null,
     naturalidade: null, estado_civil: null, endereco: null, num_dependentes: 0,
-    mes_ferias: null, bi_numero: null, inss_numero: null, nuit_numero: null,
+    mes_ferias: null, bi_numero: null, bi_validade: null,
+    carta_conducao: "AB-123456", carta_conducao_validade: isoEmDias(-5), inss_numero: null, nuit_numero: null,
     contacto_1: null, contacto_2: null, contacto: null, email: null,
     grupo_sanguineo: null, doenca_cronica: null, altura_cm: null,
     observacoes_gerais: null, estagio_instituicao: null, estagio_orientador: null,
@@ -83,7 +85,8 @@ const COLS = [
     empresa_origem: null, data_admissao_danmo: null, data_admissao_grupo: null,
     data_admissao: null, data_inativo: null, data_nascimento: "2003-02-11",
     naturalidade: null, estado_civil: null, endereco: null, num_dependentes: 0,
-    mes_ferias: null, bi_numero: null, inss_numero: null, nuit_numero: null,
+    mes_ferias: null, bi_numero: null, bi_validade: null,
+    carta_conducao: null, carta_conducao_validade: null, inss_numero: null, nuit_numero: null,
     contacto_1: null, contacto_2: null, contacto: null, email: null,
     grupo_sanguineo: null, doenca_cronica: null, altura_cm: null,
     observacoes_gerais: null, estagio_instituicao: "Instituto Politécnico da Beira",
@@ -123,6 +126,22 @@ const COLS = [
 
 const promovida = { ...COLS[3], tipo_colaborador: "efetivo", tipo_vinculo: "contratado", estagio_resultado: "promovido", data_admissao_danmo: "2026-04-01" };
 
+/* Anexo de exemplo na ficha do Filomeno (B.I. digitalizado, ja vencido) */
+const DOC1 = {
+  id: "11111111-1111-4111-8111-111111111111",
+  colaborador_id: 1,
+  tipo: "B.I.",
+  titulo: "BI Filomeno digitalizado",
+  validade: "2024-01-31",
+  arquivo_nome: "bi-filomeno.pdf",
+  arquivo_tipo: "application/pdf",
+  arquivo_bytes: 812345,
+  criado_em: "2026-08-15T09:30:00Z"
+};
+
+/* Validade que vem de um SCAN anexado (José, B.I. renovado com scan novo) */
+const DOCS_VALIDADES = [{ colaborador_id: 2, tipo: "B.I.", validade: isoEmDias(20) }];
+
 /* PNGs de 1px distintos: a MINI da grelha e a FOTO grande da ficha */
 const MINI_A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 const FOTO_A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -135,9 +154,12 @@ const FOTO_A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFc
   await contexto.addCookies([{ name: "dss_token", value: "estrutura", url: BASE }]);
 
   const pedidosPatch = [];
+  const pedidosDocsPost = [];
+  const pedidosDocsDelete = [];
+  let proximoDocId = 2;
   await contexto.route("**/api/rh/quadro", async (rota) => {
     if (rota.request().method() === "GET") {
-      return rota.fulfill({ json: { ok: true, colaboradores: COLS } });
+      return rota.fulfill({ json: { ok: true, colaboradores: COLS, docsValidades: DOCS_VALIDADES } });
     }
     if (rota.request().method() === "POST") {
       const corpo = rota.request().postDataJSON();
@@ -166,7 +188,50 @@ const FOTO_A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFc
     return rota.fulfill({ json: { ok: true, colaborador: COLS[1], foto: "" } });
   });
   await contexto.route("**/api/rh/quadro/1", async (rota) => {
+    if (rota.request().method() === "PATCH") {
+      pedidosPatch.push(rota.request().postDataJSON());
+      return rota.fulfill({ json: { ok: true, colaborador: COLS[0] } });
+    }
     return rota.fulfill({ json: { ok: true, colaborador: COLS[0], foto: FOTO_A } });
+  });
+  await contexto.route("**/api/rh/quadro/documentos/*/arquivo*", async (rota) => {
+    return rota.fulfill({
+      status: 200,
+      body: "%PDF-1.4 scan de teste",
+      contentType: "application/pdf"
+    });
+  });
+  await contexto.route("**/api/rh/quadro/documentos/*", async (rota) => {
+    if (rota.request().method() === "DELETE") {
+      const idApagado = rota.request().url().split("/documentos/")[1];
+      pedidosDocsDelete.push(idApagado);
+      return rota.fulfill({ json: { ok: true } });
+    }
+    return rota.fulfill({ json: { ok: false, erro: "pedido inesperado" }, status: 400 });
+  });
+  await contexto.route("**/api/rh/quadro/documentos*", async (rota) => {
+    const url = rota.request().url();
+    if (rota.request().method() === "GET") {
+      const quem = Number(new URL(url).searchParams.get("colaborador_id") || 0);
+      return rota.fulfill({ json: { ok: true, documentos: quem === 1 ? [DOC1] : [] } });
+    }
+    if (rota.request().method() === "POST") {
+      const corpo = rota.request().postDataJSON();
+      pedidosDocsPost.push(corpo);
+      const novo = {
+        id: `22222222-2222-4222-8222-${String(proximoDocId++).padStart(12, "0")}`,
+        colaborador_id: corpo.colaborador_id,
+        tipo: corpo.tipo,
+        titulo: corpo.arquivo_nome.replace(/\.[^.]+$/, ""),
+        validade: corpo.validade || null,
+        arquivo_nome: corpo.arquivo_nome,
+        arquivo_tipo: corpo.arquivo_tipo,
+        arquivo_bytes: corpo.arquivo_bytes,
+        criado_em: new Date().toISOString()
+      };
+      return rota.fulfill({ json: { ok: true, documento: novo } });
+    }
+    return rota.fulfill({ json: { ok: false, erro: "pedido inesperado" }, status: 400 });
   });
   await contexto.route("**/api/rh/quadro/fotos", async (rota) => {
     return rota.fulfill({ json: { ok: true, fotos: [{ id: 1, img: MINI_A }] } });
@@ -194,6 +259,20 @@ const FOTO_A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFc
   ok("estagiario com fim previsto", await pagina.getByText("Fim previsto:").count() >= 1);
   ok("botao Promover a efetivo no aviso", await pagina.getByRole("button", { name: "Promover a efetivo" }).count() >= 1);
   ok("botao Nao permanece no aviso", await pagina.getByRole("button", { name: "Não permanece" }).count() >= 1);
+
+  /* ---------- 2b. Painel de documentos a vencer ---------- */
+  ok("painel de documentos a vencer com 3 avisos", await pagina.getByText("Documentos a vencer (3)").count() === 1);
+  const alertasRows = pagina.locator("[data-alerta-doc]");
+  ok("carta vencida do José em primeiro", (await alertasRows.first().textContent()).includes("Venceu há 5 dias"));
+  ok("BI do José vem do scan anexado (20 dias)", (await alertasRows.nth(1).textContent()).includes("Faltam 20 dias"));
+  ok("BI do Filomeno vem da ficha (30 dias)", (await alertasRows.nth(2).textContent()).includes("Faltam 30 dias"));
+  await alertasRows.first().click();
+  await pagina.waitForSelector("text=Código DM0101", { timeout: 8000 });
+  ok("clicar no alerta abre a ficha do José", true);
+  ok("ficha do José traz o número da carta", await pagina.getByText("AB-123456").count() === 1);
+  ok("ficha do José sem anexos mostra vazio", await pagina.getByText("Sem documentos anexados.").count() === 1);
+  await pagina.locator("button").filter({ hasText: "Fechar" }).first().click();
+  await pagina.waitForTimeout(200);
 
   /* ---------- 3. Cartões com badges das duas listas ---------- */
   ok("cartao Filomeno com Danmo Porto", (await pagina.locator("[data-cartao]", { hasText: "Filomeno Manuel" }).textContent()).includes("Danmo Porto"));
@@ -260,6 +339,42 @@ const FOTO_A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFc
   await pagina.locator("button").filter({ hasText: "Fechar" }).first().click();
   await pagina.waitForTimeout(200);
 
+  /* ---------- 5d. Arquivo de documentos na ficha (scans) ---------- */
+  await pagina.locator("[data-cartao]", { hasText: "Filomeno Manuel" }).first().click();
+  await pagina.waitForSelector("text=Documentos anexados", { timeout: 8000 });
+  ok("ficha mostra 1 anexo", await pagina.locator("[data-doc]").count() === 1);
+  const linhaDoc = pagina.locator("[data-doc]").first();
+  ok("anexo mostra o titulo", (await linhaDoc.textContent()).includes("BI Filomeno digitalizado"));
+  ok("anexo mostra o tamanho (793 KB)", (await linhaDoc.textContent()).includes("793 KB"));
+  ok("anexo vencido mostra a data", (await linhaDoc.textContent()).includes("31/01/2024"));
+  ok("botao Abrir aponta ao ficheiro", (await linhaDoc.locator('a[aria-label^="Abrir"]').getAttribute("href")).endsWith("/arquivo"));
+  ok("botao Descarregar com descarregar=1", (await linhaDoc.locator('a[aria-label^="Descarregar"]').getAttribute("href")).includes("descarregar=1"));
+  ok("detalhe traz B.I. Validade", (await pagina.locator("body").textContent()).includes("B.I. Validade"));
+
+  await pagina.getByLabel("Tipo de documento").selectOption("B.I.");
+  await pagina.getByLabel("Validade do documento").fill(isoEmDias(40));
+  await pagina.locator('input[type="file"]').setInputFiles({
+    name: "bi-filomeno-novo.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 scan novo do BI")
+  });
+  await pagina.waitForSelector("text=Documento anexado.", { timeout: 8000 });
+  ok("toast de anexo gravado", true);
+  await pagina.waitForFunction(() => document.querySelectorAll("[data-doc]").length === 2, { timeout: 8000 });
+  ok("anexo novo aparece na lista", await pagina.getByText("bi-filomeno-novo").count() >= 1);
+  const corpoPost = pedidosDocsPost[0];
+  ok("POST manda o PDF em data URL", typeof corpoPost?.arquivo === "string" && corpoPost.arquivo.startsWith("data:application/pdf;base64,"));
+  ok("POST manda tipo e validade", corpoPost?.tipo === "B.I." && corpoPost?.validade === isoEmDias(40));
+
+  pagina.on("dialog", (d) => d.accept());
+  await pagina.locator("[data-doc]").first().locator('button[aria-label^="Apagar"]').click();
+  await pagina.waitForSelector("text=Documento apagado.", { timeout: 8000 });
+  await pagina.waitForFunction(() => document.querySelectorAll("[data-doc]").length === 1, { timeout: 8000 });
+  ok("apagar manda DELETE e a linha sai", pedidosDocsDelete.length === 1);
+
+  await pagina.locator("button").filter({ hasText: "Fechar" }).first().click();
+  await pagina.waitForTimeout(200);
+
   /* ---------- 6. Ficha detalhe: parcelas do transferido ---------- */
   await pagina.locator("[data-cartao]", { hasText: "José Chingueture" }).first().click();
   await pagina.waitForSelector("text=Código DM0101", { timeout: 8000 });
@@ -307,13 +422,41 @@ const FOTO_A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFc
   await dialogo.locator("button").filter({ hasText: "Guardar" }).first().click();
   await pagina.waitForTimeout(300);
   ok("validacao pede nome", await dialogo.getByText("Escreve o nome completo.").count() === 1);
+  ok("form tem B.I. Validade e Carta Validade", await dialogo.locator("#fich-bival").count() === 1 && await dialogo.locator("#fich-cartaval").count() === 1);
+  const optMarco = dialogo.locator('#fich-mfer option[value="Marco"]');
+  ok("mes de ferias guarda Marco e mostra Março", (await optMarco.count()) === 1 && (await optMarco.textContent()) === "Março");
   await dialogo.locator("button").filter({ hasText: "Cancelar" }).first().click();
   await pagina.waitForTimeout(200);
 
+  /* ---------- 8b. Editar ficha grava as datas dos documentos ---------- */
+  await pagina.locator("[data-cartao]", { hasText: "Filomeno Manuel" }).first().click();
+  await pagina.waitForSelector("text=Código DM0069", { timeout: 8000 });
+  await pagina.getByRole("button", { name: "Editar" }).click();
+  await pagina.waitForSelector("#fich-bival", { timeout: 8000 });
+  const dialogoDocs = pagina.locator('[role="dialog"]');
+  ok("B.I. Validade preenchida no formulario", (await dialogoDocs.locator("#fich-bival").inputValue()) === isoEmDias(30));
+  await dialogoDocs.locator("#fich-carta").fill("AB-987654");
+  await dialogoDocs.locator("#fich-cartaval").fill("2027-01-31");
+  await dialogoDocs.locator("button").filter({ hasText: "Guardar" }).first().click();
+  await pagina.waitForSelector("text=Ficha actualizada.", { timeout: 8000 });
+  const patchEdicao = pedidosPatch.find((p) => p.accao === "editar");
+  ok("PATCH leva carta e validade", patchEdicao?.dados?.carta_conducao === "AB-987654" && patchEdicao?.dados?.carta_conducao_validade === "2027-01-31");
+  await pagina.waitForTimeout(300);
+
   /* ---------- 9. Menu (acordeão: módulo -> grupo -> link) e home ---------- */
   await pagina.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-  await pagina.waitForSelector("text=Admin. Oficinal", { timeout: 15000 });
+  await pagina.waitForSelector("text=Admin. Oficinal", { timeout: 30000 });
   await pagina.locator("button[title='Admin. Oficinal']").first().click();
+  // A hidratacao pode chegar depois do HTML em compile a frio: se o
+  // acordeao nao abriu, clica outra vez (prova de robustez, nao de sorte)
+  let abriuRh = false;
+  for (let tentativa = 0; tentativa < 6 && !abriuRh; tentativa++) {
+    await pagina.waitForTimeout(500);
+    abriuRh = (await pagina.locator("button", { hasText: "RH & Quadro de Pessoal" }).count()) > 0;
+    if (!abriuRh && tentativa >= 1) {
+      await pagina.locator("button[title='Admin. Oficinal']").first().click();
+    }
+  }
   await pagina.waitForTimeout(300);
   await pagina.locator("button", { hasText: "RH & Quadro de Pessoal" }).first().click();
   await pagina.waitForTimeout(300);

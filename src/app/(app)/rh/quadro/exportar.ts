@@ -33,7 +33,8 @@ const CABECALHOS = [
   "Código", "Nome", "Função", "Empresa", "Tipo", "Vínculo",
   "Empresa de origem", "Admissão no grupo", "Início de serviço",
   "Tempo de casa", "Tempo total no grupo", "Estado", "Área",
-  "Mês de férias", "Nascimento", "B.I.", "INSS", "NUIT",
+  "Mês de férias", "Nascimento", "B.I.", "B.I. Validade",
+  "Carta de Condução", "Carta Validade", "INSS", "NUIT",
   "Contacto 1", "Contacto 2", "Email"
 ];
 
@@ -84,6 +85,9 @@ export async function exportarQuadroExcel(
       c.mes_ferias || "",
       formatoData(c.data_nascimento),
       c.bi_numero || "",
+      formatoData(c.bi_validade),
+      c.carta_conducao || "",
+      formatoData(c.carta_conducao_validade),
       c.inss_numero || "",
       c.nuit_numero || "",
       c.contacto_1 || c.contacto || "",
@@ -107,7 +111,7 @@ export async function exportarQuadroExcel(
   const ws = XLSXS.utils.aoa_to_sheet(aoa);
   const nCol = CABECALHOS.length;
   const nLin = aoa.length;
-  const larguras = [10, 30, 20, 14, 11, 12, 18, 14, 14, 12, 18, 10, 14, 12, 12, 16, 12, 12, 12, 12, 24];
+  const larguras = [10, 30, 20, 14, 11, 12, 18, 14, 14, 12, 18, 10, 14, 12, 12, 16, 12, 16, 12, 12, 12, 12, 12, 24];
   ws["!cols"] = larguras.map((wch) => ({ wch }));
   ws["!merges"] = [0, 1, 2, 3].map((l) => ({
     s: { r: l, c: 0 },

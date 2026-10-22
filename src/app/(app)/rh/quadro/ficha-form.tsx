@@ -24,6 +24,7 @@ import {
   GRUPOS_SANGUINEOS,
   MESES,
   idadeAnos,
+  mesLabel,
   problemaDaFicha,
   proximoCodigo,
   tempoLongo,
@@ -68,6 +69,9 @@ function fichaVazia(codigos: string[]): DadosFicha {
     num_dependentes: "",
     mes_ferias: "",
     bi_numero: "",
+    bi_validade: "",
+    carta_conducao: "",
+    carta_conducao_validade: "",
     inss_numero: "",
     nuit_numero: "",
     contacto_1: "",
@@ -105,6 +109,9 @@ function fichaDe(c: Colaborador): DadosFicha {
     num_dependentes: c.num_dependentes ? String(c.num_dependentes) : "",
     mes_ferias: c.mes_ferias || "",
     bi_numero: c.bi_numero || "",
+    bi_validade: (c.bi_validade || "").slice(0, 10),
+    carta_conducao: c.carta_conducao || "",
+    carta_conducao_validade: (c.carta_conducao_validade || "").slice(0, 10),
     inss_numero: c.inss_numero || "",
     nuit_numero: c.nuit_numero || "",
     contacto_1: c.contacto_1 || c.contacto || "",
@@ -688,7 +695,7 @@ export function FichaForm({
               >
                 <option value="">- Seleccionar -</option>
                 {MESES.map((m) => (
-                  <option key={m} value={m}>{m}</option>
+                  <option key={m} value={m}>{mesLabel(m)}</option>
                 ))}
               </select>
             </div>
@@ -717,6 +724,16 @@ export function FichaForm({
               />
             </div>
             <div className="space-y-1">
+              <label className={classeLabel} htmlFor="fich-bival">B.I. Validade</label>
+              <input
+                id="fich-bival"
+                type="date"
+                className={classeInput}
+                value={f.bi_validade}
+                onChange={(e) => set("bi_validade", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
               <label className={classeLabel} htmlFor="fich-inss">INSS Nº</label>
               <input
                 id="fich-inss"
@@ -725,6 +742,8 @@ export function FichaForm({
                 onChange={(e) => set("inss_numero", e.target.value)}
               />
             </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1">
               <label className={classeLabel} htmlFor="fich-nuit">NUIT Nº</label>
               <input
@@ -732,6 +751,25 @@ export function FichaForm({
                 className={classeInput}
                 value={f.nuit_numero}
                 onChange={(e) => set("nuit_numero", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className={classeLabel} htmlFor="fich-carta">Carta de Condução Nº</label>
+              <input
+                id="fich-carta"
+                className={classeInput}
+                value={f.carta_conducao}
+                onChange={(e) => set("carta_conducao", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className={classeLabel} htmlFor="fich-cartaval">Carta de Condução Validade</label>
+              <input
+                id="fich-cartaval"
+                type="date"
+                className={classeInput}
+                value={f.carta_conducao_validade}
+                onChange={(e) => set("carta_conducao_validade", e.target.value)}
               />
             </div>
           </div>

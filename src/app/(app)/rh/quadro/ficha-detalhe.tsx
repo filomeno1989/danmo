@@ -8,23 +8,46 @@
  * da Danmo, o tempo na Danmo e o TOTAL, sempre com as parcelas a vista.
  * No estagiario, o estado do periodo (dias que faltam, decisao tomada)
  * vem a frente de tudo.
+ *
+ * ARQUIVO DE DOCUMENTOS: cada ficha leva os scans anexados (PDF ou
+ * foto comprimida no navegador). Abre numa tab nova para imprimir,
+ * descarrega com um clique e a validade opcional alimenta os alertas.
  */
 
-import { useEffect, useState } from "react";
-import { Pencil, UserRound } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import {
+  Download,
+  ExternalLink,
+  FileImage,
+  FileText,
+  LoaderCircle,
+  Paperclip,
+  Pencil,
+  Trash2,
+  UserRound
+} from "lucide-react";
 import { Modal } from "@/components/ui/modal";
+import { enviar, pedir } from "@/components/oficina/ui-bits";
+import { comprimirFoto } from "@/lib/comprimir-foto";
 import {
   ESTAGIO_RESULTADO_LABEL,
   EMPRESA_LABEL,
+  MAX_DOC_BYTES,
+  TIPOS_DOCUMENTOS,
   empresaRotulo,
   estadoEstagio,
+  formatoBytes,
   formatoData,
   idadeAnos,
   inicioServico,
+  mesLabel,
+  situacaoPorValidade,
   tempoDeCasa,
   tempoLongo,
   temposTransferido,
-  type Colaborador
+  type Colaborador,
+  type ValidadeCor
 } from "@/lib/rh";
 
 type Props = {
@@ -33,11 +56,20 @@ type Props = {
   onAmpliar: (id: number, nome: string, foto: string) => void;
   onEditar: () => void;
   onFechar: () => void;
+  /** Avisado quando os anexos mudam (anexado ou apagado): os alertas do quadro recalculam. */
+  onDocumentosMudaram?: () => void;
 };
 
 const COR_EMPRESA: Record<string, string> = {
   porto: "bg-emerald-600/12 text-emerald-700 dark:text-emerald-300",
   danmo: "bg-sky-600/12 text-sky-700 dark:text-sky-300"
+};
+
+const COR_SITUACAO: Record<ValidadeCor, string> = {
+  vencido: "bg-red-600/12 text-red-700 dark:text-red-300",
+  urgente: "bg-amber-500/20 text-amber-700 dark:text-amber-300",
+  proximo: "bg-amber-500/10 text-amber-700 dark:text-amber-200/90",
+  ok: "bg-muted text-muted-foreground"
 };
 
 function Etiqueta({ cor, children }: { cor: string; children: React.ReactNode }) {
@@ -62,7 +94,243 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
   );
 }
 
-export function FichaDetalhe({ ficha, podeMexer, onAmpliar, onEditar, onFechar }: Props) {
+/* ============ Arquivo de documentos (scans) ============ */
+
+type DocAnexado = {
+  id: string;
+  tipo: string;
+  titulo: string;
+  validade: string | null;
+  arquivo_nome: string;
+  arquivo_tipo: string;
+  arquivo_bytes: number;
+  criado_em: string;
+};
+
+function lerDataUrl(ficheiro: File): Promise<string> {
+  return new Promise((resolver, recusar) => {
+    const leitor = new FileReader();
+    leitor.onload = () => resolver(String(leitor.result || ""));
+    leitor.onerror = () => recusar(new Error("O navegador não conseguiu ler o ficheiro."));
+    leitor.readAsDataURL(ficheiro);
+  });
+}
+
+function SecaoDocumentos({
+  fichaId,
+  podeMexer,
+  onMudou
+}: {
+  fichaId: number;
+  podeMexer: boolean;
+  onMudou?: () => void;
+}) {
+  const [docs, setDocs] = useState<DocAnexado[] | null>(null);
+  const [tipo, setTipo] = useState("");
+  const [validade, setValidade] = useState("");
+  const [aAnexar, setAAnexar] = useState(false);
+  const [aApagar, setAApagar] = useState("");
+  const inputFicheiro = useRef<HTMLInputElement>(null);
+
+  const carregar = useCallback(() => {
+    pedir<{ ok: boolean; documentos: DocAnexado[] }>(
+      `/api/rh/quadro/documentos?colaborador_id=${fichaId}`
+    )
+      .then((d) => setDocs(d.documentos || []))
+      .catch(() => setDocs([]));
+  }, [fichaId]);
+
+  useEffect(() => {
+    carregar();
+  }, [carregar]);
+
+  async function anexar(ficheiro: File | undefined) {
+    if (!ficheiro) return;
+    if (!tipo) {
+      toast.error("Escolhe primeiro o tipo de documento.");
+      return;
+    }
+    const imagem = ficheiro.type.startsWith("image/");
+    if (!imagem && ficheiro.type !== "application/pdf") {
+      toast.error("Escolhe um PDF ou uma foto (JPG, PNG, WebP).");
+      return;
+    }
+    if (!imagem && ficheiro.size > MAX_DOC_BYTES) {
+      toast.error("O PDF passou de 3 MB. Digitaliza em qualidade média ou tira uma foto.");
+      return;
+    }
+    setAAnexar(true);
+    try {
+      const arquivo = imagem ? await comprimirFoto(ficheiro) : await lerDataUrl(ficheiro);
+      const mime = arquivo.slice(5, arquivo.indexOf(";")) || ficheiro.type;
+      const d = await enviar<{ ok: boolean; documento: DocAnexado | null }>(
+        "/api/rh/quadro/documentos",
+        {
+          accao: "anexar",
+          colaborador_id: fichaId,
+          tipo,
+          validade: validade || null,
+          arquivo,
+          arquivo_nome: ficheiro.name,
+          arquivo_tipo: mime,
+          arquivo_bytes: ficheiro.size
+        },
+        "Documento anexado."
+      );
+      if (d.documento) setDocs((atual) => [d.documento as DocAnexado, ...(atual || [])]);
+      setTipo("");
+      setValidade("");
+      onMudou?.();
+    } catch {
+      /* o toast do enviar ja mostra a causa */
+    } finally {
+      setAAnexar(false);
+      if (inputFicheiro.current) inputFicheiro.current.value = "";
+    }
+  }
+
+  async function apagar(doc: DocAnexado) {
+    if (!window.confirm(`Apagar o documento "${doc.titulo}"? Esta acção não pode ser desfeita.`)) {
+      return;
+    }
+    setAApagar(doc.id);
+    try {
+      await enviar(`/api/rh/quadro/documentos/${doc.id}`, undefined, "Documento apagado.", "DELETE");
+      setDocs((atual) => (atual || []).filter((x) => x.id !== doc.id));
+      onMudou?.();
+    } catch {
+      /* o toast do enviar ja mostra a causa */
+    } finally {
+      setAApagar("");
+    }
+  }
+
+  return (
+    <div>
+      <p className="mb-2.5 flex items-center gap-2 text-[0.72rem] font-bold uppercase tracking-wider text-primario">
+        Documentos anexados
+        {docs && <span className="text-muted-foreground">({docs.length})</span>}
+      </p>
+
+      {podeMexer && (
+        <div className="mb-3 rounded-xl border bg-muted/30 p-3">
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr),minmax(0,1fr),auto]">
+            <select
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value)}
+              aria-label="Tipo de documento"
+              className="border-input bg-background h-9 rounded-md border px-2.5 text-sm"
+            >
+              <option value="">Tipo de documento</option>
+              {TIPOS_DOCUMENTOS.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={validade}
+              onChange={(e) => setValidade(e.target.value)}
+              aria-label="Validade do documento"
+              className="border-input bg-transparent dark:bg-input/30 flex h-9 rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            />
+            <button
+              type="button"
+              onClick={() => inputFicheiro.current?.click()}
+              disabled={aAnexar}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primario px-3 text-sm font-semibold text-white hover:bg-primario-forte disabled:opacity-60"
+            >
+              {aAnexar ? <LoaderCircle className="size-4 animate-spin" /> : <Paperclip className="size-4" />}
+              Anexar ficheiro
+            </button>
+          </div>
+          <input
+            ref={inputFicheiro}
+            type="file"
+            accept="application/pdf,image/*"
+            className="hidden"
+            onChange={(e) => anexar(e.target.files?.[0])}
+          />
+        </div>
+      )}
+
+      {docs === null ? (
+        <p className="flex items-center gap-2 py-3 text-sm text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" /> A carregar os anexos...
+        </p>
+      ) : docs.length === 0 ? (
+        <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">
+          Sem documentos anexados.
+        </p>
+      ) : (
+        <ul className="divide-y">
+          {docs.map((doc) => {
+            const imagem = doc.arquivo_tipo.startsWith("image/");
+            const sit = situacaoPorValidade(doc.validade);
+            return (
+              <li key={doc.id} data-doc className="flex flex-wrap items-center gap-2 py-2.5">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                  {imagem ? <FileImage className="size-4.5" aria-hidden /> : <FileText className="size-4.5" aria-hidden />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{doc.titulo}</p>
+                  <p className="truncate text-[0.68rem] text-muted-foreground">
+                    {formatoBytes(doc.arquivo_bytes)} · anexado {formatoData(doc.criado_em.slice(0, 10)) || "-"}
+                  </p>
+                </div>
+                <Etiqueta cor="bg-neutral-900/8 text-neutral-700 dark:bg-white/10 dark:text-neutral-200">
+                  {doc.tipo}
+                </Etiqueta>
+                {doc.validade && sit && (
+                  <Etiqueta cor={COR_SITUACAO[sit]}>
+                    {sit === "ok" ? "Vence " : ""}
+                    {formatoData(doc.validade)}
+                  </Etiqueta>
+                )}
+                <span className="flex gap-1">
+                  <a
+                    href={`/api/rh/quadro/documentos/${doc.id}/arquivo`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Abrir ${doc.titulo}`}
+                    title="Abrir para ver ou imprimir"
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <ExternalLink className="size-4" aria-hidden />
+                  </a>
+                  <a
+                    href={`/api/rh/quadro/documentos/${doc.id}/arquivo?descarregar=1`}
+                    aria-label={`Descarregar ${doc.titulo}`}
+                    title="Descarregar"
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <Download className="size-4" aria-hidden />
+                  </a>
+                  {podeMexer && (
+                    <button
+                      type="button"
+                      onClick={() => apagar(doc)}
+                      disabled={aApagar === doc.id}
+                      aria-label={`Apagar ${doc.titulo}`}
+                      className="rounded-md p-1.5 text-muted-foreground hover:bg-erro-bg hover:text-erro disabled:opacity-60"
+                    >
+                      {aApagar === doc.id ? (
+                        <LoaderCircle className="size-4 animate-spin" aria-hidden />
+                      ) : (
+                        <Trash2 className="size-4" aria-hidden />
+                      )}
+                    </button>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export function FichaDetalhe({ ficha, podeMexer, onAmpliar, onEditar, onFechar, onDocumentosMudaram }: Props) {
   const estagiario = (ficha.tipo_colaborador || "") === "estagiario";
   const transferido = !estagiario && (ficha.tipo_vinculo || "contratado") === "transferido";
   const activo = ficha.active !== false;
@@ -286,11 +554,14 @@ export function FichaDetalhe({ ficha, podeMexer, onAmpliar, onEditar, onFechar }
             <Linha rotulo="Estado civil" valor={ficha.estado_civil || ""} />
             <Linha rotulo="Endereço" valor={ficha.endereco || ""} />
             <Linha rotulo="Dependentes" valor={ficha.num_dependentes ? String(ficha.num_dependentes) : "-"} />
-            <Linha rotulo="Mês de férias" valor={ficha.mes_ferias || ""} />
+            <Linha rotulo="Mês de férias" valor={mesLabel(ficha.mes_ferias)} />
             <Linha rotulo="Área / Departamento" valor={area} />
             <Linha rotulo="B.I." valor={ficha.bi_numero || ""} />
+            <Linha rotulo="B.I. Validade" valor={formatoData(ficha.bi_validade)} />
             <Linha rotulo="INSS" valor={ficha.inss_numero || ""} />
             <Linha rotulo="NUIT" valor={ficha.nuit_numero || ""} />
+            <Linha rotulo="Carta de Condução" valor={ficha.carta_conducao || ""} />
+            <Linha rotulo="Carta Validade" valor={formatoData(ficha.carta_conducao_validade)} />
             <Linha rotulo="Contacto 1" valor={ficha.contacto_1 || ficha.contacto || ""} />
             <Linha rotulo="Contacto 2" valor={ficha.contacto_2 || ""} />
             <Linha rotulo="Email" valor={ficha.email || ""} />
@@ -299,6 +570,8 @@ export function FichaDetalhe({ ficha, podeMexer, onAmpliar, onEditar, onFechar }
             <Linha rotulo="Altura" valor={ficha.altura_cm ? `${ficha.altura_cm} cm` : "-"} />
           </div>
         </div>
+
+        <SecaoDocumentos fichaId={ficha.id} podeMexer={podeMexer} onMudou={onDocumentosMudaram} />
 
         {ficha.observacoes_gerais && (
           <div>

@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowDownUp,
+  CalendarClock,
   CircleSlash,
   Eye,
   LayoutGrid,
@@ -38,6 +39,7 @@ import {
   empresaRotulo,
   estagioATerminar,
   estadoEstagio,
+  alertasDocumentos,
   filtrarQuadro,
   formatoData,
   iniciais,
@@ -45,8 +47,11 @@ import {
   resumoQuadro,
   tempoDeCasa,
   temposTransferido,
+  textoAlertaDoc,
+  type AlertaDoc,
   type Colaborador,
-  type Filtros
+  type Filtros,
+  type ValidadeDoc
 } from "@/lib/rh";
 
 type Props = {
@@ -66,6 +71,12 @@ const CORES_AVATAR = [
   "bg-red-600/12 text-red-800 dark:text-red-200",
   "bg-neutral-900/10 text-neutral-800 dark:bg-white/10 dark:text-neutral-100"
 ];
+
+const COR_SITUACAO_ALERTA: Record<AlertaDoc["situacao"], string> = {
+  vencido: "bg-red-600/12 text-red-700 dark:text-red-300",
+  urgente: "bg-amber-500/20 text-amber-700 dark:text-amber-300",
+  proximo: "bg-amber-500/10 text-amber-700 dark:text-amber-200/90"
+};
 
 function corAvatar(nome: string | null | undefined): string {
   let h = 0;
@@ -218,6 +229,8 @@ export function QuadroClient({ podeMexer, podeApagar }: Props) {
   // Fotos LEVES da grelha (minis; sem mini, a foto grande mesmo)
   const [fotos, setFotos] = useState<Record<number, string>>({});
   const [zoom, setZoom] = useState<ZoomFotoEstado>(null);
+  // Validades nos scans anexados: 2a fonte dos alertas de documentos
+  const [docsValidades, setDocsValidades] = useState<ValidadeDoc[]>([]);
 
   const carregarFotos = useCallback(() => {
     pedir<{ ok: boolean; fotos: { id: number; img: string }[] }>("/api/rh/quadro/fotos")
@@ -236,8 +249,11 @@ export function QuadroClient({ podeMexer, podeApagar }: Props) {
   const carregar = useCallback(() => {
     setACarregar(true);
     setFalha("");
-    pedir<{ ok: boolean; colaboradores: Colaborador[] }>("/api/rh/quadro")
-      .then((d) => setLista(d.colaboradores || []))
+    pedir<{ ok: boolean; colaboradores: Colaborador[]; docsValidades?: ValidadeDoc[] }>("/api/rh/quadro")
+      .then((d) => {
+        setLista(d.colaboradores || []);
+        setDocsValidades(d.docsValidades || []);
+      })
       .catch((e: Error) => setFalha(e.message))
       .finally(() => setACarregar(false));
     carregarFotos();
@@ -245,9 +261,12 @@ export function QuadroClient({ podeMexer, podeApagar }: Props) {
 
   useEffect(() => {
     let vivo = true;
-    pedir<{ ok: boolean; colaboradores: Colaborador[] }>("/api/rh/quadro")
+    pedir<{ ok: boolean; colaboradores: Colaborador[]; docsValidades?: ValidadeDoc[] }>("/api/rh/quadro")
       .then((d) => {
-        if (vivo) setLista(d.colaboradores || []);
+        if (vivo) {
+          setLista(d.colaboradores || []);
+          setDocsValidades(d.docsValidades || []);
+        }
       })
       .catch((e: Error) => {
         if (vivo) setFalha(e.message);
@@ -276,6 +295,11 @@ export function QuadroClient({ podeMexer, podeApagar }: Props) {
         .filter((c) => estagioATerminar(c))
         .sort((a, b) => (a.estagio_data_fim || "").localeCompare(b.estagio_data_fim || "")),
     [lista]
+  );
+
+  const alertas = useMemo(
+    () => alertasDocumentos(lista || [], docsValidades),
+    [lista, docsValidades]
   );
 
   const codigos = useMemo(() => (lista || []).map((c) => c.code || ""), [lista]);
@@ -469,6 +493,38 @@ export function QuadroClient({ podeMexer, podeApagar }: Props) {
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {alertas.length > 0 && (
+            <div className="card-sombra border border-ambar/40 p-4" data-alertas-docs>
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <CalendarClock className="size-4 text-ambar-texto" aria-hidden />
+                Documentos a vencer ({alertas.length})
+              </div>
+              <div className="divide-y">
+                {alertas.map((a) => (
+                  <button
+                    key={`${a.colaborador_id}-${a.documento}`}
+                    type="button"
+                    data-alerta-doc
+                    onClick={() => setDetalheId(a.colaborador_id)}
+                    className="flex w-full flex-wrap items-center gap-2 py-2 text-left text-sm transition-colors hover:bg-accent/40"
+                  >
+                    <span className="font-semibold">{a.nome}</span>
+                    <Etiqueta cor="bg-neutral-900/8 text-neutral-700 dark:bg-white/10 dark:text-neutral-200">
+                      {a.documento}
+                    </Etiqueta>
+                    <Etiqueta cor={COR_SITUACAO_ALERTA[a.situacao]}>
+                      {textoAlertaDoc(a)}
+                    </Etiqueta>
+                    <span className="text-xs text-muted-foreground">{formatoData(a.validade)}</span>
+                    <Etiqueta cor={COR_EMPRESA[a.empresa || ""] || "bg-muted text-muted-foreground"}>
+                      {a.empresa ? EMPRESA_LABEL[a.empresa] : "Sem classificar"}
+                    </Etiqueta>
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -759,6 +815,7 @@ export function QuadroClient({ podeMexer, podeApagar }: Props) {
           ficha={fichaAberta}
           podeMexer={podeMexer}
           onAmpliar={(id, nome, foto) => setZoom({ id, nome, inicial: foto })}
+          onDocumentosMudaram={carregar}
           onEditar={() => {
             setDetalheId(null);
             setForm({ modo: "editar", ficha: fichaAberta });

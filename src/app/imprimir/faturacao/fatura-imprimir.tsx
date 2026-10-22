@@ -253,7 +253,11 @@ export function FaturaImprimir({ docId, anexo }: { docId: string; anexo: boolean
                     {doc.assunto && textoSemTags(doc.assunto) ? (
                       <div
                         className="doc-assunto"
-                        dangerouslySetInnerHTML={{ __html: doc.assunto }}
+                        dangerouslySetInnerHTML={{
+                          /* Rótulo a negrito como no hub (era Assunto:),
+                             agora com a palavra que o Filomeno pediu. */
+                          __html: `<strong>Descrição:</strong><br>${doc.assunto}`
+                        }}
                       />
                     ) : null}
 
@@ -265,18 +269,18 @@ export function FaturaImprimir({ docId, anexo }: { docId: string; anexo: boolean
                             <th>Técnico</th>
                             <th className="r" style={{ width: 44 }}>Qtd</th>
                             <th className="r" style={{ width: 60 }}>Tempo</th>
-                            <th className="r" style={{ width: 65 }}>Unidade</th>
-                            <th className="r" style={{ width: 115 }}>Val. Unit. ({doc.moeda})</th>
-                            <th className="r" style={{ width: 120 }}>Total ({doc.moeda})</th>
+                            <th className="r" style={{ width: 70 }}>Unidade</th>
+                            <th className="r" style={{ width: 140 }}>Val. Unit. ({doc.moeda})</th>
+                            <th className="r" style={{ width: 125 }}>Total ({doc.moeda})</th>
                           </tr>
                         ) : isMat ? (
                           <tr>
                             <th style={{ width: 30 }}>Nº</th>
                             <th>Descrição</th>
                             <th className="r" style={{ width: 44 }}>Qtd</th>
-                            <th className="r" style={{ width: 65 }}>Unidade</th>
-                            <th className="r" style={{ width: 115 }}>Val. Unit. ({doc.moeda})</th>
-                            <th className="r" style={{ width: 120 }}>Total ({doc.moeda})</th>
+                            <th className="r" style={{ width: 70 }}>Unidade</th>
+                            <th className="r" style={{ width: 140 }}>Val. Unit. ({doc.moeda})</th>
+                            <th className="r" style={{ width: 125 }}>Total ({doc.moeda})</th>
                           </tr>
                         ) : (
                           <tr>
@@ -284,9 +288,9 @@ export function FaturaImprimir({ docId, anexo }: { docId: string; anexo: boolean
                             <th style={{ width: 68 }}>Tipo</th>
                             <th>Técnico / Descrição</th>
                             <th className="r" style={{ width: 44 }}>Qtd</th>
-                            <th className="r" style={{ width: 60 }}>Tempo/Und</th>
-                            <th className="r" style={{ width: 115 }}>Val. Unit. ({doc.moeda})</th>
-                            <th className="r" style={{ width: 120 }}>Total ({doc.moeda})</th>
+                            <th className="r" style={{ width: 85 }}>Tempo/Und</th>
+                            <th className="r" style={{ width: 140 }}>Val. Unit. ({doc.moeda})</th>
+                            <th className="r" style={{ width: 125 }}>Total ({doc.moeda})</th>
                           </tr>
                         )}
                       </thead>
@@ -568,7 +572,7 @@ body { background: #1a1a2e; }
 
 .items-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
 .items-table thead { display: table-header-group; }
-.items-table th { background: #0a1628; color: white; padding: 6px 8px; text-align: left; font-size: 8.5pt; letter-spacing: 0.5px; text-transform: uppercase; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+.items-table th { background: #0a1628; color: white; padding: 6px 8px; text-align: left; font-size: 8.5pt; letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 .items-table th.r { text-align: right; }
 .items-table td { padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
 .items-table td.r { text-align: right; }

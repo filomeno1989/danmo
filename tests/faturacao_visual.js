@@ -497,6 +497,7 @@ const docPorId = (id) =>
   ok("Impressão: papel com COTAÇÃO e número", html.includes("COTAÇÃO") && html.includes("008/2026"));
   ok("Impressão: código do modelo no rodapé", html.includes("DAN_ADO_FR_030_REV02"));
   ok("Impressão: extenso do total", html.includes("Vinte e quatro mil cento e sessenta e sete meticais"));
+  ok("Impressão: rótulo Descrição: a negrito no papel (era Assunto: no hub)", html.includes("<strong>Descrição:</strong>"));
 
   /* Bug do Filomeno: na pré-visualização o documento aparecia inteiro,
      mas ao imprimir SAIA CORTADO - a migração perdeu a medida das
@@ -512,6 +513,12 @@ const docPorId = (id) =>
   const alturaCab = await pg.locator(".doc-header").first().evaluate((el) => el.getBoundingClientRect().height);
   ok("Impressão: espaço do cabeçalho medido (não tapa o conteúdo)", espacoCab > 0 && espacoCab >= alturaCab, `(espaço ${Math.round(espacoCab)}px vs cabeçalho ${Math.round(alturaCab)}px)`);
   ok("Impressão: espaço do rodapé medido", espacoRod > 0, `(${Math.round(espacoRod)}px)`);
+  /* Pedido do Filomeno: o rótulo Val. Unit. (MZN) quebrava em duas
+     linhas na barra do cabeçalho da tabela de itens. Com nowrap e as
+     larguras novas, TODOS os th ficam numa linha só: a altura do th
+     mais alto tem de continuar de uma linha (uma 2a linha daria ~36px). */
+  const alturasTh = await pg.locator(".items-table thead th").evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
+  ok("Impressão: cabeçalho dos itens numa linha só (Val. Unit. não quebra)", alturasTh.length > 0 && Math.max(...alturasTh) < 32, `(alturas ${alturasTh.join("/")}px)`);
   await pg.emulateMedia({ media: "screen" });
 
   await pg.goto(`${BASE}/imprimir/faturacao/doc-2?modo=anexo`, { waitUntil: "domcontentloaded" });

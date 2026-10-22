@@ -30,6 +30,7 @@ import {
 type Props = {
   ficha: Colaborador;
   podeMexer: boolean;
+  onAmpliar: (id: number, nome: string, foto: string) => void;
   onEditar: () => void;
   onFechar: () => void;
 };
@@ -61,7 +62,7 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
   );
 }
 
-export function FichaDetalhe({ ficha, podeMexer, onEditar, onFechar }: Props) {
+export function FichaDetalhe({ ficha, podeMexer, onAmpliar, onEditar, onFechar }: Props) {
   const estagiario = (ficha.tipo_colaborador || "") === "estagiario";
   const transferido = !estagiario && (ficha.tipo_vinculo || "contratado") === "transferido";
   const activo = ficha.active !== false;
@@ -99,8 +100,16 @@ export function FichaDetalhe({ ficha, podeMexer, onEditar, onFechar }: Props) {
       <div className="space-y-5">
         <div className="flex flex-wrap items-center gap-4">
           {foto ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={foto} alt={ficha.name || ""} className="size-20 rounded-xl border object-cover" />
+            <button
+              type="button"
+              onClick={() => onAmpliar(ficha.id, ficha.name || "", foto)}
+              aria-label="Ampliar foto"
+              title="Clica para ampliar"
+              className="shrink-0 cursor-zoom-in rounded-xl border transition-transform hover:scale-[1.03]"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={foto} alt={ficha.name || ""} className="size-20 rounded-xl object-cover" />
+            </button>
           ) : (
             <span className="flex size-20 items-center justify-center rounded-xl border bg-muted text-muted-foreground">
               <UserRound className="size-9" aria-hidden />

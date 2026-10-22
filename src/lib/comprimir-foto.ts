@@ -82,3 +82,36 @@ export async function comprimirFoto(ficheiro: File): Promise<string> {
     fonte.limpar();
   }
 }
+
+/**
+ * MINI da foto para a grelha do Quadro: recorte quadrado do centro com
+ * viés para cima (a cara costuma ficar no terco superior) e lado fixo
+ * de 240px, JPEG leve. Nasce junto da foto grande no momento do upload
+ * e vive na mesma linha da tabela de fotos; e a MINI que a lista do
+ * Quadro carrega, para a grelha nunca pesar o que a ficha pesa.
+ */
+const MINI_LADO = 240;
+const MINI_QUALIDADE = 0.72;
+
+export async function comprimirMiniFoto(ficheiro: File): Promise<string> {
+  if (!ficheiro.type.startsWith("image/")) {
+    throw new Error("Escolhe um ficheiro de imagem (JPG, PNG, WebP).");
+  }
+  const fonte = await carregarImagem(ficheiro);
+  try {
+    const ladoFonte = Math.min(fonte.largura, fonte.altura);
+    const sx = Math.floor((fonte.largura - ladoFonte) / 2);
+    const sy = Math.floor((fonte.altura - ladoFonte) * 0.25);
+    const tela = document.createElement("canvas");
+    tela.width = MINI_LADO;
+    tela.height = MINI_LADO;
+    const ctx = tela.getContext("2d");
+    if (!ctx) throw new Error("O navegador não conseguiu processar a imagem.");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, MINI_LADO, MINI_LADO);
+    ctx.drawImage(fonte.desenho, sx, sy, ladoFonte, ladoFonte, 0, 0, MINI_LADO, MINI_LADO);
+    return tela.toDataURL("image/jpeg", MINI_QUALIDADE);
+  } finally {
+    fonte.limpar();
+  }
+}

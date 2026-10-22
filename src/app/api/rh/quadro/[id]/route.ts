@@ -12,8 +12,10 @@
  *       ficha inactiva na data indicada (ou hoje) e resultado ficado.
  * DELETE: apagar a ficha (e a foto, por cascata).
  *
- * A foto entra por accao propria: { accao: "foto", foto: dataURL }
- * grava, { accao: "foto", foto: "" } apaga. So mexer.
+ * A foto entra por accao propria: { accao: "foto", foto: dataURL,
+ * mini: dataURL } grava a foto grande e a MINI da grelha (a mini e
+ * opcional nas fotos antigas: sem ela a grelha usa a foto grande),
+ * { accao: "foto", foto: "" } apaga. So mexer.
  */
 
 import { NextResponse, NextRequest } from "next/server";
@@ -76,6 +78,7 @@ export async function PATCH(req: NextRequest, ctx: Contexto) {
       dados?: DadosFicha;
       data_fim?: string;
       foto?: string;
+      mini?: string;
     };
 
     if (corpo.accao === "foto") {
@@ -92,8 +95,13 @@ export async function PATCH(req: NextRequest, ctx: Contexto) {
           { status: 413 }
         );
       }
-      await upsert("rh_colaborador_fotos", { colaborador_id: Number(fichaId), foto: corpo.foto }, "colaborador_id");
-      return NextResponse.json({ ok: true, foto: corpo.foto });
+      const mini = typeof corpo.mini === "string" && corpo.mini ? corpo.mini : null;
+      await upsert(
+        "rh_colaborador_fotos",
+        { colaborador_id: Number(fichaId), foto: corpo.foto, mini },
+        "colaborador_id"
+      );
+      return NextResponse.json({ ok: true, foto: corpo.foto, mini: mini || "" });
     }
 
     if (corpo.accao === "promover" || corpo.accao === "nao_permaneceu") {

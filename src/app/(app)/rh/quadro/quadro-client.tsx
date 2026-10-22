@@ -25,6 +25,7 @@ import {
   Pencil,
   RefreshCw,
   Search,
+  UserRound,
   UserRoundPlus,
   X
 } from "lucide-react";
@@ -104,6 +105,98 @@ function Kpi({
   );
 }
 
+type ZoomFotoEstado = { id: number; nome: string; inicial: string } | null;
+
+/**
+ * Zoom da foto: abre logo com o que ja ha (a MINI da grelha, ou a foto
+ * grande quando vem da ficha) e, quando so ha mini, busca a foto grande
+ * por baixo para a trocar. Fecha com ESC (capture, para nao fechar a
+ * ficha junto), clicando fora ou no X. Nao mexe no scroll do fundo:
+ * quando abre sobre a ficha, quem trava o scroll e o Modal dela.
+ */
+function ZoomFoto({ zoom, onFechar }: { zoom: ZoomFotoEstado; onFechar: () => void }) {
+  // O pai remonta este componente (key) a cada zoom novo: o estado nasce
+  // do props e a busca da foto grande so mexe no estado dentro das
+  // promises, nunca no corpo do efeito.
+  const [grande, setGrande] = useState(zoom?.inicial || "");
+  const [aBusca, setABusca] = useState(Boolean(zoom && !zoom.inicial));
+
+  useEffect(() => {
+    if (!zoom || zoom.inicial) return;
+    let vivo = true;
+    fetch(`/api/rh/quadro/${zoom.id}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: { foto?: string }) => {
+        if (vivo && d.foto) setGrande(d.foto);
+      })
+      .catch(() => {
+        /* sem foto grande, o zoom fica com a mini */
+      })
+      .finally(() => {
+        if (vivo) setABusca(false);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [zoom]);
+
+  useEffect(() => {
+    if (!zoom) return;
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onFechar();
+      }
+    };
+    document.addEventListener("keydown", aoTeclar, true);
+    return () => document.removeEventListener("keydown", aoTeclar, true);
+  }, [zoom, onFechar]);
+
+  if (!zoom) return null;
+  const img = grande || zoom.inicial;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Foto de ${zoom.nome}`}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onFechar();
+      }}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4"
+    >
+      <button
+        type="button"
+        onClick={onFechar}
+        aria-label="Fechar foto"
+        className="absolute top-4 right-4 z-10 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/25"
+      >
+        <X className="size-5" aria-hidden />
+      </button>
+      <div className="relative flex flex-col items-center gap-3">
+        {img ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={img}
+            alt={zoom.nome}
+            className="max-h-[82vh] max-w-[92vw] rounded-xl object-contain shadow-2xl"
+          />
+        ) : (
+          <span className="flex size-32 items-center justify-center rounded-xl bg-white/10 text-white/60">
+            <UserRound className="size-16" aria-hidden />
+          </span>
+        )}
+        {aBusca && (
+          <span className="absolute right-3 bottom-3 rounded-full bg-black/60 p-2 text-white">
+            <LoaderCircle className="size-4 animate-spin" aria-hidden />
+          </span>
+        )}
+        <p className="max-w-[92vw] truncate text-sm font-semibold text-white/90">{zoom.nome}</p>
+      </div>
+    </div>
+  );
+}
+
 export function QuadroClient({ podeMexer, podeApagar }: Props) {
   const [lista, setLista] = useState<Colaborador[] | null>(null);
   const [falha, setFalha] = useState("");
@@ -122,6 +215,24 @@ export function QuadroClient({ podeMexer, podeApagar }: Props) {
   const [form, setForm] = useState<{ modo: "novo" | "editar"; ficha: Colaborador | null } | null>(null);
   const [aDecidir, setADecidir] = useState<number | null>(null);
 
+  // Fotos LEVES da grelha (minis; sem mini, a foto grande mesmo)
+  const [fotos, setFotos] = useState<Record<number, string>>({});
+  const [zoom, setZoom] = useState<ZoomFotoEstado>(null);
+
+  const carregarFotos = useCallback(() => {
+    pedir<{ ok: boolean; fotos: { id: number; img: string }[] }>("/api/rh/quadro/fotos")
+      .then((d) => {
+        const mapa: Record<number, string> = {};
+        for (const f of d.fotos || []) mapa[f.id] = f.img;
+        setFotos(mapa);
+      })
+      .catch(() => {
+        /* sem fotos, os cartoes ficam com as iniciais */
+      });
+  }, []);
+
+  const fecharZoom = useCallback(() => setZoom(null), []);
+
   const carregar = useCallback(() => {
     setACarregar(true);
     setFalha("");
@@ -129,7 +240,8 @@ export function QuadroClient({ podeMexer, podeApagar }: Props) {
       .then((d) => setLista(d.colaboradores || []))
       .catch((e: Error) => setFalha(e.message))
       .finally(() => setACarregar(false));
-  }, []);
+    carregarFotos();
+  }, [carregarFotos]);
 
   useEffect(() => {
     let vivo = true;
@@ -140,10 +252,11 @@ export function QuadroClient({ podeMexer, podeApagar }: Props) {
       .catch((e: Error) => {
         if (vivo) setFalha(e.message);
       });
+    carregarFotos();
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [carregarFotos]);
 
   // Foto da ficha aberta carrega dentro da FichaDetalhe (tabela a parte)
 
@@ -466,26 +579,54 @@ export function QuadroClient({ podeMexer, podeApagar }: Props) {
                 {filtrada.map((c) => {
                   const s = estadoEstagio(c);
                   const parcelas = temposTransferido(c);
+                  const foto = fotos[c.id];
                   return (
-                    <button
+                    <div
                       key={c.id}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
+                      data-cartao
                       onClick={() => setDetalheId(c.id)}
-                      className="rounded-xl border p-3.5 text-left transition-colors hover:border-primario/50 hover:bg-accent/40"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setDetalheId(c.id);
+                        }
+                      }}
+                      className="cursor-pointer rounded-xl border p-3.5 text-left transition-colors hover:border-primario/50 hover:bg-accent/40 focus-visible:outline-2 focus-visible:outline-primario"
                     >
                       <div className="flex items-start gap-3">
-                        <span
-                          className={
-                            "flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-bold " +
-                            corAvatar(c.name)
-                          }
-                        >
-                          {iniciais(c.name)}
-                        </span>
+                        {foto ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setZoom({ id: c.id, nome: c.name || "", inicial: "" });
+                            }}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            aria-label={`Ampliar foto de ${c.name}`}
+                            className="shrink-0 rounded-xl border shadow-sm transition-transform hover:scale-[1.05] focus-visible:outline-2 focus-visible:outline-primario"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={foto} alt="" className="size-16 rounded-xl object-cover" />
+                          </button>
+                        ) : (
+                          <span
+                            className={
+                              "flex size-16 shrink-0 items-center justify-center rounded-full text-lg font-bold " +
+                              corAvatar(c.name)
+                            }
+                          >
+                            {iniciais(c.name)}
+                          </span>
+                        )}
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-bold leading-tight">{c.name}</p>
                           <p className="mt-0.5 truncate text-xs text-muted-foreground">
                             {c.code} · {c.categoria || "-"}
+                          </p>
+                          <p className="mt-1 truncate text-xs text-muted-foreground">
+                            {formatoData(inicioServico(c)) || "Sem início"} · {tempoDeCasa(c)}
                           </p>
                         </div>
                         {c.active === false && (
@@ -511,23 +652,18 @@ export function QuadroClient({ podeMexer, podeApagar }: Props) {
                             </Etiqueta>
                           )
                         )}
-                      </div>
-                      <div className="mt-2.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                        <span>
-                          {formatoData(inicioServico(c)) || "Sem início"} · {tempoDeCasa(c)}
-                        </span>
                         {s?.situacao === "a_decorrer" && Number.isFinite(s.dias) && (
-                          <span className="font-semibold text-ambar-texto">
+                          <Etiqueta cor="bg-amber-500/15 text-amber-700 dark:text-amber-300">
                             {s.dias <= 0 ? "Termina hoje" : `${s.dias}d`}
-                          </span>
+                          </Etiqueta>
                         )}
                         {parcelas && (
-                          <span className="font-semibold text-primario" title="Tempo total no grupo">
+                          <Etiqueta cor="bg-primario/10 text-primario">
                             {parcelas.total.split(",").slice(0, 2).join(",")} no grupo
-                          </span>
+                          </Etiqueta>
                         )}
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -622,6 +758,7 @@ export function QuadroClient({ podeMexer, podeApagar }: Props) {
         <FichaDetalhe
           ficha={fichaAberta}
           podeMexer={podeMexer}
+          onAmpliar={(id, nome, foto) => setZoom({ id, nome, inicial: foto })}
           onEditar={() => {
             setDetalheId(null);
             setForm({ modo: "editar", ficha: fichaAberta });
@@ -639,9 +776,16 @@ export function QuadroClient({ podeMexer, podeApagar }: Props) {
           podeApagar={podeApagar}
           onGuardada={fichaGuardada}
           onApagada={() => fichaApagada(form.ficha?.id || 0)}
+          onFotoMudou={carregarFotos}
           onFechar={() => setForm(null)}
         />
       )}
+
+      <ZoomFoto
+        key={zoom ? `${zoom.id}-${zoom.inicial ? "ficha" : "grelha"}` : "fechado"}
+        zoom={zoom}
+        onFechar={fecharZoom}
+      />
     </div>
   );
 }

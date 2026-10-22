@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, RefreshCw, Trash2, UserRound } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { enviar } from "@/components/oficina/ui-bits";
-import { comprimirFoto } from "@/lib/comprimir-foto";
+import { comprimirFoto, comprimirMiniFoto } from "@/lib/comprimir-foto";
 import {
   AREAS,
   ESTADOS_CIVIS,
@@ -38,6 +38,8 @@ type Props = {
   onGuardada: (c: Colaborador) => void;
   onApagada?: () => void;
   podeApagar?: boolean;
+  /** Avisado quando a foto muda (gravada ou removida), para a grelha buscar a mini nova. */
+  onFotoMudou?: () => void;
   onFechar: () => void;
 };
 
@@ -166,6 +168,7 @@ export function FichaForm({
   onGuardada,
   onApagada,
   podeApagar,
+  onFotoMudou,
   onFechar
 }: Props) {
   const [f, setF] = useState<DadosFicha>(() => (modo === "editar" && inicial ? fichaDe(inicial) : fichaVazia(codigos)));
@@ -278,14 +281,18 @@ export function FichaForm({
     if (!ficheiro || !inicial) return;
     setAFoto(true);
     try {
-      const dataUrl = await comprimirFoto(ficheiro);
+      const [dataUrl, mini] = await Promise.all([
+        comprimirFoto(ficheiro),
+        comprimirMiniFoto(ficheiro)
+      ]);
       const d = await enviar<{ ok: boolean; foto: string }>(
         `/api/rh/quadro/${inicial.id}`,
-        { accao: "foto", foto: dataUrl },
+        { accao: "foto", foto: dataUrl, mini },
         "Foto gravada.",
         "PATCH"
       );
       setFoto(d.foto);
+      onFotoMudou?.();
     } catch {
       /* o toast do enviar ja mostra a causa */
     } finally {
@@ -299,6 +306,7 @@ export function FichaForm({
     try {
       await enviar(`/api/rh/quadro/${inicial.id}`, { accao: "foto", foto: "" }, "Foto removida.", "PATCH");
       setFoto("");
+      onFotoMudou?.();
     } catch {
       /* o toast do enviar ja mostra a causa */
     } finally {

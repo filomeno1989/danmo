@@ -24,7 +24,9 @@ const {
   payloadDaFicha,
   resumoQuadro,
   filtrarQuadro,
-  iniciais
+  iniciais,
+  ESTADOS_CIVIS,
+  fotosParaGrelha
 } = await import("@/lib/rh");
 import type { Colaborador, DadosFicha } from "@/lib/rh";
 
@@ -424,5 +426,53 @@ describe("Resumo e filtros do painel", () => {
     expect(iniciais("Filomeno Alexandre")).toBe("FA");
     expect(iniciais("Mesquita")).toBe("M");
     expect(iniciais(null)).toBe("?");
+  });
+});
+
+describe("Fotos da grelha e estados civis", () => {
+  test("ESTADOS_CIVIS tem a uniao de facto com os antigos", () => {
+    expect(ESTADOS_CIVIS).toContain("União de facto");
+    expect(ESTADOS_CIVIS).toContain("Solteiro(a)");
+    expect(ESTADOS_CIVIS).toContain("Casado(a)");
+    expect(ESTADOS_CIVIS).toContain("Divorciado(a)");
+    expect(ESTADOS_CIVIS).toContain("Viuvo(a)");
+    expect(new Set(ESTADOS_CIVIS).size).toBe(ESTADOS_CIVIS.length);
+  });
+
+  test("mini ganha e fica ordenada por id", () => {
+    const r = fotosParaGrelha(
+      [
+        { colaborador_id: 3, mini: "mini3" },
+        { colaborador_id: 1, mini: "mini1" }
+      ],
+      []
+    );
+    expect(r).toEqual([
+      { id: 1, img: "mini1" },
+      { id: 3, img: "mini3" }
+    ]);
+  });
+
+  test("sem mini, sai a foto grande (fotos antigas)", () => {
+    const r = fotosParaGrelha([], [{ colaborador_id: 7, foto: "grande7" }]);
+    expect(r).toEqual([{ id: 7, img: "grande7" }]);
+  });
+
+  test("quando ha as duas, a mini manda sobre a grande", () => {
+    const r = fotosParaGrelha(
+      [{ colaborador_id: 7, mini: "mini7" }],
+      [{ colaborador_id: 7, foto: "grande7" }]
+    );
+    expect(r).toEqual([{ id: 7, img: "mini7" }]);
+  });
+
+  test("listas vazias e linhas sem imagem nao rebentam", () => {
+    expect(fotosParaGrelha([], [])).toEqual([]);
+    expect(
+      fotosParaGrelha(
+        [{ colaborador_id: 2, mini: "" }],
+        [{ colaborador_id: 4, foto: null }]
+      )
+    ).toEqual([]);
   });
 });

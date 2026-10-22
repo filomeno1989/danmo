@@ -85,7 +85,13 @@ export const AREAS = [
 
 export const GRUPOS_SANGUINEOS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
-export const ESTADOS_CIVIS = ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viuvo(a)"];
+export const ESTADOS_CIVIS = [
+  "Solteiro(a)",
+  "Casado(a)",
+  "União de facto",
+  "Divorciado(a)",
+  "Viuvo(a)"
+];
 
 /* ------------------------------------------------------------------
  * Texto e datas
@@ -505,4 +511,33 @@ export function iniciais(nome: string | null | undefined): string {
   const primeira = partes[0][0] || "";
   const ultima = partes.length > 1 ? partes[partes.length - 1][0] : "";
   return (primeira + ultima).toUpperCase();
+}
+
+/* ------------------------------------------------------------------
+ * Fotos da grelha
+ * ------------------------------------------------------------------ */
+
+export type FotoGrelha = { id: number; img: string };
+
+/**
+ * Junta as duas respostas da tabela de fotos num mapa simples para a
+ * grelha: quem tem MINI usa a mini (leve, e a que a lista carrega);
+ * quem so tem a foto grande (gravada antes de a mini existir) usa a
+ * foto grande mesmo, que e melhor do que ficar sem cara no cartao.
+ * A mini ganha quando a mesma ficha aparece nas duas listas.
+ */
+export function fotosParaGrelha(
+  minis: { colaborador_id: number; mini: string | null }[],
+  grandes: { colaborador_id: number; foto: string | null }[]
+): FotoGrelha[] {
+  const mapa = new Map<number, string>();
+  for (const g of grandes || []) {
+    if (g.foto && g.colaborador_id) mapa.set(Number(g.colaborador_id), g.foto);
+  }
+  for (const m of minis || []) {
+    if (m.mini && m.colaborador_id) mapa.set(Number(m.colaborador_id), m.mini);
+  }
+  return [...mapa]
+    .map(([id, img]) => ({ id, img }))
+    .sort((a, b) => a.id - b.id);
 }

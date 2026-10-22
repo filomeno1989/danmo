@@ -123,6 +123,10 @@ const COLS = [
 
 const promovida = { ...COLS[3], tipo_colaborador: "efetivo", tipo_vinculo: "contratado", estagio_resultado: "promovido", data_admissao_danmo: "2026-04-01" };
 
+/* PNGs de 1px distintos: a MINI da grelha e a FOTO grande da ficha */
+const MINI_A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const FOTO_A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
 /* ============ teste ============ */
 
 (async () => {
@@ -161,6 +165,12 @@ const promovida = { ...COLS[3], tipo_colaborador: "efetivo", tipo_vinculo: "cont
   await contexto.route("**/api/rh/quadro/2", async (rota) => {
     return rota.fulfill({ json: { ok: true, colaborador: COLS[1], foto: "" } });
   });
+  await contexto.route("**/api/rh/quadro/1", async (rota) => {
+    return rota.fulfill({ json: { ok: true, colaborador: COLS[0], foto: FOTO_A } });
+  });
+  await contexto.route("**/api/rh/quadro/fotos", async (rota) => {
+    return rota.fulfill({ json: { ok: true, fotos: [{ id: 1, img: MINI_A }] } });
+  });
 
   const pagina = await contexto.newPage();
 
@@ -186,22 +196,22 @@ const promovida = { ...COLS[3], tipo_colaborador: "efetivo", tipo_vinculo: "cont
   ok("botao Nao permanece no aviso", await pagina.getByRole("button", { name: "Não permanece" }).count() >= 1);
 
   /* ---------- 3. Cartões com badges das duas listas ---------- */
-  ok("cartao Filomeno com Danmo Porto", (await pagina.locator("button", { hasText: "Filomeno Manuel" }).textContent()).includes("Danmo Porto"));
-  ok("cartao José com badge Transferido", (await pagina.locator("button", { hasText: "José Chingueture" }).textContent()).includes("Transferido"));
-  ok("cartao Augusto na lista TCM", (await pagina.locator("button", { hasText: "Administrador TCM Augusto" }).textContent()).includes("Danmo (TCM)"));
-  ok("cartao estagio com iniciais", (await pagina.locator("button", { hasText: "Diana Estagio Teste" }).count()) === 1);
+  ok("cartao Filomeno com Danmo Porto", (await pagina.locator("[data-cartao]", { hasText: "Filomeno Manuel" }).textContent()).includes("Danmo Porto"));
+  ok("cartao José com badge Transferido", (await pagina.locator("[data-cartao]", { hasText: "José Chingueture" }).textContent()).includes("Transferido"));
+  ok("cartao Augusto na lista TCM", (await pagina.locator("[data-cartao]", { hasText: "Administrador TCM Augusto" }).textContent()).includes("Danmo (TCM)"));
+  ok("cartao estagio com iniciais", (await pagina.locator("[data-cartao]", { hasText: "Diana Estagio Teste" }).count()) === 1);
 
   /* ---------- 4. Pesquisa sem acentos + filtro ---------- */
   await pagina.getByPlaceholder("Pesquisar por nome, código ou função...").fill("jose");
   await pagina.waitForTimeout(300);
-  ok("pesquisa 'jose' acha José Chingueture", await pagina.locator("button", { hasText: "José Chingueture" }).count() === 1);
-  ok("pesquisa 'jose' esconde Filomeno", await pagina.locator("button", { hasText: "Filomeno Manuel" }).count() === 0);
+  ok("pesquisa 'jose' acha José Chingueture", await pagina.locator("[data-cartao]", { hasText: "José Chingueture" }).count() === 1);
+  ok("pesquisa 'jose' esconde Filomeno", await pagina.locator("[data-cartao]", { hasText: "Filomeno Manuel" }).count() === 0);
   await pagina.getByPlaceholder("Pesquisar por nome, código ou função...").fill("");
   await pagina.waitForTimeout(200);
 
   await pagina.getByLabel("Filtrar por empresa").selectOption("sem");
   await pagina.waitForTimeout(300);
-  ok("filtro 'Sem classificar' mostra so Efraim", await pagina.locator("button", { hasText: "Efraim Sem Classificacao" }).count() === 1 && await pagina.locator("button", { hasText: "Filomeno Manuel" }).count() === 0);
+  ok("filtro 'Sem classificar' mostra so Efraim", await pagina.locator("[data-cartao]", { hasText: "Efraim Sem Classificacao" }).count() === 1 && await pagina.locator("[data-cartao]", { hasText: "Filomeno Manuel" }).count() === 0);
   await pagina.getByRole("button", { name: "Limpar" }).click();
   await pagina.waitForTimeout(200);
 
@@ -211,10 +221,47 @@ const promovida = { ...COLS[3], tipo_colaborador: "efetivo", tipo_vinculo: "cont
   ok("tabela mostra coluna Tempo de casa", await pagina.locator("th", { hasText: "Tempo de casa" }).count() === 1);
   ok("tabela mostra linha do inactivo", (await pagina.locator("tr", { hasText: "Gustavo Inactivo Antigo" }).textContent()).includes("Inactivo"));
   await pagina.getByRole("button", { name: "Cartões" }).click();
+  await pagina.waitForTimeout(300);
+
+  /* ---------- 5b. Foto na grelha: avatar maior e zoom sem abrir a ficha ---------- */
+  const cartaoFoto = pagina.locator("[data-cartao]", { hasText: "Filomeno Manuel" });
+  ok("cartao com foto mostra a imagem", await cartaoFoto.locator("img").count() === 1);
+  const caixaFoto = await cartaoFoto.locator("img").first().boundingBox();
+  ok("avatar maior (64px, antes 40px)", !!caixaFoto && caixaFoto.width >= 56 && caixaFoto.height >= 56, JSON.stringify(caixaFoto));
+  ok("cartao sem foto fica com iniciais", await pagina.locator("[data-cartao]", { hasText: "Diana Estagio Teste" }).locator("img").count() === 0);
+
+  await pagina.locator('button[aria-label="Ampliar foto de Filomeno Manuel Joaquim Alexandre"]').click();
+  const zoomDialog = pagina.locator('div[role="dialog"][aria-label="Foto de Filomeno Manuel Joaquim Alexandre"]');
+  ok("zoom abre com a foto do cartao", await zoomDialog.count() === 1);
+  ok("clicar na foto NAO abre a ficha", await pagina.getByText("Código DM0069").count() === 0);
+  await pagina.waitForFunction(
+    (esperada) => {
+      const i = document.querySelector('div[aria-label^="Foto de"] img');
+      return !!i && i.getAttribute("src") === esperada;
+    },
+    FOTO_A,
+    { timeout: 6000 }
+  );
+  ok("zoom troca para a foto grande (busca na rota da ficha)", true);
+  await pagina.mouse.click(12, 12);
+  await pagina.waitForTimeout(250);
+  ok("clicar fora fecha o zoom", await zoomDialog.count() === 0);
+
+  /* ---------- 5c. Foto na ficha: amplia por cima do detalhe e a ficha fica ---------- */
+  await pagina.locator("[data-cartao]", { hasText: "Filomeno Manuel" }).first().click();
+  await pagina.waitForSelector("text=Código DM0069", { timeout: 8000 });
+  ok("ficha abre com a foto", await pagina.locator('div[role="dialog"][aria-label="Filomeno Manuel Joaquim Alexandre"] img').count() === 1);
+  await pagina.locator('button[aria-label="Ampliar foto"]').click();
+  await pagina.waitForTimeout(250);
+  ok("zoom abre sobre a ficha", await zoomDialog.count() === 1);
+  await pagina.keyboard.press("Escape");
+  await pagina.waitForTimeout(250);
+  ok("ESC fecha o zoom e MANTÉM a ficha aberta", await zoomDialog.count() === 0 && (await pagina.getByText("Código DM0069").count()) === 1);
+  await pagina.locator("button").filter({ hasText: "Fechar" }).first().click();
   await pagina.waitForTimeout(200);
 
   /* ---------- 6. Ficha detalhe: parcelas do transferido ---------- */
-  await pagina.locator("button", { hasText: "José Chingueture" }).first().click();
+  await pagina.locator("[data-cartao]", { hasText: "José Chingueture" }).first().click();
   await pagina.waitForSelector("text=Código DM0101", { timeout: 8000 });
   await pagina.waitForSelector("text=Tempo no Grupo, por parcela", { timeout: 8000 });
   ok("detalhe abre a ficha do José", true);
@@ -226,7 +273,7 @@ const promovida = { ...COLS[3], tipo_colaborador: "efetivo", tipo_vinculo: "cont
   await pagina.waitForTimeout(200);
 
   /* ---------- 7. Detalhe do estagiario e PROMOCAO ---------- */
-  await pagina.locator("button", { hasText: "Diana Estagio Teste" }).first().click();
+  await pagina.locator("[data-cartao]", { hasText: "Diana Estagio Teste" }).first().click();
   await pagina.waitForSelector("text=Situação do Estágio", { timeout: 8000 });
   ok("detalhe mostra situacao do estagio", await pagina.getByText("Faltam 5 dias para o fim previsto").count() === 1);
   ok("detalhe mostra instituicao", await pagina.getByText("Instituto Politécnico da Beira").count() === 1);
@@ -251,6 +298,8 @@ const promovida = { ...COLS[3], tipo_colaborador: "efetivo", tipo_vinculo: "cont
   const dialogo = pagina.locator('[role="dialog"]');
   ok("novo ficha abre com codigo sugerido", (await dialogo.locator("#fich-code").inputValue()).startsWith("DM"));
   ok("efetivo mostra admissao", await dialogo.locator("#fich-adm").count() === 1);
+  ok("estado civil traz União de facto", await dialogo.locator('#lista-estados-civis option[value="União de facto"]').count() === 1);
+  ok("estado civil mantém os antigos", await dialogo.locator('#lista-estados-civis option[value="Casado(a)"]').count() === 1);
   await dialogo.locator("button").filter({ hasText: "Estagiário" }).first().click();
   await pagina.waitForTimeout(200);
   ok("troca para estagiario esconde admissao e mostra estagio", await dialogo.locator("#fich-adm").count() === 0 && await dialogo.locator("#fich-eini").count() === 1);

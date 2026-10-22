@@ -410,7 +410,8 @@ export function EditorClient({
           ? await enviar<{ id: string; numero: string }>(
               `/api/faturacao/documentos/${docId}`,
               corpoDoc(),
-              "Documento actualizado."
+              "Documento actualizado.",
+              "PATCH"
             )
           : await enviar<{ id: string; numero: string }>(
               "/api/faturacao/documentos",

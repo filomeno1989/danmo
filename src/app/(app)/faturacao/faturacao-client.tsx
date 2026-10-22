@@ -130,7 +130,7 @@ export function FaturacaoClient({
   const apagar = async () => {
     if (!aApagar) return;
     try {
-      await enviar(`/api/faturacao/documentos/${aApagar.id}`, null, undefined);
+      await enviar(`/api/faturacao/documentos/${aApagar.id}`, null, undefined, "DELETE");
       toast.success(`Documento ${aApagar.numero} apagado.`);
       setAApagar(null);
       carregar();

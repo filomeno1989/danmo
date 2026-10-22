@@ -83,7 +83,7 @@ function SelectUnidade({
         if (e.target.value === "__outro__") onOutro(e.target);
         else onChange(e.target.value);
       }}
-      className="h-8 w-[92px] rounded-md border border-input bg-background px-1.5 text-xs"
+      className="h-8 w-full rounded-md border border-input bg-background px-1.5 text-xs"
     >
       {UNIDADES_LISTA.map((u) => (
         <option key={u} value={u}>{u}</option>
@@ -139,8 +139,9 @@ export function TabelaMao({
 }) {
   return (
     <TabelaWrap
+      minW={640}
       cabecalho={
-        <tr>
+        <tr className="border-b bg-ambar-claro/50 text-left text-[0.65rem] uppercase tracking-wider text-ambar-texto dark:text-amber-400">
           <Th className="w-8">#</Th>
           <Th>Técnico</Th>
           <Th className="w-14">Qtd</Th>
@@ -170,7 +171,7 @@ export function TabelaMao({
           <Td>
             <Input
               type="number"
-              className="h-8 w-14 px-1.5 text-xs"
+              className="h-8 w-full px-1.5 text-xs"
               value={l.qtd}
               min="1"
               onChange={(e) => onEditar(l._id, "qtd", e.target.value)}
@@ -179,7 +180,7 @@ export function TabelaMao({
           <Td>
             <Input
               type="number"
-              className="h-8 w-16 px-1.5 text-xs"
+              className="h-8 w-full px-1.5 text-xs"
               value={l.tempo}
               min="0.5"
               step="0.5"
@@ -196,7 +197,7 @@ export function TabelaMao({
           <Td>
             <Input
               type="number"
-              className="h-8 w-[110px] px-1.5 text-xs"
+              className="h-8 w-full px-1.5 text-xs"
               value={l.valor_unit}
               step="0.01"
               onChange={(e) => onEditar(l._id, "valor_unit", e.target.value)}
@@ -251,8 +252,9 @@ export function TabelaMaterial({
 }) {
   return (
     <TabelaWrap
+      minW={640}
       cabecalho={
-        <tr>
+        <tr className="border-b bg-ambar-claro/50 text-left text-[0.65rem] uppercase tracking-wider text-ambar-texto dark:text-amber-400">
           <Th className="w-8">#</Th>
           <Th>Descrição</Th>
           <Th className="w-14">Qtd</Th>
@@ -297,7 +299,7 @@ export function TabelaMaterial({
             <Td>
               <Input
                 type="number"
-                className="h-8 w-14 px-1.5 text-xs"
+                className="h-8 w-full px-1.5 text-xs"
                 value={l.qtd}
                 min="1"
                 onChange={(e) => onEditar(l._id, "qtd", e.target.value)}
@@ -313,7 +315,7 @@ export function TabelaMaterial({
             <Td>
               <Input
                 type="number"
-                className="h-8 w-[100px] px-1.5 text-xs"
+                className="h-8 w-full px-1.5 text-xs"
                 value={doCliente ? 0 : l.valor_unit}
                 step="0.01"
                 disabled={doCliente}
@@ -379,8 +381,9 @@ export function TabelaMisto({
 }) {
   return (
     <TabelaWrap
+      minW={760}
       cabecalho={
-        <tr>
+        <tr className="border-b bg-ambar-claro/50 text-left text-[0.65rem] uppercase tracking-wider text-ambar-texto dark:text-amber-400">
           <Th className="w-8">#</Th>
           <Th className="w-[92px]">Tipo</Th>
           <Th>Técnico / Descrição</Th>
@@ -406,7 +409,7 @@ export function TabelaMisto({
               <select
                 value={eMao ? "mao" : "material"}
                 onChange={(e) => onTipo(l._id, e.target.value as Linha["item_tipo"])}
-                className="h-8 w-[92px] rounded-md border border-input bg-background px-1.5 text-xs"
+                className="h-8 w-full rounded-md border border-input bg-background px-1.5 text-xs"
               >
                 <option value="mao">M-de-O</option>
                 <option value="material">Material</option>
@@ -450,7 +453,7 @@ export function TabelaMisto({
             <Td>
               <Input
                 type="number"
-                className="h-8 w-14 px-1.5 text-xs"
+                className="h-8 w-full px-1.5 text-xs"
                 value={l.qtd}
                 min="1"
                 onChange={(e) => onEditar(l._id, "qtd", e.target.value)}
@@ -460,7 +463,7 @@ export function TabelaMisto({
               {eMao ? (
                 <Input
                   type="number"
-                  className="h-8 w-16 px-1.5 text-xs"
+                  className="h-8 w-full px-1.5 text-xs"
                   value={l.tempo}
                   step="0.5"
                   onChange={(e) => onEditar(l._id, "tempo", e.target.value)}
@@ -479,7 +482,7 @@ export function TabelaMisto({
             <Td>
               <Input
                 type="number"
-                className="h-8 w-[110px] px-1.5 text-xs"
+                className="h-8 w-full px-1.5 text-xs"
                 value={doCliente ? 0 : l.valor_unit}
                 step="0.01"
                 disabled={doCliente}
@@ -536,15 +539,32 @@ export { MarcaCliente };
 
 /* ============ Peças comuns ============ */
 
-function TabelaWrap({ cabecalho, children }: { cabecalho: React.ReactNode; children: React.ReactNode }) {
+/**
+ * Grelha comum às três tabelas.
+ *
+ * O cabeçalho JÁ CHEGA como <tr> único e entra directo no <thead>:
+ * encaixar <tr> dentro de <tr> é HTML inválido - o navegador içava as
+ * células para fora da grelha e o cabeçalho ficava com larguras próprias,
+ * desalinhado dos registos.
+ *
+ * table-fixed + larguras declaradas nos <th> + campos w-full nas células:
+ * cabeçalho e linhas partilham a MESMA grelha por construção, em qualquer
+ * ecrã. minW por tabela deixa a Misto (9 colunas) rolar no ecrã estreito
+ * sem espremer as colunas fixas.
+ */
+function TabelaWrap({
+  cabecalho,
+  children,
+  minW = 560
+}: {
+  cabecalho: React.ReactNode;
+  children: React.ReactNode;
+  minW?: number;
+}) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[560px] text-sm">
-        <thead>
-          <tr className="border-b bg-ambar-claro/50 text-left text-[0.65rem] uppercase tracking-wider text-ambar-texto dark:text-amber-400">
-            {cabecalho}
-          </tr>
-        </thead>
+      <table className="w-full table-fixed text-sm" style={{ minWidth: `${minW}px` }}>
+        <thead>{cabecalho}</thead>
         <tbody>{children}</tbody>
       </table>
     </div>

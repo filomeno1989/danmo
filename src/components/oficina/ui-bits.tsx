@@ -25,20 +25,26 @@ export async function pedir<T>(url: string): Promise<T> {
   return d as T;
 }
 
-/** Pedido POST com JSON + toast em caso de falha (devolve a resposta). */
+/**
+ * Pedido à API com JSON + toast em caso de falha (devolve a resposta).
+ * O método vai a cavalo: POST cria, PATCH edita, DELETE apaga. Mandar o
+ * método errado devolve 405 da rota sem mensagem nenhuma - era assim que
+ * o "Não foi possível guardar." genérico nascia, sem dizer a causa real.
+ */
 export async function enviar<T = { ok: boolean; erro?: string }>(
   url: string,
   corpo: unknown,
-  msgSucesso?: string
+  msgSucesso?: string,
+  metodo: "POST" | "PATCH" | "PUT" | "DELETE" = "POST"
 ): Promise<T> {
   const r = await fetch(url, {
-    method: "POST",
+    method: metodo,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(corpo)
+    body: corpo == null ? undefined : JSON.stringify(corpo)
   });
   const d = (await r.json().catch(() => ({}))) as T & { ok?: boolean; erro?: string };
   if (!r.ok || d?.ok === false) {
-    toast.error(d?.erro || "Não foi possível guardar.");
+    toast.error(d?.erro || `Não foi possível guardar (erro ${r.status}).`);
     throw new Error(d?.erro || "Falha no pedido");
   }
   if (msgSucesso) toast.success(msgSucesso);

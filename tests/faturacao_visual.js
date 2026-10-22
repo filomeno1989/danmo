@@ -179,6 +179,7 @@ const docPorId = (id) =>
   await contexto.addCookies([{ name: "dss_token", value: "estrutura", url: BASE }]);
 
   const postsDocs = [];
+  const metodosDoc = [];
   await contexto.route("**/api/faturacao/documentos", async (rota) => {
     if (rota.request().method() !== "GET") {
       postsDocs.push(rota.request().postDataJSON());
@@ -190,6 +191,7 @@ const docPorId = (id) =>
     const url = rota.request().url();
     const id = url.split("/").pop().split("?")[0];
     if (rota.request().method() !== "GET") {
+      metodosDoc.push(rota.request().method());
       return rota.fulfill({ json: { ok: true, id, numero: "012/2026" } });
     }
     const doc = docPorId(id);
@@ -267,6 +269,14 @@ const docPorId = (id) =>
   ok("Painel: filtro por tipo presente", (await pg.locator('select[aria-label="Filtrar por tipo"]').count()) === 1);
   ok("Painel: acção Gerar Fatura na cotação", (await pg.locator('button[title*="Gerar Fatura"]').count()) >= 1);
 
+  /* apagar: o botão do painel tem de mandar DELETE à rota do documento.
+     Mandava POST para uma rota que só aceita DELETE: nunca apagava. */
+  await pg.locator('button[title="Apagar"]').first().click();
+  await pg.waitForTimeout(300);
+  await pg.locator('button:has-text("Apagar")').last().click();
+  await pg.waitForTimeout(600);
+  ok("Painel: apagar manda DELETE à rota do documento", metodosDoc.includes("DELETE"), JSON.stringify(metodosDoc));
+
   /* pesquisa */
   await pg.fill('input[placeholder*="Pesquisar por número"]', "ACCESS");
   await pg.waitForTimeout(400);
@@ -283,6 +293,33 @@ const docPorId = (id) =>
   ok("Editor: tabela de mão-de-obra com Técnico", (await pg.locator('td select').count()) >= 1);
   ok("Editor: atalhos de tarifa visíveis", (await pg.locator('button[title="Standard"]').count()) >= 1);
   ok("Editor: extenso presente", (await pg.content()).includes("São: Zero meticais"));
+
+  /* prova ao pixel: cabeçalho e linhas na MESMA grelha (diferença 0px).
+     O cabeçalho era um <tr> dentro de outro <tr>: HTML inválido, o
+     navegador içava as células e as larguras ficavam desconexas. */
+  const medirColunas = () =>
+    pg.evaluate(() => {
+      const tabela = document.querySelector("table");
+      if (!tabela) return null;
+      const ths = Array.from(tabela.querySelectorAll("thead th"));
+      const tds = Array.from(tabela.querySelectorAll("tbody tr:first-child td"));
+      return ths.map((th, i) => {
+        const td = tds[i];
+        if (!td) return null;
+        return Math.round(Math.abs(th.getBoundingClientRect().left - td.getBoundingClientRect().left) * 10) / 10;
+      });
+    });
+  const grelhaOk = (diffs) => Array.isArray(diffs) && diffs.length > 0 && diffs.every((d) => d !== null) && Math.max(...diffs) <= 0.5;
+  let diffs = await medirColunas();
+  ok("Tabela Mão: cabeçalho alinhado ao pixel (0px)", grelhaOk(diffs), JSON.stringify(diffs));
+  await pg.locator('button:has-text("Material") >> nth=0').first().click();
+  await pg.waitForTimeout(400);
+  diffs = await medirColunas();
+  ok("Tabela Material: cabeçalho alinhado ao pixel (0px)", grelhaOk(diffs), JSON.stringify(diffs));
+  await pg.locator('button:has-text("Misto")').first().click();
+  await pg.waitForTimeout(400);
+  diffs = await medirColunas();
+  ok("Tabela Misto: cabeçalho alinhado ao pixel (0px)", grelhaOk(diffs), JSON.stringify(diffs));
 
   /* alternar tipo -> nova sugestão de número */
   await pg.locator('button:has-text("Fatura")').first().click();
@@ -325,6 +362,16 @@ const docPorId = (id) =>
   ok("Editor edição: linha Do cliente marcada", html.includes("Do cliente"));
   ok("Editor edição: aviso do Anexo de Material", html.includes("Anexo de Material"));
   ok("Editor edição: autor original mantido", html.includes("Filomeno Manuel"));
+
+  /* gravar a edição: PATCH na rota do documento. Mandava POST para uma
+     rota que só aceita PATCH: 405 sem mensagem e o aviso genérico. */
+  await pg.locator('button:has-text("Guardar") >> nth=0').click();
+  await pg.waitForTimeout(600);
+  ok(
+    "Editor edição: gravar manda PATCH (não POST)",
+    metodosDoc.includes("PATCH") && !metodosDoc.includes("POST"),
+    JSON.stringify(metodosDoc)
+  );
 
   /* ---------- 7. Clientes / Técnicos / Tarifas ---------- */
   await pg.goto(`${BASE}/faturacao/clientes`, { waitUntil: "domcontentloaded" });

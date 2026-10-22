@@ -498,12 +498,34 @@ const docPorId = (id) =>
   ok("Impressão: código do modelo no rodapé", html.includes("DAN_ADO_FR_030_REV02"));
   ok("Impressão: extenso do total", html.includes("Vinte e quatro mil cento e sessenta e sete meticais"));
 
+  /* Bug do Filomeno: na pré-visualização o documento aparecia inteiro,
+     mas ao imprimir SAIA CORTADO - a migração perdeu a medida das
+     margens dinâmicas do hub e os espaços da tabela mágica ficavam com
+     altura 0, o cabeçalho e o rodapé fixos de fundo branco tapavam o
+     conteúdo em todas as páginas. Prova no modo de impressão real do
+     Chromium: os espaços têm a altura do cabeçalho/rodapé (+ folga)
+     e o conteúdo começa ABAIXO do cabeçalho fixo, não por baixo dele. */
+  await pg.emulateMedia({ media: "print" });
+  await pg.waitForTimeout(400);
+  const espacoCab = await pg.locator(".print-header-space").first().evaluate((el) => el.getBoundingClientRect().height);
+  const espacoRod = await pg.locator(".print-footer-space").first().evaluate((el) => el.getBoundingClientRect().height);
+  const alturaCab = await pg.locator(".doc-header").first().evaluate((el) => el.getBoundingClientRect().height);
+  ok("Impressão: espaço do cabeçalho medido (não tapa o conteúdo)", espacoCab > 0 && espacoCab >= alturaCab, `(espaço ${Math.round(espacoCab)}px vs cabeçalho ${Math.round(alturaCab)}px)`);
+  ok("Impressão: espaço do rodapé medido", espacoRod > 0, `(${Math.round(espacoRod)}px)`);
+  await pg.emulateMedia({ media: "screen" });
+
   await pg.goto(`${BASE}/imprimir/faturacao/doc-2?modo=anexo`, { waitUntil: "domcontentloaded" });
   await pg.waitForTimeout(900);
   html = await pg.content();
   ok("Impressão: Anexo de Material do documento misto", html.includes("Anexo de Material"));
   ok("Impressão: linha do material do cliente no anexo", html.includes("Oleo 15W40"));
   ok("Impressão: nota de não faturado", html.includes("NÃO estão faturados"));
+
+  await pg.emulateMedia({ media: "print" });
+  await pg.waitForTimeout(400);
+  const espacoCabAnexo = await pg.locator(".print-header-space").first().evaluate((el) => el.getBoundingClientRect().height);
+  ok("Impressão: Anexo também com margens dinâmicas", espacoCabAnexo > 0, `(${Math.round(espacoCabAnexo)}px)`);
+  await pg.emulateMedia({ media: "screen" });
 
   await browser.close();
 

@@ -10,7 +10,7 @@
  * marcadas "Do cliente" com valor zero, não faturadas.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Printer } from "lucide-react";
 import { pedir } from "@/components/oficina/ui-bits";
@@ -30,10 +30,51 @@ import { LOGO_DANMO, LOGO_MESQUITA, LOGO_MMM } from "./logos";
 
 type Resposta = { ok: boolean; documento: DocFaturacao; itens: ItemFaturacao[] };
 
+type Alturas = { cab: number; rod: number } | null;
+
+/**
+ * Tabela mágica de margens dinâmicas (herdada do print.html do hub):
+ * na impressão o cabeçalho e o rodapé ficam FIXOS no papel e a tabela
+ * de layout repete um espaço com a ALTURA DELES em todas as páginas.
+ * Sem a medida, o espaço nasce com altura 0 e o cabeçalho/rodapé de
+ * fundo branco TAPAM o conteúdo: a folha sai cortada na impressora
+ * mesmo estando inteira na pré-visualização do ecrã. Mede-se no
+ * navegador (carga + 200ms + beforeprint) com folga de +15px, igual
+ * ao hub (a página da OS imprime com +25px pelo mesmo mecanismo).
+ */
+function useAlturasImpressao(activo: boolean) {
+  const [alturas, setAlturas] = useState<Alturas>(null);
+  const cabRef = useRef<HTMLDivElement | null>(null);
+  const rodRef = useRef<HTMLDivElement | null>(null);
+
+  const medir = useCallback(() => {
+    if (cabRef.current && rodRef.current) {
+      setAlturas({
+        cab: cabRef.current.offsetHeight + 15,
+        rod: rodRef.current.offsetHeight + 15
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activo) return;
+    medir();
+    const t = setTimeout(medir, 200);
+    window.addEventListener("beforeprint", medir);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("beforeprint", medir);
+    };
+  }, [activo, medir]);
+
+  return { alturas, cabRef, rodRef };
+}
+
 export function FaturaImprimir({ docId, anexo }: { docId: string; anexo: boolean }) {
   const [doc, setDoc] = useState<DocFaturacao | null>(null);
   const [itens, setItens] = useState<ItemFaturacao[]>([]);
   const [falha, setFalha] = useState("");
+  const { alturas, cabRef, rodRef } = useAlturasImpressao(!!doc);
 
   useEffect(() => {
     pedir<Resposta>(`/api/faturacao/documentos/${docId}`)
@@ -137,7 +178,7 @@ export function FaturaImprimir({ docId, anexo }: { docId: string; anexo: boolean
 
   return (
     <>
-      <style>{cssPapel}</style>
+      <style>{cssPapel(alturas)}</style>
       <div className="preview-bar">
         <div className="preview-bar-left">
           <Link href="/faturacao" className="btn-back">
@@ -159,7 +200,7 @@ export function FaturaImprimir({ docId, anexo }: { docId: string; anexo: boolean
 
       <div className="doc-wrap">
         <div className="doc-page">
-          <div className="doc-header">
+          <div className="doc-header" ref={cabRef}>
             <div className="doc-header-inner">
               <img src={LOGO_DANMO} className="logo-danmo" alt="Danmo SS" />
               <img src={LOGO_MMM} className="logo-mmm" alt="Made in Mozambique" />
@@ -329,7 +370,7 @@ export function FaturaImprimir({ docId, anexo }: { docId: string; anexo: boolean
             </tfoot>
           </table>
 
-          <div className="doc-footer">
+          <div className="doc-footer" ref={rodRef}>
             <div className="footer-codigo">
               <b>Código</b> DAN_ADO_FR_030_REV02_29.05.26<br />
               Este documento é propriedade da DANMO. Não é permitida sua reprodução sem autorização.<br />
@@ -348,9 +389,10 @@ export function FaturaImprimir({ docId, anexo }: { docId: string; anexo: boolean
  * ------------------------------------------------------------------ */
 
 function PapelAnexo({ doc, itensCliente }: { doc: DocFaturacao; itensCliente: ItemFaturacao[] }) {
+  const { alturas, cabRef, rodRef } = useAlturasImpressao(true);
   return (
     <>
-      <style>{cssPapel}</style>
+      <style>{cssPapel(alturas)}</style>
       <div className="preview-bar">
         <div className="preview-bar-left">
           <Link href="/faturacao" className="btn-back">
@@ -367,7 +409,7 @@ function PapelAnexo({ doc, itensCliente }: { doc: DocFaturacao; itensCliente: It
 
       <div className="doc-wrap">
         <div className="doc-page">
-          <div className="doc-header">
+          <div className="doc-header" ref={cabRef}>
             <div className="doc-header-inner">
               <img src={LOGO_DANMO} className="logo-danmo" alt="Danmo SS" />
               <img src={LOGO_MMM} className="logo-mmm" alt="Made in Mozambique" />
@@ -471,7 +513,7 @@ function PapelAnexo({ doc, itensCliente }: { doc: DocFaturacao; itensCliente: It
             </tfoot>
           </table>
 
-          <div className="doc-footer">
+          <div className="doc-footer" ref={rodRef}>
             <div className="footer-codigo">
               <b>Código</b> DAN_ADO_FR_030_REV02_29.05.26 (Anexo)<br />
               Este documento é propriedade da DANMO. Não é permitida sua reprodução sem autorização.<br />
@@ -489,7 +531,7 @@ function PapelAnexo({ doc, itensCliente }: { doc: DocFaturacao; itensCliente: It
  * CSS do papel (adaptado do print.html do hub)
  * ------------------------------------------------------------------ */
 
-const cssPapel = `
+const cssPapel = (alturas: Alturas) => `
 body { background: #1a1a2e; }
 .preview-bar { max-width: 820px; margin: 0 auto 16px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .preview-bar-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -578,6 +620,10 @@ body { background: #1a1a2e; }
   @page { margin: 0; size: A4; }
   .doc-header { position: fixed; top: 0; left: 0; right: 0; background: #fff; z-index: 1000; }
   .doc-footer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; z-index: 1000; margin-top: 0; }
+  /* Margens dinâmicas medidas no navegador (tabela mágica do hub): sem
+     isto os espaços ficam com 0 e o cabeçalho/rodapé tapam o conteúdo. */
+  .print-header-space { height: ${alturas ? alturas.cab : 165}px !important; }
+  .print-footer-space { height: ${alturas ? alturas.rod : 90}px !important; }
   .items-table tr { page-break-inside: avoid; break-inside: avoid; }
   .items-table thead { display: table-header-group; }
   .doc-assunto, .nota-cliente-area, .doc-totais-area, .extenso-area, .assinatura-area { page-break-inside: avoid; break-inside: avoid; }

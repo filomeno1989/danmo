@@ -189,6 +189,34 @@ export function calcTotais(
 }
 
 /* ------------------------------------------------------------------
+ * Totais do ano por tipo (Painel)
+ * ------------------------------------------------------------------ */
+
+export type TotaisAnoTipo = { faturas: number; cotacoes: number };
+
+/**
+ * Soma dos totais em MZN por TIPO, só dos documentos com data no ano
+ * pedido. Cotação e fatura nunca somam no mesmo número: quando a cotação
+ * vira fatura o mesmo trabalho entrava duas vezes no "Total do ano" do
+ * painel e o valor dobrava. O dinheiro do ano é o das FATURAS; as
+ * cotações ficam à parte (são proposta, não receita).
+ */
+export function totaisAnoPorTipo(
+  docs: { tipo: string; data?: string; total_mzn?: number | null }[],
+  ano: number
+): TotaisAnoTipo {
+  let faturas = 0;
+  let cotacoes = 0;
+  for (const d of docs) {
+    if (String(d.data || "").slice(0, 4) !== String(ano)) continue;
+    const v = Number(d.total_mzn) || 0;
+    if (d.tipo === "fatura") faturas += v;
+    else if (d.tipo === "cotacao") cotacoes += v;
+  }
+  return { faturas: arred2(faturas), cotacoes: arred2(cotacoes) };
+}
+
+/* ------------------------------------------------------------------
  * Numeração: 001/2026, por tipo, reinicia a cada ano
  * ------------------------------------------------------------------ */
 

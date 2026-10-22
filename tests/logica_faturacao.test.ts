@@ -21,7 +21,8 @@ const {
   textoSemTags,
   validarDocEntrada,
   fmtData,
-  dataExtenso
+  dataExtenso,
+  totaisAnoPorTipo
 } = await import("@/lib/faturacao");
 import type { ItemFaturacao } from "@/lib/faturacao";
 
@@ -303,5 +304,49 @@ describe("validarDocEntrada", () => {
     );
     expect(v.ok).toBeTrue();
     expect(v.dados?.itens[0].item_tipo).toBe("mao");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+
+describe("totaisAnoPorTipo", () => {
+  const docs = [
+    { tipo: "fatura", data: "2026-03-10", total_mzn: 53452.8 },
+    { tipo: "fatura", data: "2026-06-01", total_mzn: 1000 },
+    { tipo: "cotacao", data: "2026-04-15", total_mzn: 24167.28 },
+    { tipo: "cotacao", data: "2025-12-31", total_mzn: 999999 },
+    { tipo: "fatura", data: "2025-07-01", total_mzn: 777 },
+    { tipo: "fatura", data: "2026-05-05" }
+  ];
+
+  test("faturas e cotações ficam em números SEPARADOS (cotação convertida não dobra o total)", () => {
+    const t = totaisAnoPorTipo(docs, 2026);
+    expect(t.faturas).toBe(54452.8);
+    expect(t.cotacoes).toBe(24167.28);
+  });
+
+  test("só entra quem tem data no ano pedido", () => {
+    const t = totaisAnoPorTipo(docs, 2025);
+    expect(t.faturas).toBe(777);
+    expect(t.cotacoes).toBe(999999);
+  });
+
+  test("documento sem total_mzn conta 0, não rebenta", () => {
+    const t = totaisAnoPorTipo(docs, 2026);
+    expect(t.faturas).toBe(54452.8);
+  });
+
+  test("lista vazia dá zeros", () => {
+    expect(totaisAnoPorTipo([], 2026)).toEqual({ faturas: 0, cotacoes: 0 });
+  });
+
+  test("o mesmo trabalho em cotação + fatura soma uma só vez nas faturas", () => {
+    const trabalho = [
+      { tipo: "cotacao", data: "2026-02-01", total_mzn: 50000 },
+      { tipo: "fatura", data: "2026-03-01", total_mzn: 50000 }
+    ];
+    const t = totaisAnoPorTipo(trabalho, 2026);
+    expect(t.faturas).toBe(50000);
+    expect(t.cotacoes).toBe(50000);
   });
 });

@@ -112,6 +112,13 @@ export function EditorClient({
   const [autorOriginal, setAutorOriginal] = useState<{ nome: string; cargo: string } | null>(null);
   const [fonteConversao, setFonteConversao] = useState("");
   const [aImprimirAnexo, setAImprimirAnexo] = useState(false);
+  /* Descrição rica à espera de entrar no ecrã. O HTML não pode ser escrito
+     directamente em richRef durante a carga: o formulário ainda não está
+     montado (o ecrã mostra o spinner) e richRef.current era null - a
+     descrição nunca aparecia e ao gravar saía vazia para a base,
+     apagando a descrição do documento original. Passa por estado e um
+     efeito aplica-a quando o editor monta. */
+  const [richCarga, setRichCarga] = useState<{ html: string; chave: number }>({ html: "", chave: 0 });
 
   /* ---------- carregar ---------- */
 
@@ -139,14 +146,20 @@ export function EditorClient({
       if (doc.utilizador_nome) {
         setAutorOriginal({ nome: doc.utilizador_nome, cargo: doc.utilizador_cargo || "" });
       }
-      if (richRef.current) {
-        const s = String(doc.assunto || "");
-        richRef.current.innerHTML = s; // o servidor já mandou HTML limpo
-        richRef.current.classList.toggle("rich-vazio", !richRef.current.innerText.trim());
-      }
+      setRichCarga((c) => ({ html: String(doc.assunto || ""), chave: c.chave + 1 }));
     },
     []
   );
+
+  /* Marca o cliente da base no select quando o nome do documento casa com
+     um cliente registado. Sem isto, o select voltava a "- Selecionar
+     cliente -" ao editar ou converter, parecendo que o cliente se perdeu
+     (o nome estava, mas a lista ficava desmarcada). */
+  const marcarClienteNaLista = (d: Dados | null, nome: string) => {
+    if (!nome) return;
+    const c = (d?.clientes || []).find((x) => x.nome === nome);
+    if (c) setSelCliente(c.id);
+  };
 
   useEffect(() => {
     let vivo = true;
@@ -162,6 +175,7 @@ export function EditorClient({
           );
           if (!vivo) return;
           preencherDeDoc(r.documento, r.itens);
+          marcarClienteNaLista(d, r.documento.cliente_nome);
         } else if (idFonte) {
           // Gerar fatura a partir da cotação fonte
           const r = await pedir<{ documento: DocFaturacao; itens: ItemFaturacao[] }>(
@@ -172,6 +186,7 @@ export function EditorClient({
             toast.error("O documento fonte não é uma cotação.");
           }
           preencherDeDoc(r.documento, r.itens);
+          marcarClienteNaLista(d, r.documento.cliente_nome);
           setDocId("");
           setDocTipo("fatura");
           setFonteConversao(r.documento.numero);
@@ -196,6 +211,7 @@ export function EditorClient({
               valor_unit: 0
             }
           ]);
+          setRichCarga((c) => ({ html: "", chave: c.chave + 1 }));
         }
       } catch (e) {
         if (vivo) setFalha((e as Error).message);
@@ -221,6 +237,19 @@ export function EditorClient({
       ed.removeEventListener("blur", vazio);
     };
   }, [aCarregar]);
+
+  /* Aplica o HTML da descrição quando o editor está montado. Corre com a
+     chave (não com o valor): converter uma cotação cujo assunto é igual
+     ao do documento aberto teria de repetir a escrita mesmo com o HTML
+     idêntico, senão o conteúdo antigo do ecrã ficava no lugar. */
+  useEffect(() => {
+    if (aCarregar) return;
+    const ed = richRef.current;
+    if (!ed) return;
+    ed.innerHTML = richCarga.html; // o servidor já mandou HTML limpo
+    ed.classList.toggle("rich-vazio", !ed.innerText.trim());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [richCarga.chave, aCarregar]);
 
   const comando = (cmd: string) => {
     const ed = richRef.current;

@@ -191,7 +191,7 @@ const docPorId = (id) =>
     const url = rota.request().url();
     const id = url.split("/").pop().split("?")[0];
     if (rota.request().method() !== "GET") {
-      metodosDoc.push(rota.request().method());
+      metodosDoc.push({ m: rota.request().method(), corpo: rota.request().postDataJSON() });
       return rota.fulfill({ json: { ok: true, id, numero: "012/2026" } });
     }
     const doc = docPorId(id);
@@ -269,13 +269,22 @@ const docPorId = (id) =>
   ok("Painel: filtro por tipo presente", (await pg.locator('select[aria-label="Filtrar por tipo"]').count()) === 1);
   ok("Painel: acção Gerar Fatura na cotação", (await pg.locator('button[title*="Gerar Fatura"]').count()) >= 1);
 
+  /* O cartão do dinheiro contava COTAÇÕES e FATURAS no mesmo número:
+     converter a cotação 008/26 em fatura dobrava o total do ano
+     (24.167,28 + 53.452,80 = 77.620,08 contados como um só). Agora o
+     cartão mostra só as faturas e as cotações ficam à parte. */
+  ok("Painel: cartão Faturado 2026", html.includes("Faturado 2026 (MZN equiv.)"));
+  ok("Painel: Faturado 2026 = só faturas (53.452,80)", html.includes("53.452,80"));
+  ok("Painel: cotações 2026 à parte (24.167,28 MZN)", html.includes("Cotações 2026: 24.167,28 MZN"));
+  ok("Painel: o total dobrado (77.620,08) NÃO aparece", !html.includes("77.620,08"));
+
   /* apagar: o botão do painel tem de mandar DELETE à rota do documento.
      Mandava POST para uma rota que só aceita DELETE: nunca apagava. */
   await pg.locator('button[title="Apagar"]').first().click();
   await pg.waitForTimeout(300);
   await pg.locator('button:has-text("Apagar")').last().click();
   await pg.waitForTimeout(600);
-  ok("Painel: apagar manda DELETE à rota do documento", metodosDoc.includes("DELETE"), JSON.stringify(metodosDoc));
+  ok("Painel: apagar manda DELETE à rota do documento", metodosDoc.some((x) => x.m === "DELETE"), JSON.stringify(metodosDoc));
 
   /* pesquisa */
   await pg.fill('input[placeholder*="Pesquisar por número"]', "ACCESS");
@@ -344,6 +353,20 @@ const docPorId = (id) =>
   ok("Editor conversão: cliente copiado", (await pg.inputValue('input[placeholder="Nome da empresa"]')) === "Cornelder de Moçambique (CdM)");
   ok("Editor conversão: linha técnica copiada (Técnico Mecânico)", html.includes("Técnico Mecânico"));
 
+  /* A descrição rica NUNCA entrava no ecrã: o HTML era escrito no ref
+     enquanto o formulário ainda não estava montado (richRef null) e ao
+     gravar saía VAZIO para a base - a cotação perdia a descrição. */
+  const descConvertida = await pg.locator(".rich-editor").innerText();
+  ok(
+    "Editor conversão: descrição rica copiada",
+    descConvertida.includes("Cotação de mão de obra para reparações"),
+    JSON.stringify(descConvertida.slice(0, 80))
+  );
+  ok(
+    "Editor conversão: select do cliente marcado na base",
+    (await pg.locator("select").first().inputValue()) === "cli-2"
+  );
+
   /* guardar (POST mock) */
   await pg.locator('button:has-text("Guardar") >> nth=0').click();
   await pg.waitForTimeout(600);
@@ -352,6 +375,11 @@ const docPorId = (id) =>
     const corpo = postsDocs[postsDocs.length - 1];
     ok("Editor conversão: corpo com tipo fatura", corpo.tipo === "fatura");
     ok("Editor conversão: itens copiados com qtd/tempo", corpo.itens?.[0]?.qtd === 2 && corpo.itens?.[0]?.tempo === 6);
+    ok(
+      "Editor conversão: descrição vai no corpo gravado",
+      String(corpo.assunto || "").includes("mão de obra") && String(corpo.assunto || "").includes("reparações"),
+      JSON.stringify(String(corpo.assunto || "").slice(0, 80))
+    );
   }
 
   /* ---------- 6. Editor: editar documento com material do cliente ---------- */
@@ -363,14 +391,29 @@ const docPorId = (id) =>
   ok("Editor edição: aviso do Anexo de Material", html.includes("Anexo de Material"));
   ok("Editor edição: autor original mantido", html.includes("Filomeno Manuel"));
 
+  /* Descrição também na EDIÇÃO (o mesmo bug esvaziava o campo e, ao
+     gravar, apagava a descrição do documento na base). */
+  const descEdicao = await pg.locator(".rich-editor").innerText();
+  ok(
+    "Editor edição: descrição rica carregada",
+    descEdicao.includes("Cotação de mão de obra para reparações"),
+    JSON.stringify(descEdicao.slice(0, 80))
+  );
+
   /* gravar a edição: PATCH na rota do documento. Mandava POST para uma
      rota que só aceita PATCH: 405 sem mensagem e o aviso genérico. */
   await pg.locator('button:has-text("Guardar") >> nth=0').click();
   await pg.waitForTimeout(600);
   ok(
     "Editor edição: gravar manda PATCH (não POST)",
-    metodosDoc.includes("PATCH") && !metodosDoc.includes("POST"),
-    JSON.stringify(metodosDoc)
+    metodosDoc.some((x) => x.m === "PATCH") && !metodosDoc.some((x) => x.m === "POST"),
+    JSON.stringify(metodosDoc.map((x) => x.m))
+  );
+  const patchCorpo = metodosDoc.find((x) => x.m === "PATCH")?.corpo;
+  ok(
+    "Editor edição: PATCH mantém a descrição (não apaga na base)",
+    String(patchCorpo?.assunto || "").includes("mão de obra") && String(patchCorpo?.assunto || "").includes("reparações"),
+    JSON.stringify(String(patchCorpo?.assunto || "").slice(0, 80))
   );
 
   /* ---------- 7. Clientes / Técnicos / Tarifas ---------- */

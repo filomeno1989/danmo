@@ -36,6 +36,7 @@ import {
   hojeISO,
   SERVICO_LABEL,
   textoSemTags,
+  totaisAnoPorTipo,
   type ClienteFat,
   type DocFaturacao,
   type ServicoTipo
@@ -117,13 +118,18 @@ export function FaturacaoClient({
   const stats = useMemo(() => {
     const docs = dados?.documentos || [];
     const doAno = docs.filter((d) => String(d.data || "").slice(0, 4) === String(ano));
+    /* Dinheiro do ano SÓ das faturas: somar cotações no mesmo número
+       dobrava o valor quando a cotação era convertida (o mesmo trabalho
+       contava 2x). As cotações ficam à parte, no próprio cartão. */
+    const dinheiro = totaisAnoPorTipo(docs, ano);
     return {
       total: docs.length,
       cotacoes: docs.filter((d) => d.tipo === "cotacao").length,
       faturas: docs.filter((d) => d.tipo === "fatura").length,
       clientes: (dados?.clientes || []).filter((c) => c.ativo !== false).length,
       doAno: doAno.length,
-      mznAno: doAno.reduce((s, d) => s + (Number(d.total_mzn) || 0), 0)
+      mznFaturas: dinheiro.faturas,
+      mznCotacoes: dinheiro.cotacoes
     };
   }, [dados, ano]);
 
@@ -160,8 +166,9 @@ export function FaturacaoClient({
         <Stat icone={<Users className="size-4" aria-hidden />} valor={stats.clientes} rotulo="Clientes activos" />
         <Stat
           icone={<Receipt className="size-4" aria-hidden />}
-          valor={fmtNum(stats.mznAno)}
-          rotulo={`Total ${ano} (MZN equiv.)`}
+          valor={fmtNum(stats.mznFaturas)}
+          rotulo={`Faturado ${ano} (MZN equiv.)`}
+          nota={`Cotações ${ano}: ${fmtNum(stats.mznCotacoes)} MZN`}
           pequeno
         />
       </section>
@@ -378,11 +385,13 @@ function Stat({
   icone,
   valor,
   rotulo,
+  nota,
   pequeno
 }: {
   icone: React.ReactNode;
   valor: number | string;
   rotulo: string;
+  nota?: string;
   pequeno?: boolean;
 }) {
   return (
@@ -394,6 +403,7 @@ function Stat({
         <div className="min-w-0">
           <div className={`truncate font-bold ${pequeno ? "text-lg" : "text-xl"}`}>{valor}</div>
           <div className="text-[0.7rem] uppercase tracking-wide text-muted-foreground">{rotulo}</div>
+          {nota && <div className="truncate text-[0.68rem] italic text-muted-foreground">{nota}</div>}
         </div>
       </CardContent>
     </Card>

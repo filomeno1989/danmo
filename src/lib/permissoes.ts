@@ -85,7 +85,7 @@ export const MODULOS: Modulo[] = [
     grupos: [
       {
         label: "RH & Quadro de Pessoal",
-        itens: [{ label: "RH & Quadro de Pessoal", href: "/em-migracao?mod=rh" }]
+        itens: [{ label: "Quadro de Pessoal", href: "/rh/quadro", pagina: "rh.quadro" }]
       },
       {
         label: "Avaliação de Desempenho",

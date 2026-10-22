@@ -236,7 +236,7 @@ const docPorId = (id) =>
   await pg.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
   await pg.waitForTimeout(900);
   const home = await pg.content();
-  ok("Home: cartao Admin. Oficinal no ar com a Faturação", home.includes("Faturação no ar"));
+  ok("Home: cartao Admin. Oficinal no ar com a Faturação e o Quadro", home.includes("No ar: Faturação com Cotações e Faturas e o Quadro de Pessoal"));
   ok("Home: cartao aponta a /faturacao", home.includes('href="/faturacao"'));
 
   /* ---------- 2. Menu: grupo Faturação com as 6 páginas ---------- */
@@ -258,8 +258,14 @@ const docPorId = (id) =>
       await grupoRH.click();
       await pg.waitForTimeout(300);
     }
+    ok("Menu: Quadro de Pessoal listado como página real", (await pg.locator('nav a[href="/rh/quadro"]').count()) === 1);
+    const grupoAval = pg.locator('nav button:has-text("Avaliação de Desempenho")').first();
+    if ((await grupoAval.count()) > 0) {
+      await grupoAval.click();
+      await pg.waitForTimeout(300);
+    }
     const linksMigracao = await pg.locator('nav a[href*="em-migracao"]').count();
-    ok("Menu: grupos por migrar ficam como cartaz para o admin (RH...)", linksMigracao >= 1);
+    ok("Menu: grupos por migrar ficam como cartaz para o admin (Avaliação...)", linksMigracao >= 1);
   }
 
   /* ---------- 3. Painel ---------- */

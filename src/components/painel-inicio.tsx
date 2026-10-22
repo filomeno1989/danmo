@@ -128,6 +128,7 @@ export function PainelInicio({
   podeOficina,
   podeStock,
   podeFaturacao,
+  podeQuadro,
   eAdmin,
   fundos
 }: {
@@ -136,6 +137,7 @@ export function PainelInicio({
   podeOficina: boolean;
   podeStock: boolean;
   podeFaturacao: boolean;
+  podeQuadro: boolean;
   eAdmin: boolean;
   fundos?: Parameters<typeof HeroiSaudacao>[0]["fundosIniciais"];
 }) {
@@ -210,7 +212,7 @@ export function PainelInicio({
           />
         </SemPermissaoAplicada>
 
-        <SemPermissaoAplicada permitido={podeFaturacao}>
+        <SemPermissaoAplicada permitido={podeFaturacao || podeQuadro}>
           <CartaoFase
             classeFundo="fase-ambar text-amber-950 dark:text-white"
             icone={Briefcase}
@@ -218,12 +220,16 @@ export function PainelInicio({
             marcaAgua={Briefcase}
             titulo="Admin. Oficinal"
             corTitulo="text-amber-950 dark:text-white"
-            texto="Faturação no ar: Cotações e Faturas com numeração anual 001/2026, conversão de cotação em fatura e anexo de material do cliente. Seguem RH, Avaliação, Aquisições e Férias."
+            texto={
+              podeFaturacao
+                ? "No ar: Faturação com Cotações e Faturas e o Quadro de Pessoal com as duas listas (Porto e TCM), estagiários e tempo de quem veio transferido. Seguem Avaliação, Aquisições e Férias."
+                : "No ar: o Quadro de Pessoal com as duas listas (Porto e TCM), estagiários com decisão no fim e o tempo de quem veio transferido. Seguem Avaliação, Aquisições e Férias."
+            }
             corTexto="text-amber-900/75 dark:text-white/75"
             pill={pillNoAr}
             seta="border-amber-700/30 text-amber-900 hover:bg-amber-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
-            href="/faturacao"
-            rotulo="Abrir a Faturação da Administração"
+            href={podeFaturacao ? "/faturacao" : "/rh/quadro"}
+            rotulo={podeFaturacao ? "Abrir a Faturação da Administração" : "Abrir o Quadro de Pessoal"}
           />
         </SemPermissaoAplicada>
 

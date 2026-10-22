@@ -110,10 +110,17 @@ describe("pode(): as 3 marcas", () => {
 });
 
 describe("PAGINAS: o mapa das páginas atribuíveis", () => {
-  test("são as 24 páginas reais dos 4 módulos no ar (18 + 6 da Faturação)", () => {
-    expect(PAGINAS.length).toBe(24);
+  test("são as 25 páginas reais dos 4 módulos no ar (18 + 6 da Faturação + 1 do RH)", () => {
+    expect(PAGINAS.length).toBe(25);
     const modulos = new Set(PAGINAS.map((p) => p.modulo));
     expect([...modulos].sort()).toEqual(["admin", "disponibilidade", "oficina", "stock"]);
+  });
+  test("o Quadro de Pessoal (RH) entra na matriz pela página rh.quadro", () => {
+    const rh = PAGINAS.filter((p) => p.pagina.startsWith("rh."));
+    expect(rh.length).toBe(1);
+    expect(rh[0].pagina).toBe("rh.quadro");
+    expect(rh[0].href).toBe("/rh/quadro");
+    expect(rh[0].modulo).toBe("admin");
   });
   test("a Faturação entra na matriz como páginas novas (sem href do sub, vem dos grupos)", () => {
     const fat = PAGINAS.filter((p) => p.pagina.startsWith("faturacao"));

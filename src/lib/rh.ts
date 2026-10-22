@@ -565,16 +565,20 @@ export type Aniversariante = {
 };
 
 /**
- * Quem faz anos NESTE mes (data de hoje no fuso de Maputo), ordenado
- * pelo dia. So activos. Fev/29 entra no mes 2 sempre: quando o ano
- * nao e bissexto a pessoa continua a aparecer com o dia 29.
+ * Quem faz anos no MES pedido (por omissao o mes da data de hoje, no
+ * fuso de Maputo), ordenado pelo dia. So activos. Fev/29 entra no mes
+ * 2 sempre: quando o ano nao e bissexto a pessoa continua a aparecer
+ * com o dia 29. O mes navegavel (pagina Aniversarios) usa o 3o
+ * argumento; o cartao do home chama sem ele, como sempre.
  */
 export function aniversariantesDoMes(
   cols: Pick<Colaborador, "id" | "name" | "active" | "data_nascimento" | "empresa">[],
-  hojeISO?: string
+  hojeISO?: string,
+  mesPedido?: number
 ): Aniversariante[] {
   const hoje = paraData(hojeISO || dataHojeISO())!;
-  const mes = hoje.getUTCMonth() + 1;
+  const mesActual = hoje.getUTCMonth() + 1;
+  const mes = mesPedido && mesPedido >= 1 && mesPedido <= 12 ? mesPedido : mesActual;
   const diaHoje = hoje.getUTCDate();
   const ano = hoje.getUTCFullYear();
   const lista: Aniversariante[] = [];
@@ -588,7 +592,69 @@ export function aniversariantesDoMes(
       dia: nasc.getUTCDate(),
       idadeFaz: ano - nasc.getUTCFullYear(),
       empresa: c.empresa || null,
-      hoje: nasc.getUTCDate() === diaHoje
+      hoje: mes === mesActual && nasc.getUTCDate() === diaHoje
+    });
+  }
+  return lista.sort((a, b) => a.dia - b.dia || a.nome.localeCompare(b.nome, "pt"));
+}
+
+/* ------------------------------------------------------------------
+ * Anos de casa no mes (aniversario de trabalho, para o cartaz)
+ * ------------------------------------------------------------------ */
+
+export type AnoCasa = {
+  id: number;
+  nome: string;
+  dia: number; // dia do mes em que completa os anos
+  anosFaz: number; // anos de servico que completa este ano
+  empresa: string | null;
+  inicio: string; // ISO do inicio do servico (a mesma data que a ficha mostra)
+  hoje: boolean; // completa os anos exactamente hoje
+};
+
+/**
+ * Quem completa anos de SERVICO no mes pedido (por omissao o actual):
+ * o mes/dia do inicio de servico (a mesma conta de sempre, o fim do
+ * estagio conta como inicio) cai no mes e a pessoa completa 1 ano ou
+ * mais este ano. So activos, ordenado pelo dia igual aos
+ * aniversarios. A data vem de inicioServico, a mesma fonte do
+ * "Tempo de casa" da ficha, para o cartaz nunca contradizer a ficha.
+ */
+export function anosDeCasaDoMes(
+  cols: Pick<
+    Colaborador,
+    | "id"
+    | "name"
+    | "active"
+    | "empresa"
+    | "tipo_colaborador"
+    | "estagio_data_inicio"
+    | "data_admissao_danmo"
+    | "data_admissao"
+  >[],
+  hojeISO?: string,
+  mesPedido?: number
+): AnoCasa[] {
+  const hoje = paraData(hojeISO || dataHojeISO())!;
+  const mesActual = hoje.getUTCMonth() + 1;
+  const mes = mesPedido && mesPedido >= 1 && mesPedido <= 12 ? mesPedido : mesActual;
+  const diaHoje = hoje.getUTCDate();
+  const ano = hoje.getUTCFullYear();
+  const lista: AnoCasa[] = [];
+  for (const c of cols) {
+    if (c.active === false) continue;
+    const inicio = paraData(inicioServico(c));
+    if (!inicio || inicio.getUTCMonth() + 1 !== mes) continue;
+    const anos = ano - inicio.getUTCFullYear();
+    if (anos < 1) continue;
+    lista.push({
+      id: c.id,
+      nome: c.name || "?",
+      dia: inicio.getUTCDate(),
+      anosFaz: anos,
+      empresa: c.empresa || null,
+      inicio: inicio.toISOString().slice(0, 10),
+      hoje: mes === mesActual && inicio.getUTCDate() === diaHoje
     });
   }
   return lista.sort((a, b) => a.dia - b.dia || a.nome.localeCompare(b.nome, "pt"));
@@ -743,4 +809,74 @@ export function formatoBytes(n: number): string {
 /** Rotulo bonito do mes guardado na ficha ("Marco" -> "Março"). */
 export function mesLabel(mes: string | null | undefined): string {
   return mes === "Marco" ? "Março" : mes || "";
+}
+
+/* ------------------------------------------------------------------
+ * Arquivo central de documentos (pagina Documentos do RH)
+ * ------------------------------------------------------------------ */
+
+/** Linha do arquivo central: metadados do anexo + quem o possui. */
+export type LinhaDoc = {
+  id: string;
+  colaborador_id: number;
+  nome: string; // nome do colaborador que possui o anexo
+  empresa: string | null;
+  tipo: string;
+  titulo: string;
+  emissao: string | null;
+  validade: string | null;
+  arquivo_tipo: string;
+  arquivo_bytes: number;
+  criado_em: string;
+};
+
+export type FiltroDocs = {
+  busca: string;
+  tipo: string; // "" = todos os tipos
+  situacao: "" | SituacaoDoc | "ok"; // "" = todas as situacoes
+};
+
+/**
+ * Filtros do arquivo central: pesquisa SEM ACENTOS por titulo ou nome
+ * do colaborador, tipo de documento e situacao da validade (um anexo
+ * sem validade nao tem situacao e sai quando o filtro esta activo).
+ */
+export function filtrarDocumentos(
+  docs: LinhaDoc[],
+  f: FiltroDocs,
+  hojeISO?: string
+): LinhaDoc[] {
+  const busca = normalizar(f.busca);
+  return docs.filter((d) => {
+    if (f.tipo && d.tipo !== f.tipo) return false;
+    if (busca && !normalizar(d.titulo).includes(busca) && !normalizar(d.nome).includes(busca)) {
+      return false;
+    }
+    if (f.situacao && situacaoPorValidade(d.validade, hojeISO) !== f.situacao) return false;
+    return true;
+  });
+}
+
+/**
+ * Ordem do arquivo central: os mais graves primeiro (vencido, urgente,
+ * proximo, ok) e, dentro da mesma situacao, o que vence primeiro.
+ * Anexos sem validade ficam no fim, pelo mais recente anexado.
+ */
+export function ordenarDocumentos(docs: LinhaDoc[], hojeISO?: string): LinhaDoc[] {
+  const hoje = paraData(hojeISO || dataHojeISO())!;
+  const gravidade = (d: LinhaDoc): number => {
+    const v = paraData(d.validade);
+    if (!v) return 4;
+    const dias = Math.round((v.getTime() - hoje.getTime()) / 86400000);
+    if (dias < 0) return 0;
+    if (dias <= DIAS_URGENTE_DOC) return 1;
+    if (dias <= DIAS_ALERTA_DOC) return 2;
+    return 3;
+  };
+  return [...docs].sort(
+    (a, b) =>
+      gravidade(a) - gravidade(b) ||
+      (a.validade || "9999").localeCompare(b.validade || "9999") ||
+      b.criado_em.localeCompare(a.criado_em)
+  );
 }

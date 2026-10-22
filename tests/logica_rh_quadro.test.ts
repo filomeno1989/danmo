@@ -28,14 +28,27 @@ const {
   ESTADOS_CIVIS,
   fotosParaGrelha,
   aniversariantesDoMes,
+  anosDeCasaDoMes,
   alertasDocumentos,
   textoAlertaDoc,
   situacaoPorValidade,
   formatoBytes,
   mesLabel,
-  MAX_DOC_BYTES
+  MAX_DOC_BYTES,
+  filtrarDocumentos,
+  ordenarDocumentos
 } = await import("@/lib/rh");
-import type { Colaborador, DadosFicha } from "@/lib/rh";
+import type { Colaborador, DadosFicha, LinhaDoc } from "@/lib/rh";
+const {
+  MODELOS_CARTAZ,
+  titularCartaz,
+  linhaAnos,
+  dataLongaCartaz,
+  rodapeCartaz,
+  mensagemWhatsApp,
+  nomeFicheiroCartaz,
+  corAvatarCartaz
+} = await import("@/lib/cartazes");
 
 const HOJE = "2026-10-22";
 
@@ -679,5 +692,213 @@ describe("Situacao por validade, bytes e meses", () => {
     // base64 + 33% de 3 MB ~ 4 MB, abaixo dos 4.5 MB do limite
     expect(MAX_DOC_BYTES).toBe(3_000_000);
     expect(MAX_DOC_BYTES * 4 / 3).toBeLessThan(4_500_000);
+  });
+});
+
+/* ------------------------------------------------------------------
+ * Mes navegavel dos aniversarios + anos de casa (pagina nova)
+ * ------------------------------------------------------------------ */
+
+describe("Aniversariantes com mes navegavel", () => {
+  test("mes pedido diferente do mes de hoje lista outra malha", () => {
+    const lista = [
+      fichaBase({ id: 1, name: "Ana Maio", data_nascimento: "1995-05-20" }),
+      fichaBase({ id: 2, name: "Bruno Outubro", data_nascimento: "1990-10-05" })
+    ];
+    const r = aniversariantesDoMes(lista, HOJE, 5);
+    expect(r.map((x) => x.id)).toEqual([1]);
+    expect(r[0].dia).toBe(20);
+    expect(r[0].hoje).toBe(false);
+  });
+
+  test("mes invalido cai no mes de hoje", () => {
+    const lista = [fichaBase({ id: 2, name: "Bruno Outubro", data_nascimento: "1990-10-05" })];
+    expect(aniversariantesDoMes(lista, HOJE, 0)).toHaveLength(1);
+    expect(aniversariantesDoMes(lista, HOJE, 13)).toHaveLength(1);
+    expect(aniversariantesDoMes(lista, HOJE, undefined)).toHaveLength(1);
+  });
+
+  test("hoje marcado so no mes actual", () => {
+    const lista = [fichaBase({ id: 9, name: "Zeca do Dia", data_nascimento: "1988-10-22" })];
+    expect(aniversariantesDoMes(lista, HOJE)[0].hoje).toBe(true);
+    expect(aniversariantesDoMes(lista, HOJE, 10)[0].hoje).toBe(true);
+    expect(aniversariantesDoMes(lista, HOJE, 3)).toEqual([]);
+  });
+});
+
+describe("Anos de casa no mes", () => {
+  test("quem completa anos de servico no mes actual", () => {
+    const lista = [
+      fichaBase({ id: 1, name: "Ana 2021", data_admissao_danmo: "2021-10-10" }),
+      fichaBase({ id: 2, name: "Bruno fora do mes", data_admissao_danmo: "2020-03-05" }),
+      fichaBase({ id: 3, name: "Claudia menos de 1 ano", data_admissao_danmo: "2026-10-15" }),
+      fichaBase({ id: 4, name: "Diana sem data", data_admissao_danmo: null })
+    ];
+    const r = anosDeCasaDoMes(lista, HOJE);
+    expect(r.map((x) => x.id)).toEqual([1]);
+    expect(r[0].anosFaz).toBe(5);
+    expect(r[0].dia).toBe(10);
+    expect(r[0].inicio).toBe("2021-10-10");
+    expect(r[0].hoje).toBe(false);
+  });
+
+  test("estagiario conta pelo inicio do estagio, transferido pela Danmo", () => {
+    const lista = [
+      fichaBase({
+        id: 5,
+        name: "Estagio Outubro",
+        tipo_colaborador: "estagiario",
+        data_admissao_danmo: null,
+        estagio_data_inicio: "2025-10-01"
+      }),
+      fichaBase({
+        id: 6,
+        name: "Transferido 2019",
+        tipo_vinculo: "transferido",
+        data_admissao_grupo: "2016-10-12",
+        data_admissao_danmo: "2019-10-12"
+      })
+    ];
+    const r = anosDeCasaDoMes(lista, HOJE);
+    // o transferido conta o inicio NA DANMO (a mesma data do Tempo de casa)
+    expect(r.map((x) => x.id)).toEqual([5, 6]);
+    expect(r[0].anosFaz).toBe(1);
+    expect(r[1].anosFaz).toBe(7);
+  });
+
+  test("inactivo e mes pedido diferente ficam de fora", () => {
+    const lista = [
+      fichaBase({ id: 7, name: "Saiu", active: false, data_admissao_danmo: "2020-10-10" }),
+      fichaBase({ id: 8, name: "Maio", data_admissao_danmo: "2022-05-10" })
+    ];
+    expect(anosDeCasaDoMes(lista, HOJE)).toEqual([]);
+    expect(anosDeCasaDoMes(lista, HOJE, 5).map((x) => x.id)).toEqual([8]);
+  });
+
+  test("completar anos HOJE fica marcado", () => {
+    const r = anosDeCasaDoMes(
+      [fichaBase({ id: 9, name: "Hoje Faz", data_admissao_danmo: "2023-10-22" })],
+      HOJE
+    );
+    expect(r[0].hoje).toBe(true);
+    expect(r[0].anosFaz).toBe(3);
+  });
+});
+
+/* ------------------------------------------------------------------
+ * Cartazes: textos, modelos, ficheiro e cores
+ * ------------------------------------------------------------------ */
+
+describe("Cartazes", () => {
+  test("tres modelos com ids unicos", () => {
+    expect(MODELOS_CARTAZ).toHaveLength(3);
+    expect(new Set(MODELOS_CARTAZ.map((m) => m.id)).size).toBe(3);
+    expect(MODELOS_CARTAZ.map((m) => m.label)).toEqual(["Festivo", "Elegante", "Danmo"]);
+  });
+
+  test("titular muda com a ocasiao", () => {
+    expect(titularCartaz("aniversario")).toBe("Feliz Aniversário");
+    expect(titularCartaz("anosCasa")).toBe("Mais um ano de casa");
+  });
+
+  test("linha de anos com o singular do 1", () => {
+    expect(linhaAnos("aniversario", 35)).toBe("faz 35 anos");
+    expect(linhaAnos("aniversario", 1)).toBe("faz 1 ano");
+    expect(linhaAnos("anosCasa", 10)).toBe("10 anos de casa");
+    expect(linhaAnos("anosCasa", 1)).toBe("1 ano de casa");
+  });
+
+  test("data longa no estilo do portal", () => {
+    expect(dataLongaCartaz("2026-10-22")).toBe("22 de Outubro de 2026");
+    expect(dataLongaCartaz("2026-01-03T09:00:00Z")).toBe("3 de Janeiro de 2026");
+    expect(dataLongaCartaz("")).toBe("");
+    expect(dataLongaCartaz("podre")).toBe("");
+  });
+
+  test("rodape com a etiqueta certa da empresa", () => {
+    expect(rodapeCartaz("porto")).toBe("Danmo Porto");
+    expect(rodapeCartaz("danmo")).toBe("Danmo");
+    expect(rodapeCartaz(null)).toBe("Grupo Danmo");
+  });
+
+  test("mensagem do WhatsApp leva o nome e a ocasiao", () => {
+    expect(mensagemWhatsApp("aniversario", "Ana", 30)).toContain("Feliz aniversário, Ana");
+    expect(mensagemWhatsApp("anosCasa", "Bruno", 5)).toContain("5 anos de casa, Bruno");
+    expect(mensagemWhatsApp("anosCasa", "Bruno", 1)).toContain("1 ano de casa");
+  });
+
+  test("nome do ficheiro sem acentos e com a ocasiao", () => {
+    expect(nomeFicheiroCartaz("aniversario", "José Chingueture")).toBe(
+      "cartaz-jose-chingueture-aniversario.png"
+    );
+    expect(nomeFicheiroCartaz("anosCasa", "Ana Maria da Silva")).toBe(
+      "cartaz-ana-maria-da-silva-anos-de-casa.png"
+    );
+    expect(nomeFicheiroCartaz("aniversario", "")).toBe("cartaz-colaborador-aniversario.png");
+  });
+
+  test("cor das iniciais estavel pelo nome", () => {
+    expect(corAvatarCartaz("Ana")).toEqual(corAvatarCartaz("Ana"));
+    expect(corAvatarCartaz("Ana")).not.toEqual(corAvatarCartaz("Zeca"));
+  });
+});
+
+/* ------------------------------------------------------------------
+ * Arquivo central: filtros e ordem
+ * ------------------------------------------------------------------ */
+
+const docBase = (parcial: Partial<LinhaDoc> = {}): LinhaDoc => ({
+  id: "11111111-1111-4111-8111-111111111111",
+  colaborador_id: 1,
+  nome: "Fulano Teste",
+  empresa: "porto",
+  tipo: "B.I.",
+  titulo: "BI digitalizado",
+  emissao: null,
+  validade: null,
+  arquivo_tipo: "application/pdf",
+  arquivo_bytes: 1000,
+  criado_em: "2026-10-01T09:00:00Z",
+  ...parcial
+});
+
+describe("Arquivo central de documentos", () => {
+  test("pesquisa sem acentos por titulo e por nome", () => {
+    const docs = [
+      docBase({ id: "a", titulo: "Cartão de Condução do José", nome: "José Chingueture" }),
+      docBase({ id: "b", titulo: "Contrato da Ana", nome: "Ana Macamo" })
+    ];
+    const r = filtrarDocumentos(docs, { busca: "conducao", tipo: "", situacao: "" }, HOJE);
+    expect(r.map((x) => x.id)).toEqual(["a"]);
+    const r2 = filtrarDocumentos(docs, { busca: "macamo", tipo: "", situacao: "" }, HOJE);
+    expect(r2.map((x) => x.id)).toEqual(["b"]);
+  });
+
+  test("filtro por tipo e por situacao da validade", () => {
+    const docs = [
+      docBase({ id: "a", tipo: "B.I.", validade: "2026-10-20" }),
+      docBase({ id: "b", tipo: "Contrato", validade: "2027-06-01" }),
+      docBase({ id: "c", tipo: "B.I.", validade: null })
+    ];
+    const porTipo = filtrarDocumentos(docs, { busca: "", tipo: "B.I.", situacao: "" }, HOJE);
+    expect(porTipo.map((x) => x.id)).toEqual(["a", "c"]);
+    const vencidos = filtrarDocumentos(docs, { busca: "", tipo: "", situacao: "vencido" }, HOJE);
+    expect(vencidos.map((x) => x.id)).toEqual(["a"]);
+    const ok = filtrarDocumentos(docs, { busca: "", tipo: "", situacao: "ok" }, HOJE);
+    expect(ok.map((x) => x.id)).toEqual(["b"]);
+    // sem validade nao tem situacao: sai de qualquer filtro activo
+    const nenhum = filtrarDocumentos(docs, { busca: "", tipo: "", situacao: "urgente" }, HOJE);
+    expect(nenhum).toEqual([]);
+  });
+
+  test("ordem: vencido primeiro, sem validade no fim", () => {
+    const docs = [
+      docBase({ id: "tranquilo", validade: "2027-06-01", criado_em: "2026-10-01T09:00:00Z" }),
+      docBase({ id: "sem-data", validade: null, criado_em: "2026-10-05T09:00:00Z" }),
+      docBase({ id: "proximo", validade: "2026-11-20", criado_em: "2026-10-03T09:00:00Z" }),
+      docBase({ id: "vencido", validade: "2026-10-01", criado_em: "2026-10-02T09:00:00Z" })
+    ];
+    const r = ordenarDocumentos(docs, HOJE);
+    expect(r.map((x) => x.id)).toEqual(["vencido", "proximo", "tranquilo", "sem-data"]);
   });
 });

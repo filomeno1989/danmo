@@ -341,6 +341,15 @@ export function PainelInicio({
                   </li>
                 ))}
               </ul>
+              <div className="mt-4 border-t pt-3">
+                <Link
+                  href="/rh/aniversarios"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-primario hover:underline"
+                >
+                  Abrir Aniversários & Cartazes
+                  <ArrowRight className="size-4" aria-hidden />
+                </Link>
+              </div>
             </div>
           )}
 

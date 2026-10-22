@@ -8,7 +8,7 @@
 
 import { NextResponse, NextRequest } from "next/server";
 import { query } from "@/lib/supabase";
-import { autorizado, eErro, erroBase } from "@/lib/guarda-api";
+import { autorizadoEmAlguma, eErro, erroBase } from "@/lib/guarda-api";
 
 type Contexto = { params: Promise<{ id: string }> };
 
@@ -16,7 +16,9 @@ const idSeguro = (bruto: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bruto) ? bruto : "";
 
 export async function GET(req: NextRequest, ctx: Contexto) {
-  const auth = await autorizado("rh.quadro", "ver");
+  // Ver no Quadro OU na pagina Documentos: os dois lugares abrem e
+  // descarregam os anexos (anexar e apagar continuam no Quadro, mexer).
+  const auth = await autorizadoEmAlguma(["rh.quadro", "rh.documentos"]);
   if (eErro(auth)) return auth;
   const { id } = await ctx.params;
   const docId = idSeguro(id);

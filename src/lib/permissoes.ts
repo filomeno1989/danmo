@@ -84,8 +84,12 @@ export const MODULOS: Modulo[] = [
     fase: 0,
     grupos: [
       {
-        label: "RH & Quadro de Pessoal",
-        itens: [{ label: "Quadro de Pessoal", href: "/rh/quadro", pagina: "rh.quadro" }]
+        label: "Recursos Humanos",
+        itens: [
+          { label: "Quadro de Pessoal", href: "/rh/quadro", pagina: "rh.quadro" },
+          { label: "Aniversários & Cartazes", href: "/rh/aniversarios", pagina: "rh.aniversarios" },
+          { label: "Documentos", href: "/rh/documentos", pagina: "rh.documentos" }
+        ]
       },
       {
         label: "Avaliação de Desempenho",
@@ -229,7 +233,12 @@ export function labelPagina(pagina: string): string {
   const p = PAGINAS.find((x) => x.pagina === pagina);
   if (!p) return pagina;
   // Faturação: "Painel" sozinho não diz nada na matriz; prefixa o módulo.
-  const prefixo = pagina.startsWith("faturacao") ? "Faturação - " : "";
+  // Recursos Humanos: os 3 itens partilham o mesmo módulo na matriz.
+  const prefixo = pagina.startsWith("faturacao")
+    ? "Faturação - "
+    : pagina.startsWith("rh.")
+      ? "RH - "
+      : "";
   const mod = moduloPorId(p.modulo);
   return `${prefixo}${p.label} (${mod?.label || p.modulo})`;
 }

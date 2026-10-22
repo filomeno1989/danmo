@@ -100,6 +100,7 @@ type DocAnexado = {
   id: string;
   tipo: string;
   titulo: string;
+  emissao: string | null;
   validade: string | null;
   arquivo_nome: string;
   arquivo_tipo: string;
@@ -127,6 +128,7 @@ function SecaoDocumentos({
 }) {
   const [docs, setDocs] = useState<DocAnexado[] | null>(null);
   const [tipo, setTipo] = useState("");
+  const [emissao, setEmissao] = useState("");
   const [validade, setValidade] = useState("");
   const [aAnexar, setAAnexar] = useState(false);
   const [aApagar, setAApagar] = useState("");
@@ -169,6 +171,7 @@ function SecaoDocumentos({
           accao: "anexar",
           colaborador_id: fichaId,
           tipo,
+          emissao: emissao || null,
           validade: validade || null,
           arquivo,
           arquivo_nome: ficheiro.name,
@@ -179,6 +182,7 @@ function SecaoDocumentos({
       );
       if (d.documento) setDocs((atual) => [d.documento as DocAnexado, ...(atual || [])]);
       setTipo("");
+      setEmissao("");
       setValidade("");
       onMudou?.();
     } catch {
@@ -214,34 +218,58 @@ function SecaoDocumentos({
 
       {podeMexer && (
         <div className="mb-3 rounded-xl border bg-muted/30 p-3">
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr),minmax(0,1fr),auto]">
-            <select
-              value={tipo}
-              onChange={(e) => setTipo(e.target.value)}
-              aria-label="Tipo de documento"
-              className="border-input bg-background h-9 rounded-md border px-2.5 text-sm"
-            >
-              <option value="">Tipo de documento</option>
-              {TIPOS_DOCUMENTOS.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-            <input
-              type="date"
-              value={validade}
-              onChange={(e) => setValidade(e.target.value)}
-              aria-label="Validade do documento"
-              className="border-input bg-transparent dark:bg-input/30 flex h-9 rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            />
-            <button
-              type="button"
-              onClick={() => inputFicheiro.current?.click()}
-              disabled={aAnexar}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primario px-3 text-sm font-semibold text-white hover:bg-primario-forte disabled:opacity-60"
-            >
-              {aAnexar ? <LoaderCircle className="size-4 animate-spin" /> : <Paperclip className="size-4" />}
-              Anexar ficheiro
-            </button>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr),minmax(0,1fr),minmax(0,1fr),auto]">
+            <div>
+              <label htmlFor="doc-tipo" className="mb-1 block text-[0.68rem] font-semibold text-muted-foreground">
+                Tipo
+              </label>
+              <select
+                id="doc-tipo"
+                value={tipo}
+                onChange={(e) => setTipo(e.target.value)}
+                className="border-input bg-background h-9 w-full rounded-md border px-2.5 text-sm"
+              >
+                <option value="">Tipo de documento</option>
+                {TIPOS_DOCUMENTOS.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="doc-emissao" className="mb-1 block text-[0.68rem] font-semibold text-muted-foreground">
+                Emissão (opcional)
+              </label>
+              <input
+                id="doc-emissao"
+                type="date"
+                value={emissao}
+                onChange={(e) => setEmissao(e.target.value)}
+                className="border-input bg-background dark:bg-input/30 h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              />
+            </div>
+            <div>
+              <label htmlFor="doc-validade" className="mb-1 block text-[0.68rem] font-semibold text-muted-foreground">
+                Validade (opcional)
+              </label>
+              <input
+                id="doc-validade"
+                type="date"
+                value={validade}
+                onChange={(e) => setValidade(e.target.value)}
+                className="border-input bg-background dark:bg-input/30 h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={() => inputFicheiro.current?.click()}
+                disabled={aAnexar}
+                className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-primario px-3 text-sm font-semibold text-white hover:bg-primario-forte disabled:opacity-60 lg:w-auto"
+              >
+                {aAnexar ? <LoaderCircle className="size-4 animate-spin" /> : <Paperclip className="size-4" />}
+                Anexar ficheiro
+              </button>
+            </div>
           </div>
           <input
             ref={inputFicheiro}
@@ -275,6 +303,7 @@ function SecaoDocumentos({
                   <p className="truncate text-sm font-semibold">{doc.titulo}</p>
                   <p className="truncate text-[0.68rem] text-muted-foreground">
                     {formatoBytes(doc.arquivo_bytes)} · anexado {formatoData(doc.criado_em.slice(0, 10)) || "-"}
+                    {doc.emissao ? ` · emissão ${formatoData(doc.emissao)}` : ""}
                   </p>
                 </div>
                 <Etiqueta cor="bg-neutral-900/8 text-neutral-700 dark:bg-white/10 dark:text-neutral-200">

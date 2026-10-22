@@ -132,6 +132,7 @@ const DOC1 = {
   colaborador_id: 1,
   tipo: "B.I.",
   titulo: "BI Filomeno digitalizado",
+  emissao: "2023-01-31",
   validade: "2024-01-31",
   arquivo_nome: "bi-filomeno.pdf",
   arquivo_tipo: "application/pdf",
@@ -223,6 +224,7 @@ const FOTO_A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFc
         colaborador_id: corpo.colaborador_id,
         tipo: corpo.tipo,
         titulo: corpo.arquivo_nome.replace(/\.[^.]+$/, ""),
+        emissao: corpo.emissao || null,
         validade: corpo.validade || null,
         arquivo_nome: corpo.arquivo_nome,
         arquivo_tipo: corpo.arquivo_tipo,
@@ -347,12 +349,15 @@ const FOTO_A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFc
   ok("anexo mostra o titulo", (await linhaDoc.textContent()).includes("BI Filomeno digitalizado"));
   ok("anexo mostra o tamanho (793 KB)", (await linhaDoc.textContent()).includes("793 KB"));
   ok("anexo vencido mostra a data", (await linhaDoc.textContent()).includes("31/01/2024"));
+  ok("anexo mostra a emissao", (await linhaDoc.textContent()).includes("emissão 31/01/2023"));
+  ok("rotulos visiveis Emissao e Validade no anexo", (await pagina.locator('label[for="doc-emissao"]').textContent()).includes("Emissão") && (await pagina.locator('label[for="doc-validade"]').textContent()).includes("Validade"));
   ok("botao Abrir aponta ao ficheiro", (await linhaDoc.locator('a[aria-label^="Abrir"]').getAttribute("href")).endsWith("/arquivo"));
   ok("botao Descarregar com descarregar=1", (await linhaDoc.locator('a[aria-label^="Descarregar"]').getAttribute("href")).includes("descarregar=1"));
   ok("detalhe traz B.I. Validade", (await pagina.locator("body").textContent()).includes("B.I. Validade"));
 
-  await pagina.getByLabel("Tipo de documento").selectOption("B.I.");
-  await pagina.getByLabel("Validade do documento").fill(isoEmDias(40));
+  await pagina.locator("#doc-tipo").selectOption("B.I.");
+  await pagina.locator("#doc-emissao").fill("2023-06-01");
+  await pagina.locator("#doc-validade").fill(isoEmDias(40));
   await pagina.locator('input[type="file"]').setInputFiles({
     name: "bi-filomeno-novo.pdf",
     mimeType: "application/pdf",
@@ -364,7 +369,7 @@ const FOTO_A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFc
   ok("anexo novo aparece na lista", await pagina.getByText("bi-filomeno-novo").count() >= 1);
   const corpoPost = pedidosDocsPost[0];
   ok("POST manda o PDF em data URL", typeof corpoPost?.arquivo === "string" && corpoPost.arquivo.startsWith("data:application/pdf;base64,"));
-  ok("POST manda tipo e validade", corpoPost?.tipo === "B.I." && corpoPost?.validade === isoEmDias(40));
+  ok("POST manda tipo, emissao e validade", corpoPost?.tipo === "B.I." && corpoPost?.emissao === "2023-06-01" && corpoPost?.validade === isoEmDias(40));
 
   pagina.on("dialog", (d) => d.accept());
   await pagina.locator("[data-doc]").first().locator('button[aria-label^="Apagar"]').click();
@@ -452,13 +457,13 @@ const FOTO_A = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFc
   let abriuRh = false;
   for (let tentativa = 0; tentativa < 6 && !abriuRh; tentativa++) {
     await pagina.waitForTimeout(500);
-    abriuRh = (await pagina.locator("button", { hasText: "RH & Quadro de Pessoal" }).count()) > 0;
+    abriuRh = (await pagina.locator("button", { hasText: "Recursos Humanos" }).count()) > 0;
     if (!abriuRh && tentativa >= 1) {
       await pagina.locator("button[title='Admin. Oficinal']").first().click();
     }
   }
   await pagina.waitForTimeout(300);
-  await pagina.locator("button", { hasText: "RH & Quadro de Pessoal" }).first().click();
+  await pagina.locator("button", { hasText: "Recursos Humanos" }).first().click();
   await pagina.waitForTimeout(300);
   const menuLink = pagina.locator('a[href="/rh/quadro"]');
   ok("menu mostra o link Quadro de Pessoal activo", (await menuLink.count()) === 1);

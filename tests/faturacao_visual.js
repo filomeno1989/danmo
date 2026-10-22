@@ -253,7 +253,7 @@ const docPorId = (id) =>
     ok("Menu: Novo Documento listado", (await pg.locator('nav a[href="/faturacao/editor"]').count()) === 1);
     ok("Menu: Tarifas listadas", (await pg.locator('nav a[href="/faturacao/tarifas"]').count()) === 1);
     /* Abrir um grupo por migrar: os itens ficam como cartaz (admin entra) */
-    const grupoRH = pg.locator('nav button:has-text("RH & Quadro de Pessoal")').first();
+    const grupoRH = pg.locator('nav button:has-text("Recursos Humanos")').first();
     if ((await grupoRH.count()) > 0) {
       await grupoRH.click();
       await pg.waitForTimeout(300);

@@ -12,17 +12,7 @@
  */
 
 import { obterSessao, pode, podeVerAlgum, NIVEL_LABEL } from "@/lib/auth";
-import { chavesConfiguradas, query, queryTudo } from "@/lib/supabase";
-import {
-  MESES,
-  alertasDocumentos,
-  aniversariantesDoMes,
-  dataHojeISO,
-  type AlertaDoc,
-  type Aniversariante,
-  type Colaborador,
-  type ValidadeDoc
-} from "@/lib/rh";
+import { avisosDoQuadro } from "@/lib/avisos-server";
 import { PainelInicio } from "@/components/painel-inicio";
 
 const PAGINAS_FATURACAO = [
@@ -43,52 +33,6 @@ function cumprimento(): string {
   return "Boa noite";
 }
 
-/** Dados dos avisos do Quadro, a cavalo: falha vira lista vazia. */
-async function avisosQuadro(): Promise<{
-  aniversariantes: Aniversariante[];
-  mesNome: string;
-  alertas: AlertaDoc[];
-}> {
-  const vazio = { aniversariantes: [] as Aniversariante[], mesNome: "", alertas: [] as AlertaDoc[] };
-  if (!chavesConfiguradas()) return vazio;
-  try {
-    const hoje = dataHojeISO();
-    // O select completo precisa das colunas novas (SQL fase-rh-documentos).
-    // Enquanto o SQL nao for colado no Supabase, repete so com as colunas
-    // antigas: os ANIVERSARIANTES ja funcionam, os alertas de documentos
-    // entram quando as colunas existirem.
-    let cols: Colaborador[];
-    try {
-      cols = await queryTudo<Colaborador>(
-        "collaborators",
-        "select=id,name,categoria,empresa,active,data_nascimento,bi_validade,carta_conducao_validade"
-      );
-    } catch {
-      cols = await queryTudo<Colaborador>(
-        "collaborators",
-        "select=id,name,categoria,empresa,active,data_nascimento"
-      );
-    }
-    let docs: ValidadeDoc[] = [];
-    try {
-      docs = await query<ValidadeDoc>(
-        "rh_colaborador_documentos",
-        "select=colaborador_id,tipo,validade&validade=not.is.null"
-      );
-    } catch {
-      docs = [];
-    }
-    const mes = Number(hoje.slice(5, 7));
-    return {
-      aniversariantes: aniversariantesDoMes(cols, hoje),
-      mesNome: MESES[mes - 1] ? MESES[mes - 1] : "",
-      alertas: alertasDocumentos(cols, docs, hoje)
-    };
-  } catch {
-    return vazio;
-  }
-}
-
 export default async function PaginaInicio() {
   const sessao = await obterSessao();
   const nome = sessao?.utilizador.nome || "";
@@ -98,7 +42,7 @@ export default async function PaginaInicio() {
   const quem = cargo || nivelTexto || "";
 
   const podeQuadro = pode(sessao, "rh.quadro", "ver");
-  const avisos = podeQuadro ? await avisosQuadro() : null;
+  const avisos = podeQuadro ? await avisosDoQuadro() : null;
 
   return (
     <PainelInicio

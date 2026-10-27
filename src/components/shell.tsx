@@ -5,8 +5,10 @@
  *
  * Novo desenho (mockups do Filomeno, Outubro 2026):
  * - Topbar: logo à esquerda, PÍLULA de data/hora ao vivo ao centro
- *   (hora de Maputo), e à direita o alternador de tema, a campainha de
- *   novidades reais do portal e o perfil com ponto verde de estado;
+ *   (hora de Maputo), e à direita o alternador de tema, o SINO de
+ *   alertas reais (documentos a vencer, aniversários do dia, férias em
+ *   curso e prazo do RH - feed da API /api/portal/alertas) e o perfil
+ *   com ponto verde de estado;
  * - Sidebar: em computador nasce ABERTA com os nomes à vista (com botão
  *   para recolher a ícones, guardado no navegador); item activo com
  *   azulejo de ícone na cor da marca; no fundo, a citação da Danmo;
@@ -48,6 +50,9 @@ import {
   LogOut,
   Bell,
   CalendarDays,
+  Cake,
+  FileWarning,
+  Palmtree,
   ImageIcon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -85,13 +90,19 @@ const ICONES: Record<string, LucideIcon> = {
   Settings
 };
 
-type Novidade = {
+type AlertaSino = {
   id: string;
-  icone: LucideIcon;
-  cor: string;
-  fundo: string;
+  tipo: "documento" | "aniversario" | "ferias";
   titulo: string;
   texto: string;
+  href: string;
+  grave: boolean;
+};
+
+const APARENCIA_SINO: Record<AlertaSino["tipo"], { icone: LucideIcon; cor: string; fundo: string }> = {
+  documento: { icone: FileWarning, cor: "text-erro", fundo: "bg-erro-bg" },
+  aniversario: { icone: Cake, cor: "text-aviso", fundo: "bg-aviso-bg" },
+  ferias: { icone: Palmtree, cor: "text-sucesso", fundo: "bg-sucesso-bg" }
 };
 
 type Props = {
@@ -152,7 +163,7 @@ export function Shell({ utilizador, modulos, paginas, children }: Props) {
   const [moduloAberto, setModuloAberto] = useState<string | null>(null);
   const [grupoAberto, setGrupoAberto] = useState<string | null>(null);
   const [agora, setAgora] = useState<Date | null>(null);
-  const [novidadesVistas, setNovidadesVistas] = useState(true);
+  const [alertas, setAlertas] = useState<AlertaSino[] | null>(null);
 
   // Relógio: primeiro tick em seguida, depois cada 10 segundos (a pílula
   // mostra hora e minuto; um segundo a segundo seria desperdício)
@@ -172,12 +183,39 @@ export function Shell({ utilizador, modulos, paginas, children }: Props) {
     const t = setTimeout(() => {
       try {
         if (localStorage.getItem("danmo-menu") === "fechado") setRecolhida(true);
-        setNovidadesVistas(localStorage.getItem("danmo-novidades") === "vistas");
       } catch {
         // sem localStorage (navegação privada): usa os valores por defeito
       }
     }, 0);
     return () => clearTimeout(t);
+  }, []);
+
+  // SINO: alertas reais do portal, à hora em que a página abre (e a
+  // cada vez que o sino abre). Falha macio: sem rede, o sino mostra
+  // apenas o estado vazio.
+  const carregaAlertas = async () => {
+    try {
+      const r = await fetch("/api/portal/alertas", { cache: "no-store" });
+      const d = await r.json();
+      if (d?.ok) setAlertas(d.alertas as AlertaSino[]);
+    } catch {
+      // sem alertas nesta visita; tentamos de novo ao abrir o sino
+    }
+  };
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/portal/alertas", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!vivo || !d?.ok) return;
+        setAlertas(d.alertas as AlertaSino[]);
+      })
+      .catch(() => {
+        // sem alertas nesta visita; tentamos de novo ao abrir o sino
+      });
+    return () => {
+      vivo = false;
+    };
   }, []);
 
   // Ao mudar de página, fecha o menu do telemóvel (padrão "ajustar estado
@@ -239,46 +277,10 @@ export function Shell({ utilizador, modulos, paginas, children }: Props) {
 
   // Novidades REAIS do portal (nada de dados inventados): o que mudou
   // nesta fundação, o que a administração pode fazer e o auto-registo.
-  const novidades: Novidade[] = [
-    {
-      id: "fase1",
-      icone: CircleCheck,
-      cor: "text-sucesso",
-      fundo: "bg-sucesso-bg",
-      titulo: "Fase 1 concluída",
-      texto: "Fundação do portal no ar: login no servidor, menu por permissões e tema unificado."
-    },
-    ...(eAdmin
-      ? [
-          {
-            id: "personalizar",
-            icone: ImageIcon,
-            cor: "text-primario",
-            fundo: "bg-sucesso-bg",
-            titulo: "Personalizar portal",
-            texto: "Carrega fotos da empresa para o fundo do login e do painel, em Definições."
-          }
-        ]
-      : []),
-    {
-      id: "registo",
-      icone: UserRoundPlus,
-      cor: "text-aviso",
-      fundo: "bg-aviso-bg",
-      titulo: "Auto-registo activo",
-      texto: "Os colegas criam o acesso com o código de colaborador; depois a administração dá os restantes acessos."
-    }
-  ];
-  const novidadesCount = novidadesVistas ? 0 : novidades.length;
+  const alertasCount = alertas?.length || 0;
 
-  function verNovidades(aberto: boolean) {
-    if (!aberto) return;
-    setNovidadesVistas(true);
-    try {
-      localStorage.setItem("danmo-novidades", "vistas");
-    } catch {
-      // sem localStorage: só deixa de mostrar nesta visita
-    }
+  function aoAbrirSino(aberto: boolean) {
+    if (aberto) carregaAlertas();
   }
 
   const partes = agora ? partesMaputo(agora) : null;
@@ -345,49 +347,66 @@ export function Shell({ utilizador, modulos, paginas, children }: Props) {
             {iconeTema}
           </Button>
 
-          {/* Campainha: novidades reais do portal */}
-          <DropdownMenu onOpenChange={verNovidades}>
+          {/* Sino: alertas reais do portal (documentos, aniversários, férias) */}
+          <DropdownMenu onOpenChange={aoAbrirSino}>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label={`Novidades do portal${novidadesCount ? ` (${novidadesCount})` : ""}`}
-                title="Novidades do portal"
+                aria-label={`Alertas do portal${alertasCount ? ` (${alertasCount})` : ""}`}
+                title="Alertas do portal"
                 className="relative size-10 text-topbar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               >
                 <Bell className="size-5" aria-hidden />
-                {novidadesCount > 0 && (
+                {alertasCount > 0 && (
                   <span className="absolute top-1 right-1 flex size-4.5 items-center justify-center rounded-full bg-erro text-[0.6rem] font-bold text-white">
-                    {novidadesCount}
+                    {alertasCount}
                   </span>
                 )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80">
               <DropdownMenuLabel className="text-xs text-muted-foreground">
-                Novidades do portal
+                Alertas do portal
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <div className="space-y-1">
-                {novidades.map((n) => (
-                  <div key={n.id} className="flex items-start gap-2.5 rounded-lg px-2 py-2">
-                    <span
-                      className={
-                        "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg " +
-                        n.fundo
-                      }
-                    >
-                      <n.icone className={"size-4 " + n.cor} aria-hidden />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-[0.84rem] font-semibold">{n.titulo}</p>
-                      <p className="text-[0.76rem] leading-relaxed text-muted-foreground">
-                        {n.texto}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {alertas === null ? (
+                <p className="px-2 py-4 text-center text-[0.78rem] text-muted-foreground">
+                  A ver o que está a acontecer...
+                </p>
+              ) : alertas.length === 0 ? (
+                <p className="px-2 py-4 text-center text-[0.78rem] text-muted-foreground" data-sino-vazio>
+                  Sem alertas agora. Documentos a vencer, aniversários do dia e férias do mês
+                  aparecem aqui.
+                </p>
+              ) : (
+                <div className="max-h-96 space-y-1 overflow-y-auto">
+                  {alertas.map((n) => {
+                    const ap = APARENCIA_SINO[n.tipo];
+                    return (
+                      <DropdownMenuItem key={n.id} asChild>
+                        <Link
+                          href={n.href}
+                          data-sino-alerta={n.tipo}
+                          className="flex items-start gap-2.5 rounded-lg px-2 py-2"
+                        >
+                          <span className={"mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg " + ap.fundo}>
+                            <ap.icone className={"size-4 " + ap.cor} aria-hidden />
+                          </span>
+                          <span className="min-w-0">
+                            <span className={"block text-[0.84rem] font-semibold " + (n.grave ? "text-erro" : "")}>
+                              {n.titulo}
+                            </span>
+                            <span className="block text-[0.76rem] leading-relaxed text-muted-foreground">
+                              {n.texto}
+                            </span>
+                          </span>
+                        </Link>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </div>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 

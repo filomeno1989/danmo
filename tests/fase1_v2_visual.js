@@ -87,16 +87,17 @@ const FOTOS = "/home/z/my-project/danmo/tests";
   );
   ok("Acento claro é VERDE Danmo (rgba 0,150,57)", acClaro.includes("0, 150, 57"));
 
-  // 6. Campainha: 3 novidades reais e badge desaparece ao abrir
+  // 6. SINO: alertas REAIS do portal (modo estrutura sem base: vazio honesto
+  //    e badge fiel à contagem viva - não desaparece ao abrir)
   const badgeSel = "header span.bg-erro";
-  ok("Badge de novidades visível antes", (await page.locator(badgeSel).count()) === 1);
-  await page.getByRole("button", { name: /Novidades do portal/ }).click();
-  await page.waitForTimeout(500);
+  ok("Sem alertas: badge não aparece", (await page.locator(badgeSel).count()) === 0);
+  await page.getByRole("button", { name: /Alertas do portal/ }).click();
+  await page.waitForTimeout(600);
   const corpoBell = await page.textContent("body");
-  ok("Novidades reais na campainha", corpoBell.includes("Fase 1 concluída") && corpoBell.includes("Auto-registo activo"));
+  ok("Sino vazio diz o que aparecerá (documentos, aniversários, férias)", corpoBell.includes("Sem alertas agora"));
   await page.keyboard.press("Escape");
   await page.waitForTimeout(400);
-  ok("Badge some depois de abrir", (await page.locator(badgeSel).count()) === 0);
+  ok("Badge continua fiel (0 alertas = sem badge)", (await page.locator(badgeSel).count()) === 0);
 
   // 7. Tema escuro: unificado + acento VERDE no item activo
   await page.getByRole("button", { name: "Alternar tema" }).click();

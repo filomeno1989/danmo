@@ -50,3 +50,11 @@ export type FundoLogin = {
   nome: string;
   foto: string; // data URL (base64) da imagem já comprimida
 };
+
+/** Pesquisa sem acentos (mesma receita de todas as páginas do portal). */
+export function semAcentos(s: string): string {
+  return String(s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}

@@ -111,10 +111,10 @@ export const MODULOS: Modulo[] = [
       {
         label: "Plano de Férias",
         itens: [
-          { label: "Painel", href: "/em-migracao?mod=ferias" },
-          { label: "Plano Anual", href: "/em-migracao?mod=ferias" },
-          { label: "Calendário Visual", href: "/em-migracao?mod=ferias" },
-          { label: "O Meu Plano (consulta)", href: "/em-migracao?mod=ferias" }
+          { label: "Plano Anual", href: "/ferias/plano", pagina: "ferias.plano" },
+          { label: "Folha do Mês (RH)", href: "/ferias/mes", pagina: "ferias.mes" },
+          { label: "Alterações", href: "/ferias/alteracoes", pagina: "ferias.alteracoes" },
+          { label: "Configurações", href: "/ferias/configuracoes", pagina: "ferias.configuracoes" }
         ]
       },
       {
@@ -236,13 +236,16 @@ export function labelPagina(pagina: string): string {
   // Recursos Humanos: os 3 itens partilham o mesmo módulo na matriz.
   // Pedidos de Aquisição: mesma razão da Faturação (4 páginas "Painel",
   // "Novo Pedido"... ficam ambíguas sem o módulo).
+  // Plano de Férias: idem (Plano Anual, Folha do Mês...).
   const prefixo = pagina.startsWith("faturacao")
     ? "Faturação - "
     : pagina.startsWith("rh.")
       ? "RH - "
       : pagina.startsWith("aquisicao")
         ? "Aquisição - "
-        : "";
+        : pagina.startsWith("ferias")
+          ? "Férias - "
+          : "";
   const mod = moduloPorId(p.modulo);
   return `${prefixo}${p.label} (${mod?.label || p.modulo})`;
 }

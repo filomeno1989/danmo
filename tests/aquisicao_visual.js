@@ -188,7 +188,7 @@ const pedidoPorId = (id) => (id === "aq-002" ? PEDIDO_002 : id === "aq-001" ? PE
   const home = await pg.content();
   ok(
     "Home: cartao Admin. Oficinal menciona os Pedidos de Aquisição no ar",
-    home.includes("e os Pedidos de Aquisição. Seguem Avaliação e Férias")
+    home.includes("e os Pedidos de Aquisição. Segue a Avaliação de Desempenho")
   );
 
   /* ---------- 2. Menu: grupo Pedidos de Aquisição com 4 páginas ---------- */
@@ -208,7 +208,7 @@ const pedidoPorId = (id) => (id === "aq-002" ? PEDIDO_002 : id === "aq-001" ? PE
     ok("Menu: Configurações listadas", corpoMenu.includes('href="/aquisicao/configuracoes"'));
     const navHtml2 = corpoMenu;
     ok("Menu: Aquisição já não aponta a Em migração", !navHtml2.includes("em-migracao?mod=aquisicao"));
-    ok("Menu: grupo Férias segue presente (ainda por migrar)", navHtml2.includes("Plano de Férias"));
+    ok("Menu: grupo Plano de Férias presente (agora migrado)", navHtml2.includes("Plano de Férias"));
   }
 
   /* ---------- 3. Painel ---------- */

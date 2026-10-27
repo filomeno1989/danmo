@@ -110,10 +110,25 @@ describe("pode(): as 3 marcas", () => {
 });
 
 describe("PAGINAS: o mapa das páginas atribuíveis", () => {
-  test("são as 31 páginas reais dos 4 módulos no ar (18 + 6 da Faturação + 3 do RH + 4 da Aquisição)", () => {
-    expect(PAGINAS.length).toBe(31);
+  test("são as 35 páginas reais dos 5 módulos no ar (18 + 6 da Faturação + 3 do RH + 4 da Aquisição + 4 das Férias)", () => {
+    expect(PAGINAS.length).toBe(35);
     const modulos = new Set(PAGINAS.map((p) => p.modulo));
     expect([...modulos].sort()).toEqual(["admin", "disponibilidade", "oficina", "stock"]);
+  });
+  test("as Férias entram na matriz com as 4 páginas do grupo Plano de Férias", () => {
+    const fe = PAGINAS.filter((p) => p.pagina.startsWith("ferias"));
+    expect(fe.length).toBe(4);
+    expect(fe.map((p) => p.pagina).sort()).toEqual([
+      "ferias.alteracoes",
+      "ferias.configuracoes",
+      "ferias.mes",
+      "ferias.plano"
+    ]);
+    expect(fe.every((p) => p.modulo === "admin")).toBe(true);
+    expect(fe.find((p) => p.pagina === "ferias.plano")?.href).toBe("/ferias/plano");
+    expect(fe.find((p) => p.pagina === "ferias.mes")?.href).toBe("/ferias/mes");
+    expect(fe.find((p) => p.pagina === "ferias.alteracoes")?.href).toBe("/ferias/alteracoes");
+    expect(fe.find((p) => p.pagina === "ferias.configuracoes")?.href).toBe("/ferias/configuracoes");
   });
   test("a Aquisição entra na matriz com as 4 páginas do grupo Pedidos de Aquisição", () => {
     const aq = PAGINAS.filter((p) => p.pagina.startsWith("aquisicao"));

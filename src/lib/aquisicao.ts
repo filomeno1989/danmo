@@ -156,13 +156,9 @@ export function itensParaGravar(itens: Partial<ItemAquisicao>[]): ItemAquisicao[
   }));
 }
 
-/** Pesquisa sem acentos (mesma receita das restantes páginas do portal). */
-export function semAcentos(s: string): string {
-  return String(s || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
+/** Pesquisa sem acentos: fonte única no uso-comum (import e re-export). */
+import { semAcentos } from "./uso-comum";
+export { semAcentos };
 
 /** Alvo de pesquisa de um pedido: nº formatado, solicitante, fornecedor e materiais. */
 export function alvoPesquisaPedido(

@@ -321,6 +321,87 @@ const pedidoPorId = (id) => (id === "aq-002" ? PEDIDO_002 : id === "aq-001" ? PE
       corpoPost.itens[0]?.designacao === "Tinta Vermelha 5L"
   );
 
+  /* ---------- 5b. Unidade e Aplicação: lista abre com o "Un" de nascença ---------- */
+  /* O Filomeno: as unidades nascem "Un" e não deixam escolher outra sem
+     apagar primeiro (o Chromium filtra o datalist pelo texto escrito).
+     A lista própria abre SEMPRE completa, filtra ao escrever e aceita
+     unidades livres. */
+  await pg.goto(`${BASE}/aquisicao/novo`, { waitUntil: "domcontentloaded" });
+  await pg.waitForTimeout(1200);
+  const unidade1 = pg.locator('input[placeholder="Un"]').first();
+  ok("Editor: unidade da 1ª linha nasce Un", (await unidade1.inputValue()) === "Un");
+  await unidade1.click();
+  await pg.waitForTimeout(250);
+  const popupLista = pg.locator("[data-lista-opcoes]");
+  ok("Editor: clicar na unidade abre a lista flutuante", (await popupLista.count()) === 1);
+  const textoLista = (await popupLista.first().innerText()).replace(/\s+/g, " ");
+  ok(
+    "Editor: com o 'Un' no campo a lista mostra TODAS (Kg e Galão à vista)",
+    textoLista.includes("Kg") && textoLista.includes("Galão") && textoLista.includes("Pacote"),
+    textoLista
+  );
+  const caixaLista = await popupLista.first().boundingBox();
+  ok(
+    "Editor: lista flutuante fora do corte do overflow da tabela",
+    !!caixaLista && caixaLista.height > 20 && caixaLista.y > 0
+  );
+  await popupLista.first().locator('button:has-text("Kg")').first().click();
+  await pg.waitForTimeout(200);
+  ok(
+    "Editor: escolher Kg preenche o campo e fecha a lista",
+    (await unidade1.inputValue()) === "Kg" && (await popupLista.count()) === 0
+  );
+  await unidade1.fill("sa");
+  await pg.waitForTimeout(250);
+  const textoFiltrado = (await popupLista.first().innerText()).replace(/\s+/g, " ");
+  ok(
+    "Editor: escrever 'sa' filtra para Saco (Galão sai)",
+    (await popupLista.count()) === 1 && textoFiltrado.includes("Saco") && !textoFiltrado.includes("Galão"),
+    textoFiltrado
+  );
+  await unidade1.fill("Balde");
+  await pg.waitForTimeout(250);
+  ok(
+    "Editor: unidade fora da lista aceita-se (texto livre, lista some)",
+    (await popupLista.count()) === 0 && (await unidade1.inputValue()) === "Balde"
+  );
+  await unidade1.fill("Un");
+  const aplica1 = pg.locator('input[placeholder="Ex: Serralharia"]').first();
+  await aplica1.click();
+  await pg.waitForTimeout(250);
+  const textoApl = (await popupLista.first().innerText()).replace(/\s+/g, " ");
+  ok(
+    "Editor: aplicação abre com as aprendidas (Uso Oficinal)",
+    (await popupLista.count()) === 1 && textoApl.includes("Uso Oficinal"),
+    textoApl
+  );
+  await pg.locator('h2:has-text("Material Pedido")').click();
+  await pg.waitForTimeout(200);
+  ok("Editor: lista fecha ao clicar fora", (await popupLista.count()) === 0);
+
+  /* ---------- 5c. Modo escuro: opções dos <select> legíveis ---------- */
+  /* O popup nativo dos selects ficava cinza claro com letras brancas
+     no escuro (fundo semi-transparente do select resolvido sobre
+     claro). As opções passam a levar as cores opacas do tema. */
+  await pg.evaluate(() => document.documentElement.classList.add("dark"));
+  const corOpcao = await pg.evaluate(() => {
+    const op = document.querySelector('#f-fornecedor option[value="for-2"]');
+    if (!op) return null;
+    const s = getComputedStyle(op);
+    return { fundo: s.backgroundColor, texto: s.color };
+  });
+  ok(
+    "Modo escuro: opções do select com fundo escuro opaco (#141d30)",
+    !!corOpcao && corOpcao.fundo === "rgb(20, 29, 48)",
+    JSON.stringify(corOpcao)
+  );
+  ok(
+    "Modo escuro: opções do select com texto claro (#e6ebf4)",
+    !!corOpcao && corOpcao.texto === "rgb(230, 235, 244)",
+    JSON.stringify(corOpcao)
+  );
+  await pg.evaluate(() => document.documentElement.classList.remove("dark"));
+
   /* ---------- 6. Editor: edição do 002/2026 ---------- */
   await pg.goto(`${BASE}/aquisicao/novo?id=aq-002`, { waitUntil: "domcontentloaded" });
   await pg.waitForTimeout(1500);

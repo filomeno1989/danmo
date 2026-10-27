@@ -284,6 +284,19 @@
   html.sem-transicoes *::after {
     transition: none !important;
   }
+  /* POPUP das listas <select> legível no modo escuro (Denominação,
+     Fornecedor, Estado da Obra, filtros de ano...). O Chromium pinta
+     as opções do popup com o fundo do select (aqui semi-transparente,
+     dark:bg-input/30) resolvido sobre claro, e o texto herda a cor
+     clara do tema: fica cinza claro com letras brancas, quase
+     ilegível. No claro o texto é escuro e lê-se bem, por isso só o
+     .dark recebe cores próprias e opacas nas opções - o select no
+     ecrã não muda nada. */
+  .dark select option,
+  .dark select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
   /* Foco visível e consistente em todo o portal */
   :focus-visible {
     outline: 2px solid var(--ring);

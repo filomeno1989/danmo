@@ -42,6 +42,123 @@ type LinhaItem = ItemAquisicao & { chave: number };
 
 const NOVO = "__novo__";
 
+/**
+ * Campo com lista de atalhos (Unidade e Aplicação na tabela de material).
+ *
+ * Substitui o datalist do hub: o Chromium filtra as sugestões pelo texto
+ * já escrito e a Unidade nasce "Un", logo a lista só mostrava "Un" -
+ * era preciso apagar o campo para ver as outras unidades. Aqui a lista
+ * abre SEMPRE completa ao clicar (e filtra só enquanto se escreve),
+ * aceita texto livre para unidades fora da lista e vive em
+ * position: fixed para não ser cortada pelo overflow-x da tabela.
+ */
+function CampoLista({
+  valor,
+  onMuda,
+  opcoes,
+  placeholder,
+  rotulo
+}: {
+  valor: string;
+  onMuda: (v: string) => void;
+  opcoes: string[];
+  placeholder: string;
+  rotulo: string;
+}) {
+  const [aberta, setAberta] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number; w: number; paraCima: boolean } | null>(null);
+  /* O que vale para filtrar é o que o utilizador ESCREVEU com a lista
+     aberta, não o valor que o campo já tinha: a Unidade nasce "Un" e
+     mesmo assim a lista tem de abrir completa (era este o defeito do
+     datalist, que filtrava pelo valor e só mostrava "Un"). */
+  const [escrito, setEscrito] = useState(false);
+  const raizRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberta) return;
+    const fora = (e: MouseEvent) => {
+      if (raizRef.current && e.target instanceof Node && raizRef.current.contains(e.target)) return;
+      setAberta(false);
+    };
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAberta(false);
+    };
+    const fecha = () => setAberta(false);
+    document.addEventListener("mousedown", fora);
+    document.addEventListener("keydown", tecla);
+    window.addEventListener("scroll", fecha, true);
+    window.addEventListener("resize", fecha);
+    return () => {
+      document.removeEventListener("mousedown", fora);
+      document.removeEventListener("keydown", tecla);
+      window.removeEventListener("scroll", fecha, true);
+      window.removeEventListener("resize", fecha);
+    };
+  }, [aberta]);
+
+  const abre = () => {
+    const r = raizRef.current?.getBoundingClientRect();
+    if (!r) {
+      setAberta(true);
+      return;
+    }
+    /* Abre para baixo; sem espaço na página, abre para cima. */
+    const paraCima = r.bottom + 236 > window.innerHeight && r.top > 236;
+    setPos({
+      x: r.left,
+      y: paraCima ? window.innerHeight - r.top + 4 : r.bottom + 4,
+      w: Math.max(r.width, 128),
+      paraCima
+    });
+    setEscrito(false);
+    setAberta(true);
+  };
+
+  /* Escreveu com a lista aberta? filtra. Senão? lista inteira. */
+  const q = semAcentos(valor.trim());
+  const filtradas = escrito && q ? opcoes.filter((o) => semAcentos(o).includes(q)) : opcoes;
+
+  return (
+    <div ref={raizRef} className="relative">
+      <Input
+        value={valor}
+        onChange={(e) => {
+          setEscrito(true);
+          onMuda(e.target.value);
+        }}
+        onFocus={abre}
+        placeholder={placeholder}
+        aria-label={rotulo}
+      />
+      {aberta && pos && filtradas.length > 0 ? (
+        <div
+          data-lista-opcoes
+          className="fixed z-50 max-h-56 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-lg"
+          style={{
+            left: pos.x,
+            width: pos.w,
+            ...(pos.paraCima ? { bottom: pos.y } : { top: pos.y })
+          }}
+        >
+          {filtradas.map((o) => (
+            <button
+              key={o}
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+              onClick={() => {
+                onMuda(o);
+                setAberta(false);
+              }}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function EditorAquisicao({ idEdicao }: { idEdicao: string }) {
   const router = useRouter();
 
@@ -479,19 +596,21 @@ export function EditorAquisicao({ idEdicao }: { idEdicao: string }) {
                       />
                     </td>
                     <td className="py-1.5 pr-2">
-                      <Input
-                        value={i.unidade}
-                        list="dl-unidades-aq"
-                        onChange={(e) => mudaItem(i.chave, "unidade", e.target.value)}
+                      <CampoLista
+                        valor={i.unidade}
+                        onMuda={(v) => mudaItem(i.chave, "unidade", v)}
+                        opcoes={UNIDADES_AQ}
                         placeholder="Un"
+                        rotulo={`Unidade da linha ${idx + 1}`}
                       />
                     </td>
                     <td className="py-1.5 pr-2">
-                      <Input
-                        value={i.aplicacao}
-                        list="dl-aplicacoes-aq"
-                        onChange={(e) => mudaItem(i.chave, "aplicacao", e.target.value)}
+                      <CampoLista
+                        valor={i.aplicacao}
+                        onMuda={(v) => mudaItem(i.chave, "aplicacao", v)}
+                        opcoes={aplicacoes}
                         placeholder="Ex: Serralharia"
+                        rotulo={`Aplicação da linha ${idx + 1}`}
                       />
                     </td>
                     <td className="py-1.5 pr-2">
@@ -515,16 +634,6 @@ export function EditorAquisicao({ idEdicao }: { idEdicao: string }) {
               </tbody>
             </table>
           </div>
-          <datalist id="dl-unidades-aq">
-            {UNIDADES_AQ.map((u) => (
-              <option key={u} value={u} />
-            ))}
-          </datalist>
-          <datalist id="dl-aplicacoes-aq">
-            {aplicacoes.map((a) => (
-              <option key={a} value={a} />
-            ))}
-          </datalist>
         </CardContent>
       </Card>
 

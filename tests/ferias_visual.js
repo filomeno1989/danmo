@@ -8,7 +8,8 @@
  * (prazo do RH, lançar dias, marcar como enviado, copiar email), as
  * ALTERAÇÕES (aviso prévio à vista, recusas, histórico com ⚠), as
  * CONFIGURAÇÕES (regras, feriados, limpeza com dupla confirmação) e a
- * folha de AFIXAÇÃO A4 fora do shell.
+ * folha de AFIXAÇÃO A4 fora do shell (rota por query: mes?ano=...&mes=...).
+ * ÂMBITO: o módulo só considera a gente da DANMO PORTO (KPI visível).
  *
  * Ambiente: servidor dev SEM chaves (modo estrutura) na porta 3458 +
  * mocks de rede no estilo da base real (Playwright route).
@@ -95,7 +96,7 @@ const ALERTAS = [
   await pgSem.goto(`${BASE}/ferias/plano`, { waitUntil: "domcontentloaded" });
   await pgSem.waitForTimeout(500);
   ok("Sem sessao: /ferias/plano manda ao login", pgSem.url().includes("/login"), pgSem.url());
-  await pgSem.goto(`${BASE}/imprimir/ferias/mes/2027/3`, { waitUntil: "domcontentloaded" });
+  await pgSem.goto(`${BASE}/imprimir/ferias/mes?ano=2027&mes=3`, { waitUntil: "domcontentloaded" });
   await pgSem.waitForTimeout(500);
   ok("Sem sessao: a afixação também manda ao login", pgSem.url().includes("/login"), pgSem.url());
   await ctxSem.close();
@@ -230,6 +231,7 @@ const ALERTAS = [
   let corpo = limpo(await pg.content());
   ok("Plano: cabeçalho do módulo", corpo.includes("Plano de Férias") && corpo.includes("Folha anual"));
   ok("Plano: KPIs (activos, com mês, dias do RH, hoje)", (await pg.locator("[data-ferias-kpis] > *").count()) === 4);
+  ok("Plano: âmbito visível no KPI (só Danmo Porto)", corpo.includes("Colaboradores Danmo Porto"));
   ok("Plano: grelha com os 4 colaboradores", (await pg.locator("[data-ferias-grelha] tbody tr").count()) === 4);
   ok("Plano: Outubro nasce como ano de planeamento (2027)", corpo.includes(">2027<"));
   const celConf = pg.locator('[data-celula-ferias="confirmado"]').first();
@@ -375,8 +377,8 @@ const ALERTAS = [
   /* ---------- 7. (Permissões: cobertura nos testes lógicos, a matriz
      exige pessoa escolhida e no modo estrutura não há contas) ---------- */
 
-  /* ---------- 8. Afixação A4 (fora do shell) ---------- */
-  await pg.goto(`${BASE}/imprimir/ferias/mes/2027/3`, { waitUntil: "domcontentloaded" });
+  /* ---------- 8. Afixação A4 (fora do shell, rota por query) ---------- */
+  await pg.goto(`${BASE}/imprimir/ferias/mes?ano=2027&mes=3`, { waitUntil: "domcontentloaded" });
   await pg.waitForTimeout(1000);
   corpo = limpo(await pg.content());
   ok("Afixação: título do mês certo (Março de 2027)", corpo.includes("Folha de Férias - Março de 2027"));

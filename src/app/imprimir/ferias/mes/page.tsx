@@ -1,24 +1,33 @@
 /**
- * /imprimir/ferias/mes/[ano]/[mes] - Folha de afixação (A4 retrato).
+ * /imprimir/ferias/mes?ano=AAAA&mes=MM - Folha de afixação (A4 retrato).
  *
  * O quadro que vai para a parede: quem goza férias no mês, os dias de
  * direito, o período e a coluna de assinatura. Fora do shell do portal,
  * lido pelo SERVIDOR: sem sessão nem permissão, nem chega a ver os dados.
+ * O ano e o mês vêm por query (sem segmentos dinâmicos na rota).
+ *
+ * Âmbito: só a gente da DANMO PORTO (quem a Adm. Oficinal gere).
  */
 
 import { redirect } from "next/navigation";
 import { obterSessao, pode } from "@/lib/auth";
 import { queryTudo } from "@/lib/supabase";
 import { dataHojeISO } from "@/lib/rh";
-import { nomeMes, vivas, type LinhaPlano } from "@/lib/ferias";
-import { BotaoImprimir } from "../../../botao-imprimir";
+import {
+  FILTRO_EMPRESA_FERIAS,
+  nomeMes,
+  planoNoAmbito,
+  vivas,
+  type LinhaPlano
+} from "@/lib/ferias";
+import { BotaoImprimir } from "../botao-imprimir";
 
 export const metadata = { title: "Folha de Afixação de Férias | Portal Danmo" };
 
 export default async function PaginaAfixacao({
-  params
+  searchParams
 }: {
-  params: Promise<{ ano: string; mes: string }>;
+  searchParams: Promise<{ ano?: string; mes?: string }>;
 }) {
   const sessao = await obterSessao();
   if (!sessao) redirect("/login?motivo=sem_sessao");
@@ -28,7 +37,7 @@ export default async function PaginaAfixacao({
     pode(sessao, "ferias.alteracoes", "ver");
   if (!verAlgum) redirect("/");
 
-  const { ano: anoP, mes: mesP } = await params;
+  const { ano: anoP, mes: mesP } = await searchParams;
   const ano = Number(anoP);
   const mes = Number(mesP);
   if (!Number.isInteger(ano) || !Number.isInteger(mes) || mes < 1 || mes > 12) redirect("/");
@@ -49,9 +58,10 @@ export default async function PaginaAfixacao({
       active: boolean | null;
     }>(
       "collaborators",
-      "select=id,name,code,categoria,setor,active&order=name.asc"
+      `select=id,name,code,categoria,setor,active&order=name.asc&${FILTRO_EMPRESA_FERIAS}`
     );
-    linhas = vivas(plano, cols.filter((c) => c.active !== false)).sort((a, b) =>
+    const gente = cols.filter((c) => c.active !== false);
+    linhas = vivas(planoNoAmbito(plano, gente), gente).sort((a, b) =>
       a.nome.localeCompare(b.nome)
     );
   } catch {
@@ -60,7 +70,10 @@ export default async function PaginaAfixacao({
 
   return (
     <div className="min-h-screen bg-white text-black" data-afixacao>
-      <div className="mx-auto max-w-[210mm] px-[12mm] py-[10mm] print:px-0 print:py-0">
+      <div
+        className="mx-auto print:px-0 print:py-0"
+        style={{ maxWidth: "210mm", padding: "15mm" }}
+      >
         {/* Botões só no ecrã */}
         <div className="mb-4 flex justify-end gap-2 print:hidden">
           <BotaoImprimir />

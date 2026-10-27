@@ -6,6 +6,8 @@
 
 import { expect, test, describe } from "bun:test";
 import {
+  EMPRESA_FERIAS,
+  FILTRO_EMPRESA_FERIAS,
   MESES_FERIAS,
   ROTULO_ESTADO,
   addDiasISO,
@@ -22,11 +24,13 @@ import {
   mesValido,
   nomeMes,
   paraCSV,
+  planoNoAmbito,
   problemaAlteracao,
   proximosFeriados,
   setorDe,
   textoEmailRh,
   vivas,
+  type ColabFerias,
   type FeriadoFerias,
   type LinhaPlano
 } from "@/lib/ferias";
@@ -260,5 +264,33 @@ describe("Férias no mapa de permissões", () => {
     expect(fe.length).toBe(4);
     expect(labelPagina("ferias.plano")).toContain("Férias - ");
     expect(labelPagina("ferias.mes")).toContain("Folha do Mês");
+  });
+});
+
+describe("Âmbito do módulo: só a gente da Danmo Porto", () => {
+  /* O que a API traz depois do filtro empresa=eq.porto: SÓ a gente Porto. */
+  const gente: ColabFerias[] = [
+    { id: 1, name: "Porto Um", code: "DM0001", categoria: "Mecânico", setor: "Oficina" }
+  ];
+
+  test("planoNoAmbito guarda só linhas de quem se gere", () => {
+    const plano = [
+      linha({ id: "porto", collaborator_id: 1 }),
+      linha({ id: "tcm", collaborator_id: 2 }),
+      linha({ id: "sem", collaborator_id: 3 }),
+      linha({ id: "fantasma", collaborator_id: 99 })
+    ];
+    const noAmbito = planoNoAmbito(plano, gente);
+    expect(noAmbito.map((l) => l.id)).toEqual(["porto"]);
+  });
+
+  test("folha vazia fica vazia (sem exceções)", () => {
+    expect(planoNoAmbito([], gente)).toEqual([]);
+    expect(planoNoAmbito([linha({ id: "x" })], [])).toEqual([]);
+  });
+
+  test("o filtro PostgREST aponta a empresa certa", () => {
+    expect(EMPRESA_FERIAS).toBe("porto");
+    expect(FILTRO_EMPRESA_FERIAS).toBe("empresa=eq.porto");
   });
 });

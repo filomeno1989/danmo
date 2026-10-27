@@ -24,7 +24,9 @@ import {
   avaliarAviso,
   baseAviso,
   contaNoMes,
+  FILTRO_EMPRESA_FERIAS,
   mesValido,
+  planoNoAmbito,
   problemaAlteracao,
   setorDe,
   vivas,
@@ -43,10 +45,11 @@ const CONFIG_POR_OMISSAO: ConfigFerias = {
   mes_planeamento: 10
 };
 
+/* Só a gente da DANMO PORTO: é quem a Adm. Oficinal gere. */
 async function colaboradoresActivos(): Promise<ColabFerias[]> {
   const rows = await queryTudo<ColabFerias & { active: boolean | null }>(
     "collaborators",
-    "select=id,name,code,categoria,setor,active&order=name.asc"
+    `select=id,name,code,categoria,setor,active&order=name.asc&${FILTRO_EMPRESA_FERIAS}`
   );
   return rows
     .filter((c) => c.active !== false)
@@ -67,7 +70,7 @@ export async function GET(req: NextRequest) {
       ? anoQ
       : Number(hoje.slice(0, 4));
   try {
-    const [alteracoes, plano, colaboradores] = await Promise.all([
+    const [alteracoes, planoBruto, colaboradores] = await Promise.all([
       queryTudo<AlteracaoFerias>(
         "ferias_alteracoes",
         `select=*&ano=eq.${ano}&order=criado_em.desc`
@@ -75,7 +78,13 @@ export async function GET(req: NextRequest) {
       queryTudo<LinhaPlano>("ferias_plano", `select=*&ano=eq.${ano}`),
       colaboradoresActivos()
     ]);
-    return NextResponse.json({ ok: true, ano, alteracoes, plano, colaboradores });
+    return NextResponse.json({
+      ok: true,
+      ano,
+      alteracoes,
+      plano: planoNoAmbito(planoBruto, colaboradores),
+      colaboradores
+    });
   } catch (e) {
     return erroBase(e, "ferias alteracoes GET");
   }
@@ -94,10 +103,11 @@ export async function POST(req: NextRequest) {
         ? anoQ
         : Number(hoje.slice(0, 4));
 
-    const [plano, colaboradores] = await Promise.all([
+    const [planoBruto, colaboradores] = await Promise.all([
       queryTudo<LinhaPlano>("ferias_plano", `select=*&ano=eq.${ano}`),
       colaboradoresActivos()
     ]);
+    const plano = planoNoAmbito(planoBruto, colaboradores);
     const linhas = vivas(plano, colaboradores);
 
     const colabId = Number(corpo.colaborador_id);

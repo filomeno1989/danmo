@@ -16,8 +16,10 @@ import { pode, type Sessao } from "@/lib/auth";
 import { dataHojeISO } from "@/lib/rh";
 import {
   contaNoMes,
+  FILTRO_EMPRESA_FERIAS,
   fimDe,
   mesValido,
+  planoNoAmbito,
   setorDe,
   vivas,
   type AlteracaoFerias,
@@ -43,10 +45,12 @@ const CONFIG_POR_OMISSAO: ConfigFerias = {
   mes_planeamento: 10
 };
 
+/* Só a gente da DANMO PORTO: é quem a Adm. Oficinal gere (o TCM e os
+   sem classificar ficam fora das folhas). */
 async function colaboradoresActivos(): Promise<ColabFerias[]> {
   const rows = await queryTudo<ColabFerias & { active: boolean | null }>(
     "collaborators",
-    "select=id,name,code,categoria,setor,active&order=name.asc"
+    `select=id,name,code,categoria,setor,active&order=name.asc&${FILTRO_EMPRESA_FERIAS}`
   );
   return rows
     .filter((c) => c.active !== false)
@@ -74,7 +78,7 @@ export async function GET(req: NextRequest) {
       ? anoQ
       : Number(dataHojeISO().slice(0, 4));
   try {
-    const [plano, colaboradores, config, feriados, alteracoes] = await Promise.all([
+    const [planoBruto, colaboradores, config, feriados, alteracoes] = await Promise.all([
       queryTudo<LinhaPlano>("ferias_plano", `select=*&ano=eq.${ano}`),
       colaboradoresActivos(),
       configDoPortal(),
@@ -87,7 +91,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       ano,
-      plano,
+      plano: planoNoAmbito(planoBruto, colaboradores),
       colaboradores,
       config,
       feriados,
@@ -137,8 +141,11 @@ export async function POST(req: NextRequest) {
 
     /* Estado actual do ano: uma leitura para todas as acções (o juiz do
        limite precisa das linhas e dos setores de qualquer maneira). */
-    const plano = await queryTudo<LinhaPlano>("ferias_plano", `select=*&ano=eq.${ano}`);
     const colaboradores = await colaboradoresActivos();
+    const plano = planoNoAmbito(
+      await queryTudo<LinhaPlano>("ferias_plano", `select=*&ano=eq.${ano}`),
+      colaboradores
+    );
     const linhas = vivas(plano, colaboradores);
 
     if (accao === "marcar" || accao === "gravar") {
@@ -311,7 +318,10 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const origem = await queryTudo<LinhaPlano>("ferias_plano", `select=*&ano=eq.${de}`);
+    const origem = planoNoAmbito(
+      await queryTudo<LinhaPlano>("ferias_plano", `select=*&ano=eq.${de}`),
+      colaboradores
+    );
     const comLinha = new Set(plano.map((l) => l.collaborator_id));
     const copias = origem
       .filter((l) => l.mes_previsto && !comLinha.has(l.collaborator_id))

@@ -31,6 +31,16 @@ export const MESES_FERIAS = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
 
+/**
+ * ÂMBITO do módulo: a Administração Oficinal só gere as férias da gente
+ * da DANMO PORTO (collaborators.empresa = "porto"). Os da Danmo (TCM) e
+ * os sem classificar ficam fora das folhas (outro RH central).
+ */
+export const EMPRESA_FERIAS = "porto";
+
+/** Sufixo PostgREST para todas as leituras de gente do módulo. */
+export const FILTRO_EMPRESA_FERIAS = `empresa=eq.${EMPRESA_FERIAS}`;
+
 /* ============ Tipos ============ */
 
 export type ConfigFerias = {
@@ -182,6 +192,19 @@ export function vivas(
       setor: setorDe(c)
     };
   });
+}
+
+/**
+ * Linhas do plano DENTRO do âmbito (Danmo Porto): linhas de gente de
+ * fora (TCM, sem classificar, apagada) nunca aparecem nas folhas nem
+ * contam nos limites - mesmo que fiquem órfãs na base.
+ */
+export function planoNoAmbito(
+  plano: LinhaPlano[],
+  colaboradores: ColabFerias[]
+): LinhaPlano[] {
+  const ids = new Set(colaboradores.map((c) => c.id));
+  return plano.filter((l) => ids.has(l.collaborator_id));
 }
 
 /** Chave de grupo setor|mes -> quantas pessoas marcadas. */

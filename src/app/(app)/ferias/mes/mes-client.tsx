@@ -5,7 +5,7 @@
  * 2. Marcar como enviado ao RH (fica Aguarda RH);
  * 3. O RH responde: lançam-se os dias de direito e o início (o fim sai
  *    sozinho, dias corridos);
- * 4. Imprimir a folha de afixação (rota /imprimir/ferias/mes/...).
+ * 4. Imprimir a folha de afixação (rota /imprimir/ferias/mes?ano=...&mes=...).
  */
 
 "use client";
@@ -261,7 +261,9 @@ export function MesClient() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => window.open(`/imprimir/ferias/mes/${ano}/${mes}`, "_blank")}
+          onClick={() =>
+            window.open(`/imprimir/ferias/mes?ano=${ano}&mes=${mes}`, "_blank")
+          }
         >
           <Printer className="size-4" aria-hidden /> Afixação
         </Button>

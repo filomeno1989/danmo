@@ -20,6 +20,7 @@ import { avisosDoQuadro } from "@/lib/avisos-server";
 import { dataHojeISO } from "@/lib/rh";
 import {
   diasAtePrazoEnvio,
+  FILTRO_EMPRESA_FERIAS,
   nomeMes,
   type ConfigFerias,
   type LinhaPlano
@@ -88,17 +89,30 @@ export async function GET() {
   ]);
   if (podeFerias && chavesConfiguradas()) {
     try {
-      const emCurso = await queryTudo<LinhaPlano & { nome: string }>(
-        "ferias_plano",
-        `select=id,data_inicio,data_fim,collaborator_id&data_inicio=lte.${hoje}&data_fim=gte.${hoje}`
+      /* Âmbito: só férias da gente da DANMO PORTO (quem se gere). */
+      const idsPorto = new Set(
+        (
+          await queryTudo<{ id: number }>(
+            "collaborators",
+            `select=id&${FILTRO_EMPRESA_FERIAS}&active=neq.false`
+          )
+        ).map((c) => c.id)
       );
+      const emCurso = (
+        await queryTudo<
+          Pick<LinhaPlano, "id" | "data_inicio" | "data_fim" | "collaborator_id">
+        >(
+          "ferias_plano",
+          `select=id,data_inicio,data_fim,collaborator_id&data_inicio=lte.${hoje}&data_fim=gte.${hoje}`
+        )
+      ).filter((l) => idsPorto.has(l.collaborator_id));
       if (emCurso.length) {
         const ids = [...new Set(emCurso.map((l) => l.collaborator_id))]
           .slice(0, 10)
           .join(",");
         const cols = await queryTudo<{ id: number; name: string }>(
           "collaborators",
-          `select=id,name&id=in.(${ids})`
+          `select=id,name&${FILTRO_EMPRESA_FERIAS}&id=in.(${ids})`
         );
         const nomes = emCurso
           .map((l) => cols.find((c) => c.id === l.collaborator_id)?.name || "")
@@ -123,10 +137,14 @@ export async function GET() {
       if (config) {
         const faltam = diasAtePrazoEnvio(hoje, mesActual, config.dias_antes_envio_rh);
         if (faltam <= config.dias_antes_envio_rh) {
-          const marcados = await queryTudo<LinhaPlano>(
-            "ferias_plano",
-            `select=id&ano=eq.${hoje.slice(0, 4)}&mes_previsto=eq.${mesActual}`
-          );
+          const marcados = (
+            await queryTudo<
+              Pick<LinhaPlano, "id" | "collaborator_id" | "enviado_rh_em">
+            >(
+              "ferias_plano",
+              `select=id,collaborator_id,enviado_rh_em&ano=eq.${hoje.slice(0, 4)}&mes_previsto=eq.${mesActual}`
+            )
+          ).filter((l) => idsPorto.has(l.collaborator_id));
           const porEnviar = marcados.filter((l) => !l.enviado_rh_em).length;
           if (porEnviar > 0) {
             alertas.push({

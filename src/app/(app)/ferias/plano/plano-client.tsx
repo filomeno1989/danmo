@@ -331,7 +331,7 @@ export function PlanoClient() {
           size="sm"
           disabled={ocupado === "carregar_todos"}
           onClick={async () => {
-            if (!window.confirm(`Criar linha para todos os colaboradores activos em ${ano}?`)) return;
+            if (!window.confirm(`Criar linha para todos os colaboradores Danmo Porto em ${ano}?`)) return;
             try {
               const r = await acao({ accao: "carregar_todos", ano }, "Linhas criadas.");
               if (r?.criadas === 0) toast.info("Todos já tinham linha.");
@@ -374,7 +374,7 @@ export function PlanoClient() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-ferias-kpis>
         {[
-          { label: "Colaboradores activos", valor: dados?.colaboradores.length ?? "..." },
+          { label: "Colaboradores Danmo Porto", valor: dados?.colaboradores.length ?? "..." },
           { label: "Com mês marcado", valor: `${comMes} de ${dados?.colaboradores.length ?? 0}` },
           { label: "Dias já do RH", valor: confirmados },
           { label: "De férias hoje", valor: emCurso }

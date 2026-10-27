@@ -15,6 +15,15 @@ const BASE = process.env.BASE || "http://localhost:3458";
 let passaram = 0;
 let falharam = 0;
 
+/** Semana ISO da data dada (mesmo cálculo do semana-client.tsx). */
+function semanaISODe(umaData) {
+  const d = new Date(Date.UTC(umaData.getFullYear(), umaData.getMonth(), umaData.getDate()));
+  const dia = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dia);
+  const inicioAno = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - inicioAno.getTime()) + 1) / 86400000 / 7);
+}
+
 function ok(nome, cond, extra = "") {
   if (cond) {
     passaram += 1;
@@ -492,10 +501,17 @@ let postsSemana = [];
     postsSemana.length === 1 && postsSemana[0].linhas.length === 12 && postsSemana[0].dificuldades.includes("pneus"),
     JSON.stringify(postsSemana).slice(0, 160));
 
-  // navegacao entre semanas
+  // navegacao entre semanas (a pagina nasce na semana ISO CORRENTE:
+  // o esperado e calculado na hora, sem data fixa que estrague o teste
+  // quando o calendario avança)
   await pagina.locator("button[aria-label='Semana seguinte']").click();
   await pagina.waitForTimeout(300);
-  ok("Semana: navegacao para semana 43", (await pagina.locator("text=Semana 43").count()) > 0);
+  const semanaEsperada = semanaISODe(new Date()) + 1;
+  ok(
+    "Semana: navegacao para a semana seguinte",
+    (await pagina.locator(`text=Semana ${semanaEsperada}`).count()) > 0,
+    `esperada=Semana ${semanaEsperada}`
+  );
 
   /* ---------- 6. CONFIGURACOES ---------- */
   await pagina.goto(`${BASE}/disponibilidade/config`, { waitUntil: "networkidle" });

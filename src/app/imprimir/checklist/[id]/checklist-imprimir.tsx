@@ -193,6 +193,10 @@ export function ChecklistImprimir({ checklistId }: { checklistId: number }) {
         table.ck-table th {
           border: 1px solid #999; background: #0d5ca8; color: #fff; padding: 4px;
           font-size: 8px; text-transform: uppercase; font-family: Arial, sans-serif;
+          /* Título azul com texto branco garantido no papel mesmo sem
+             "Background graphics" na impressão. */
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
         }
         table.ck-table th.grupo-header { background: #094a8a; font-size: 7.5px; letter-spacing: .5px; }
         table.ck-table th.grupo-vazio { background: #0d5ca8; }
@@ -212,6 +216,11 @@ export function ChecklistImprimir({ checklistId }: { checklistId: number }) {
         .ck-ass-box .info { color: #555; margin-top: 2px; text-align: center; }
         @media print {
           .folha-fundo { background: #fff; }
+          /* Fundo do PAPEL branco: o body do portal segue o tema e, no
+             escuro, era #0b0f19. A moldura escura na área de margem
+             @page é outro defeito (color-scheme: dark no html) e é
+             morto centralmente no globals.css para todos os impressos. */
+          body { background: #fff !important; }
           .btn-bar { display: none !important; }
           .folha { width: 100%; margin: 0; box-shadow: none; }
           @page { size: A4; margin: 10mm; }

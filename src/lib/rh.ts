@@ -235,12 +235,13 @@ export function estadoEstagio(
 /** Verdadeiro quando o estagio termina dentro dos proximos N dias (ou ja passou). */
 export function estagioATerminar(
   c: Pick<Colaborador, "tipo_colaborador" | "estagio_data_fim" | "estagio_resultado" | "active">,
-  dias = 30
+  dias = 30,
+  hojeISO?: string
 ): boolean {
   if ((c.tipo_colaborador || "") !== "estagiario") return false;
   if (c.estagio_resultado) return false;
   if (c.active === false) return false;
-  const e = estadoEstagio(c);
+  const e = estadoEstagio(c, hojeISO);
   if (!e) return false;
   if (e.situacao === "terminado") return true;
   if (e.situacao === "a_decorrer") return e.dias <= dias;
@@ -267,8 +268,8 @@ export function fimServico(c: Pick<Colaborador, "active" | "data_inativo">): str
 }
 
 /** Tempo de casa curto (para o cartao e a tabela). */
-export function tempoDeCasa(c: Colaborador): string {
-  return tempoServico(inicioServico(c), fimServico(c));
+export function tempoDeCasa(c: Colaborador, hojeISO?: string): string {
+  return tempoServico(inicioServico(c), fimServico(c) || hojeISO);
 }
 
 export type TemposTransferido = {
@@ -278,15 +279,17 @@ export type TemposTransferido = {
 
 /**
  * Parcelas do transferido: tempo ANTES da Danmo e tempo TOTAL no
- * grupo. Null quando nao e transferido (ou faltam datas).
+ * grupo. Null quando nao e transferido (ou faltam datas). O hojeISO
+ * existe para os testes (mesmo padrao do estadoEstagio); no portal
+ * chama-se sem ele e o hoje sai do relógio.
  */
-export function temposTransferido(c: Colaborador): TemposTransferido {
+export function temposTransferido(c: Colaborador, hojeISO?: string): TemposTransferido {
   if ((c.tipo_colaborador || "") === "estagiario") return null;
   if ((c.tipo_vinculo || "") !== "transferido") return null;
   if (!c.data_admissao_grupo) return null;
   return {
     antes: tempoLongo(c.data_admissao_grupo, c.data_admissao_danmo || fimServico(c) || undefined),
-    total: tempoLongo(c.data_admissao_grupo, fimServico(c) || undefined)
+    total: tempoLongo(c.data_admissao_grupo, fimServico(c) || hojeISO || undefined)
   };
 }
 

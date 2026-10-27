@@ -192,8 +192,8 @@ describe("Estagios", () => {
     });
     const s = estadoEstagio(c, HOJE);
     expect(s).toEqual({ situacao: "a_decorrer", dias: 6 });
-    expect(estagioATerminar(c, 30)).toBe(true);
-    expect(estagioATerminar(c, 5)).toBe(false);
+    expect(estagioATerminar(c, 30, HOJE)).toBe(true);
+    expect(estagioATerminar(c, 5, HOJE)).toBe(false);
   });
 
   test("terminado sem decisao marca o atraso", () => {
@@ -237,7 +237,7 @@ describe("Estagios", () => {
       data_admissao_danmo: null
     });
     expect(inicioServico(c)).toBe("2026-04-01");
-    expect(tempoDeCasa(c)).toBe("0a 6m");
+    expect(tempoDeCasa(c, HOJE)).toBe("0a 6m");
   });
 });
 
@@ -249,10 +249,10 @@ describe("Transferidos do grupo", () => {
       data_admissao_grupo: "2018-03-10",
       data_admissao_danmo: "2022-03-10"
     });
-    const p = temposTransferido(c);
+    const p = temposTransferido(c, HOJE);
     expect(p).not.toBe(null);
     expect(p!.antes).toBe("4 anos, 0 meses e 0 dias");
-    // total conta de 2018-03-10 ate hoje (2026-10-22): 8a 7m 12d
+    // total conta de 2018-03-10 ate HOJE (2026-10-22): 8a 7m 12d
     expect(p!.total).toBe("8 anos, 7 meses e 12 dias");
   });
 
@@ -275,7 +275,7 @@ describe("Transferidos do grupo", () => {
       data_admissao_grupo: "2018-03-10",
       data_admissao_danmo: "2022-03-10"
     });
-    expect(tempoDeCasa(c)).toBe("4a 7m");
+    expect(tempoDeCasa(c, HOJE)).toBe("4a 7m");
   });
 });
 

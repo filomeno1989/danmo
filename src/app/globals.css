@@ -260,6 +260,22 @@
   html {
     scroll-behavior: smooth;
   }
+  /* PAPEL sempre branco em qualquer impressão do portal. Dois defeitos
+     do tema escuro no print, descobertos com PDF paginado no escuro:
+     (1) o body herdava --background (#0b0f19, quase preto) e a área
+     vazia do papel saía PRETA (tóner desperdiçado); (2) o
+     color-scheme: dark do next-themes fazia o Chromium pintar a área
+     de margem @page (e o canvas) com a cor escura do sistema: as
+     folhas saíam com moldura preta. Forçar scheme claro + fundo
+     branco SÓ no print não mexe em nada no ecrã. */
+  @media print {
+    html {
+      color-scheme: light !important;
+    }
+    body {
+      background: #fff !important;
+    }
+  }
   /* Troca de tema instantânea: durante o flip claro/escuro, NENHUM
        elemento anima. O shell/login ligam esta classe no <html> na hora
        da troca e desligam-na meio segundo depois. */

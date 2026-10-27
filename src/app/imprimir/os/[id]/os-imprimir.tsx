@@ -342,6 +342,11 @@ export function OsImprimir({ osId }: { osId: number }) {
           text-transform: uppercase; letter-spacing: .4px; padding: 5px 6px;
           text-align: left; font-family: "Times New Roman", serif;
           border-bottom: 2px solid #92D050;
+          /* Garante o fundo escuro com texto branco mesmo quando a
+             impressão sai sem "Background graphics" (senão ficava
+             texto branco em papel branco: colunas sem título). */
+          print-color-adjust: exact;
+          -webkit-print-color-adjust: exact;
         }
         .tabela-obra tbody td, .tabela-pecas tbody td {
           padding: 4px 6px; border-bottom: 1px solid #e8e8e8; vertical-align: top;
@@ -375,6 +380,13 @@ export function OsImprimir({ osId }: { osId: number }) {
         }
         @media print {
           .folha-fundo { background: #fff; }
+          /* Fundo do PAPEL branco: o body do portal segue o tema e, no
+             escuro, era #0b0f19 (quase preto); na última página, abaixo
+             de onde o conteúdo acaba, o canvas aparecia com essa cor e
+             a folha saía com um bloco preto (tóner desperdiçado). A
+             moldura escura de margem @page é outro defeito
+             (color-scheme: dark no html), morto no globals.css. */
+          body { background: #fff !important; }
           .btn-bar { display: none !important; }
           .folha { width: 100%; margin: 0; box-shadow: none; padding: 0; }
           @page { size: A4; margin: 0; }

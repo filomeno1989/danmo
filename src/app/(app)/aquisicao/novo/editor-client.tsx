@@ -43,119 +43,85 @@ type LinhaItem = ItemAquisicao & { chave: number };
 const NOVO = "__novo__";
 
 /**
- * Campo com lista de atalhos (Unidade e Aplicação na tabela de material).
+ * Unidade da linha de material: o datalist nativo do hub, de volta.
  *
- * Substitui o datalist do hub: o Chromium filtra as sugestões pelo texto
- * já escrito e a Unidade nasce "Un", logo a lista só mostrava "Un" -
- * era preciso apagar o campo para ver as outras unidades. Aqui a lista
- * abre SEMPRE completa ao clicar (e filtra só enquanto se escreve),
- * aceita texto livre para unidades fora da lista e vive em
- * position: fixed para não ser cortada pelo overflow-x da tabela.
+ * O único defeito dele no Chromium: as sugestões são filtradas pelo
+ * texto que o campo já tem e a linha nasce "Un", pelo que o clique só
+ * mostrava a própria "Un" (era preciso apagar para ver as outras).
+ * Ao clicar, o campo limpa-se um instante e o showPicker() abre a
+ * lista COMPLETA; fechando sem escolher, o valor volta ao que estava.
+ * Escrever filtra como sempre e unidades fora da lista aceitam-se.
  */
-function CampoLista({
+const eUnidadeAq = (v: string) =>
+  UNIDADES_AQ.some((u) => u.toLowerCase() === v.trim().toLowerCase());
+
+function CampoUnidade({
   valor,
   onMuda,
-  opcoes,
-  placeholder,
   rotulo
 }: {
   valor: string;
   onMuda: (v: string) => void;
-  opcoes: string[];
-  placeholder: string;
   rotulo: string;
 }) {
-  const [aberta, setAberta] = useState(false);
-  const [pos, setPos] = useState<{ x: number; y: number; w: number; paraCima: boolean } | null>(null);
-  /* O que vale para filtrar é o que o utilizador ESCREVEU com a lista
-     aberta, não o valor que o campo já tinha: a Unidade nasce "Un" e
-     mesmo assim a lista tem de abrir completa (era este o defeito do
-     datalist, que filtrava pelo valor e só mostrava "Un"). */
-  const [escrito, setEscrito] = useState(false);
-  const raizRef = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLInputElement>(null);
+  /* O que o clique limpou para a lista abrir completa; se a lista
+     fechar sem escolha, devolve-se ao campo. */
+  const limpo = useRef("");
 
-  useEffect(() => {
-    if (!aberta) return;
-    const fora = (e: MouseEvent) => {
-      if (raizRef.current && e.target instanceof Node && raizRef.current.contains(e.target)) return;
-      setAberta(false);
-    };
-    const tecla = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAberta(false);
-    };
-    const fecha = () => setAberta(false);
-    document.addEventListener("mousedown", fora);
-    document.addEventListener("keydown", tecla);
-    window.addEventListener("scroll", fecha, true);
-    window.addEventListener("resize", fecha);
-    return () => {
-      document.removeEventListener("mousedown", fora);
-      document.removeEventListener("keydown", tecla);
-      window.removeEventListener("scroll", fecha, true);
-      window.removeEventListener("resize", fecha);
-    };
-  }, [aberta]);
-
-  const abre = () => {
-    const r = raizRef.current?.getBoundingClientRect();
-    if (!r) {
-      setAberta(true);
-      return;
-    }
-    /* Abre para baixo; sem espaço na página, abre para cima. */
-    const paraCima = r.bottom + 236 > window.innerHeight && r.top > 236;
-    setPos({
-      x: r.left,
-      y: paraCima ? window.innerHeight - r.top + 4 : r.bottom + 4,
-      w: Math.max(r.width, 128),
-      paraCima
+  const abreListaCompleta = () => {
+    const el = ref.current;
+    if (!el || !eUnidadeAq(el.value)) return;
+    limpo.current = el.value;
+    onMuda("");
+    /* O datalist lê o TEXTO do campo no momento em que abre: vazio,
+       mostra tudo. O re-render do React tem de chegar primeiro ao
+       campo, por isso o showPicker() vai no frame seguinte. */
+    requestAnimationFrame(() => {
+      try {
+        el.showPicker();
+      } catch {
+        /* Sem showPicker (navegador antigo): a lista abre no clique
+           seguinte, já sem filtro porque o campo ficou vazio. */
+      }
     });
-    setEscrito(false);
-    setAberta(true);
   };
 
-  /* Escreveu com a lista aberta? filtra. Senão? lista inteira. */
-  const q = semAcentos(valor.trim());
-  const filtradas = escrito && q ? opcoes.filter((o) => semAcentos(o).includes(q)) : opcoes;
-
   return (
-    <div ref={raizRef} className="relative">
-      <Input
-        value={valor}
-        onChange={(e) => {
-          setEscrito(true);
-          onMuda(e.target.value);
-        }}
-        onFocus={abre}
-        placeholder={placeholder}
-        aria-label={rotulo}
-      />
-      {aberta && pos && filtradas.length > 0 ? (
-        <div
-          data-lista-opcoes
-          className="fixed z-50 max-h-56 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-lg"
-          style={{
-            left: pos.x,
-            width: pos.w,
-            ...(pos.paraCima ? { bottom: pos.y } : { top: pos.y })
-          }}
-        >
-          {filtradas.map((o) => (
-            <button
-              key={o}
-              type="button"
-              className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
-              onClick={() => {
-                onMuda(o);
-                setAberta(false);
-              }}
-            >
-              {o}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
+    <Input
+      ref={ref}
+      value={valor}
+      list="dl-unidades-aq"
+      onChange={(e) => {
+        limpo.current = "";
+        onMuda(e.target.value);
+      }}
+      onMouseDown={abreListaCompleta}
+      onKeyDown={(e) => {
+        if (e.key !== "ArrowDown" && e.key !== "F4") return;
+        /* Texto livre ou campo vazio: navegação nativa. Unidade da
+           lista no campo (a "Un" de nascença, um "Kg" gravado): a
+           seta também abre a lista inteira. */
+        if (!eUnidadeAq(ref.current?.value || "")) return;
+        e.preventDefault();
+        abreListaCompleta();
+      }}
+      onBlur={() => {
+        const el = ref.current;
+        if (!el || !limpo.current) return;
+        const paraVoltar = limpo.current;
+        setTimeout(() => {
+          /* Escolheu alguma coisa? o campo já tem valor e fica.
+             Fechou sem escolher? o campo segue vazio e devolve. */
+          if (limpo.current && el.value === "") {
+            limpo.current = "";
+            onMuda(paraVoltar);
+          }
+        }, 120);
+      }}
+      placeholder="Un"
+      aria-label={rotulo}
+    />
   );
 }
 
@@ -596,21 +562,19 @@ export function EditorAquisicao({ idEdicao }: { idEdicao: string }) {
                       />
                     </td>
                     <td className="py-1.5 pr-2">
-                      <CampoLista
+                      <CampoUnidade
                         valor={i.unidade}
                         onMuda={(v) => mudaItem(i.chave, "unidade", v)}
-                        opcoes={UNIDADES_AQ}
-                        placeholder="Un"
                         rotulo={`Unidade da linha ${idx + 1}`}
                       />
                     </td>
                     <td className="py-1.5 pr-2">
-                      <CampoLista
-                        valor={i.aplicacao}
-                        onMuda={(v) => mudaItem(i.chave, "aplicacao", v)}
-                        opcoes={aplicacoes}
+                      <Input
+                        value={i.aplicacao}
+                        list="dl-aplicacoes-aq"
+                        onChange={(e) => mudaItem(i.chave, "aplicacao", e.target.value)}
                         placeholder="Ex: Serralharia"
-                        rotulo={`Aplicação da linha ${idx + 1}`}
+                        aria-label={`Aplicação da linha ${idx + 1}`}
                       />
                     </td>
                     <td className="py-1.5 pr-2">
@@ -634,6 +598,16 @@ export function EditorAquisicao({ idEdicao }: { idEdicao: string }) {
               </tbody>
             </table>
           </div>
+          <datalist id="dl-unidades-aq">
+            {UNIDADES_AQ.map((u) => (
+              <option key={u} value={u} />
+            ))}
+          </datalist>
+          <datalist id="dl-aplicacoes-aq">
+            {aplicacoes.map((a) => (
+              <option key={a} value={a} />
+            ))}
+          </datalist>
         </CardContent>
       </Card>
 

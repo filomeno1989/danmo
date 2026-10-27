@@ -321,63 +321,71 @@ const pedidoPorId = (id) => (id === "aq-002" ? PEDIDO_002 : id === "aq-001" ? PE
       corpoPost.itens[0]?.designacao === "Tinta Vermelha 5L"
   );
 
-  /* ---------- 5b. Unidade e Aplicação: lista abre com o "Un" de nascença ---------- */
-  /* O Filomeno: as unidades nascem "Un" e não deixam escolher outra sem
-     apagar primeiro (o Chromium filtra o datalist pelo texto escrito).
-     A lista própria abre SEMPRE completa, filtra ao escrever e aceita
-     unidades livres. */
+  /* ---------- 5b. Unidade: datalist nativo do hub, mas o clique abre TUDO ---------- */
+  /* O Filomeno preferiu o datalist ao campo com lista própria; a condição
+     era resolver o defeito de nascença: com "Un" no campo o Chromium
+     filtra as sugestões pelo texto e só mostra a própria "Un". O clique
+     limpa o campo um instante, o showPicker() abre a lista completa e,
+     fechando sem escolher, o valor volta ao que estava. */
   await pg.goto(`${BASE}/aquisicao/novo`, { waitUntil: "domcontentloaded" });
   await pg.waitForTimeout(1200);
-  const unidade1 = pg.locator('input[placeholder="Un"]').first();
+  await pg.evaluate(() => {
+    window.__picker = 0;
+    HTMLInputElement.prototype.showPicker = function () {
+      window.__picker++;
+    };
+  });
+  const unidade1 = pg.locator('input[aria-label="Unidade da linha 1"]');
   ok("Editor: unidade da 1ª linha nasce Un", (await unidade1.inputValue()) === "Un");
   await unidade1.click();
   await pg.waitForTimeout(250);
-  const popupLista = pg.locator("[data-lista-opcoes]");
-  ok("Editor: clicar na unidade abre a lista flutuante", (await popupLista.count()) === 1);
-  const textoLista = (await popupLista.first().innerText()).replace(/\s+/g, " ");
   ok(
-    "Editor: com o 'Un' no campo a lista mostra TODAS (Kg e Galão à vista)",
-    textoLista.includes("Kg") && textoLista.includes("Galão") && textoLista.includes("Pacote"),
-    textoLista
+    "Editor: clicar no Un abre o datalist nativo com o campo limpo (lista vai vir completa)",
+    (await pg.evaluate(() => window.__picker)) === 1 && (await unidade1.inputValue()) === ""
   );
-  const caixaLista = await popupLista.first().boundingBox();
+  const dl = await pg.evaluate(() => ({
+    unidade: document.querySelector('input[aria-label="Unidade da linha 1"]')?.getAttribute("list") || "",
+    aplicacao: document.querySelector('input[aria-label="Aplicação da linha 1"]')?.getAttribute("list") || "",
+    opcoesUn: document.querySelectorAll("#dl-unidades-aq option").length,
+    usoOficinal: !!document.querySelector('#dl-aplicacoes-aq option[value="Uso Oficinal"]')
+  }));
   ok(
-    "Editor: lista flutuante fora do corte do overflow da tabela",
-    !!caixaLista && caixaLista.height > 20 && caixaLista.y > 0
-  );
-  await popupLista.first().locator('button:has-text("Kg")').first().click();
-  await pg.waitForTimeout(200);
-  ok(
-    "Editor: escolher Kg preenche o campo e fecha a lista",
-    (await unidade1.inputValue()) === "Kg" && (await popupLista.count()) === 0
-  );
-  await unidade1.fill("sa");
-  await pg.waitForTimeout(250);
-  const textoFiltrado = (await popupLista.first().innerText()).replace(/\s+/g, " ");
-  ok(
-    "Editor: escrever 'sa' filtra para Saco (Galão sai)",
-    (await popupLista.count()) === 1 && textoFiltrado.includes("Saco") && !textoFiltrado.includes("Galão"),
-    textoFiltrado
-  );
-  await unidade1.fill("Balde");
-  await pg.waitForTimeout(250);
-  ok(
-    "Editor: unidade fora da lista aceita-se (texto livre, lista some)",
-    (await popupLista.count()) === 0 && (await unidade1.inputValue()) === "Balde"
-  );
-  await unidade1.fill("Un");
-  const aplica1 = pg.locator('input[placeholder="Ex: Serralharia"]').first();
-  await aplica1.click();
-  await pg.waitForTimeout(250);
-  const textoApl = (await popupLista.first().innerText()).replace(/\s+/g, " ");
-  ok(
-    "Editor: aplicação abre com as aprendidas (Uso Oficinal)",
-    (await popupLista.count()) === 1 && textoApl.includes("Uso Oficinal"),
-    textoApl
+    "Editor: datalists nativos de volta (12 unidades + aplicações aprendidas)",
+    dl.unidade === "dl-unidades-aq" && dl.aplicacao === "dl-aplicacoes-aq" && dl.opcoesUn === 12 && dl.usoOficinal,
+    JSON.stringify(dl)
   );
   await pg.locator('h2:has-text("Material Pedido")').click();
-  await pg.waitForTimeout(200);
-  ok("Editor: lista fecha ao clicar fora", (await popupLista.count()) === 0);
+  await pg.waitForTimeout(300);
+  ok("Editor: fechar a lista sem escolher devolve o Un", (await unidade1.inputValue()) === "Un");
+  await unidade1.fill("Kg");
+  await unidade1.click();
+  await pg.waitForTimeout(250);
+  ok(
+    "Editor: com Kg no campo o clique também abre a lista completa",
+    (await pg.evaluate(() => window.__picker)) === 2 && (await unidade1.inputValue()) === ""
+  );
+  await pg.locator('h2:has-text("Material Pedido")').click();
+  await pg.waitForTimeout(300);
+  ok("Editor: fechar sem escolher devolve o que estava (Kg, não Un)", (await unidade1.inputValue()) === "Kg");
+  await unidade1.focus();
+  await pg.keyboard.press("ArrowDown");
+  await pg.waitForTimeout(250);
+  ok(
+    "Editor: a seta para baixo também abre a lista inteira com Un no campo",
+    (await pg.evaluate(() => window.__picker)) === 3 && (await unidade1.inputValue()) === ""
+  );
+  await pg.locator('h2:has-text("Material Pedido")').click();
+  await pg.waitForTimeout(300);
+  await unidade1.fill("Balde");
+  await unidade1.click();
+  await pg.waitForTimeout(250);
+  ok(
+    "Editor: texto livre (Balde) fica como está e o clique nem mexe (comportamento nativo)",
+    (await pg.evaluate(() => window.__picker)) === 3 && (await unidade1.inputValue()) === "Balde"
+  );
+  await pg.locator('h2:has-text("Material Pedido")').click();
+  await pg.waitForTimeout(300);
+  ok("Editor: blur no texto livre mantém Balde (nada para devolver)", (await unidade1.inputValue()) === "Balde");
 
   /* ---------- 5c. Modo escuro: opções dos <select> legíveis ---------- */
   /* O popup nativo dos selects ficava cinza claro com letras brancas

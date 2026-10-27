@@ -388,6 +388,10 @@ const pedidoPorId = (id) => (id === "aq-002" ? PEDIDO_002 : id === "aq-001" ? PE
   ok("Papel: aviso de cópia não controlada", papel.includes("cópia não controlada"));
   ok("Papel: A5 landscape no CSS", papel.includes("size: A5 landscape"));
   ok("Papel: tabela mágica de espaços presente", papel.includes("print-header-space") && papel.includes("print-footer-space"));
+  ok(
+    "Papel: data de assinatura com grupos afastados (caber à mão)",
+    papel.includes("Data: ____ / ____ / _____") && !papel.includes("Data: ___/___/_____")
+  );
 
   // Emulação de impressão: o espaço do cabeçalho tem de cobrir o cabeçalho
   // fixo (o conteúdo começa ABAIXO dele, não por baixo) e o do rodapé idem.
@@ -405,6 +409,10 @@ const pedidoPorId = (id) => (id === "aq-002" ? PEDIDO_002 : id === "aq-001" ? PE
       espCab: espCab ? espCab.getBoundingClientRect().height : -1,
       espRod: espRod ? espRod.getBoundingClientRect().height : -1,
       thColorAdjust: th ? getComputedStyle(th).printColorAdjust : "",
+      assDataFs: (() => {
+        const d = document.querySelector(".ass-data");
+        return d ? getComputedStyle(d).fontSize : "";
+      })(),
       folhaW: (() => {
         const f = document.querySelector(".folha");
         return f ? f.getBoundingClientRect().width : -1;
@@ -430,6 +438,11 @@ const pedidoPorId = (id) => (id === "aq-002" ? PEDIDO_002 : id === "aq-001" ? PE
     "Papel (emulação): folha ocupa a largura toda no print (A5 = largura da página)",
     alturas.folhaW > 700,
     `w=${alturas.folhaW}`
+  );
+  ok(
+    "Papel (emulação): data de assinatura a 9px (o 7,5px do caderno saía muito justa)",
+    parseFloat(alturas.assDataFs) >= 9,
+    `fs=${alturas.assDataFs}`
   );
   await pgPapel.emulateMedia({ media: "screen" });
 

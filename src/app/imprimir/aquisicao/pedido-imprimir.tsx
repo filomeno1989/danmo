@@ -193,17 +193,17 @@ export function PedidoImprimir({ pedidoId }: { pedidoId: string }) {
                       <div className="ass-box">
                         <div className="ass-linha">{pedido.solicitante || ""}</div>
                         <div className="ass-cargo">Solicitante</div>
-                        <div className="ass-data">Data: ___/___/_____</div>
+                        <div className="ass-data">Data: ____ / ____ / _____</div>
                       </div>
                       <div className="ass-box">
                         <div className="ass-linha"></div>
                         <div className="ass-cargo">Supervisor / Gestor</div>
-                        <div className="ass-data">Data: ___/___/_____</div>
+                        <div className="ass-data">Data: ____ / ____ / _____</div>
                       </div>
                       <div className="ass-box">
                         <div className="ass-linha"></div>
                         <div className="ass-cargo">Chefe das Oficinas</div>
-                        <div className="ass-data">Data: ___/___/_____</div>
+                        <div className="ass-data">Data: ____ / ____ / _____</div>
                       </div>
                     </div>
                   </div>
@@ -295,7 +295,9 @@ table.pa-tabela th.col-un, table.pa-tabela td.col-un { width: 46px; text-align: 
 .ass-box { border: 1px solid #ccc; border-radius: 5px; padding: 8px; text-align: center; min-height: 50px; display: flex; flex-direction: column; justify-content: flex-end; }
 .ass-linha { border-bottom: 1px solid #999; height: 24px; font-size: 10.5px; font-style: italic; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 2px; color: #333; }
 .ass-cargo { font-size: 8px; text-transform: uppercase; letter-spacing: .6px; color: #666; margin-top: 4px; }
-.ass-data { font-size: 7.5px; color: #999; margin-top: 1px; }
+/* A data de assinatura precisa de espaço para se escrever à mão: grupos
+   afastados e letra maior que o 7,5px do caderno, que saía muito justa. */
+.ass-data { font-size: 9px; color: #555; margin-top: 3px; letter-spacing: .4px; }
 
 /* RODAPÉ LEGAL */
 .rodape-legal {

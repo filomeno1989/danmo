@@ -102,10 +102,10 @@ export const MODULOS: Modulo[] = [
       {
         label: "Pedidos de Aquisição",
         itens: [
-          { label: "Painel", href: "/em-migracao?mod=aquisicao" },
-          { label: "Novo Pedido", href: "/em-migracao?mod=aquisicao" },
-          { label: "Histórico", href: "/em-migracao?mod=aquisicao" },
-          { label: "Configurações", href: "/em-migracao?mod=aquisicao" }
+          { label: "Painel", href: "/aquisicao", pagina: "aquisicao" },
+          { label: "Novo Pedido", href: "/aquisicao/novo", pagina: "aquisicao.novo" },
+          { label: "Histórico", href: "/aquisicao/historico", pagina: "aquisicao.historico" },
+          { label: "Configurações", href: "/aquisicao/configuracoes", pagina: "aquisicao.configuracoes" }
         ]
       },
       {
@@ -234,11 +234,15 @@ export function labelPagina(pagina: string): string {
   if (!p) return pagina;
   // Faturação: "Painel" sozinho não diz nada na matriz; prefixa o módulo.
   // Recursos Humanos: os 3 itens partilham o mesmo módulo na matriz.
+  // Pedidos de Aquisição: mesma razão da Faturação (4 páginas "Painel",
+  // "Novo Pedido"... ficam ambíguas sem o módulo).
   const prefixo = pagina.startsWith("faturacao")
     ? "Faturação - "
     : pagina.startsWith("rh.")
       ? "RH - "
-      : "";
+      : pagina.startsWith("aquisicao")
+        ? "Aquisição - "
+        : "";
   const mod = moduloPorId(p.modulo);
   return `${prefixo}${p.label} (${mod?.label || p.modulo})`;
 }

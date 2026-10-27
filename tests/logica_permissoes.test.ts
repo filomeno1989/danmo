@@ -110,10 +110,25 @@ describe("pode(): as 3 marcas", () => {
 });
 
 describe("PAGINAS: o mapa das páginas atribuíveis", () => {
-  test("são as 27 páginas reais dos 4 módulos no ar (18 + 6 da Faturação + 3 do RH)", () => {
-    expect(PAGINAS.length).toBe(27);
+  test("são as 31 páginas reais dos 4 módulos no ar (18 + 6 da Faturação + 3 do RH + 4 da Aquisição)", () => {
+    expect(PAGINAS.length).toBe(31);
     const modulos = new Set(PAGINAS.map((p) => p.modulo));
     expect([...modulos].sort()).toEqual(["admin", "disponibilidade", "oficina", "stock"]);
+  });
+  test("a Aquisição entra na matriz com as 4 páginas do grupo Pedidos de Aquisição", () => {
+    const aq = PAGINAS.filter((p) => p.pagina.startsWith("aquisicao"));
+    expect(aq.length).toBe(4);
+    expect(aq.map((p) => p.pagina).sort()).toEqual([
+      "aquisicao",
+      "aquisicao.configuracoes",
+      "aquisicao.historico",
+      "aquisicao.novo"
+    ]);
+    expect(aq.every((p) => p.modulo === "admin")).toBe(true);
+    expect(aq.find((p) => p.pagina === "aquisicao")?.href).toBe("/aquisicao");
+    expect(aq.find((p) => p.pagina === "aquisicao.novo")?.href).toBe("/aquisicao/novo");
+    expect(aq.find((p) => p.pagina === "aquisicao.historico")?.href).toBe("/aquisicao/historico");
+    expect(aq.find((p) => p.pagina === "aquisicao.configuracoes")?.href).toBe("/aquisicao/configuracoes");
   });
   test("o RH entra na matriz com as 3 páginas do grupo Recursos Humanos", () => {
     const rh = PAGINAS.filter((p) => p.pagina.startsWith("rh."));

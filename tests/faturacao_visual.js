@@ -236,7 +236,7 @@ const docPorId = (id) =>
   await pg.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
   await pg.waitForTimeout(900);
   const home = await pg.content();
-  ok("Home: cartao Admin. Oficinal no ar com a Faturação e o Quadro", home.includes("No ar: Faturação com Cotações e Faturas e o Quadro de Pessoal"));
+  ok("Home: cartao Admin. Oficinal no ar com a Faturação e o Quadro", home.includes("No ar: Faturação com Cotações e Faturas, o Quadro de Pessoal"));
   ok("Home: cartao aponta a /faturacao", home.includes('href="/faturacao"'));
 
   /* ---------- 2. Menu: grupo Faturação com as 6 páginas ---------- */

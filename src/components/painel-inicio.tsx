@@ -261,8 +261,8 @@ export function PainelInicio({
             corTitulo="text-amber-950 dark:text-white"
             texto={
               podeFaturacao
-                ? "No ar: Faturação com Cotações e Faturas e o Quadro de Pessoal com as duas listas (Porto e TCM), estagiários e tempo de quem veio transferido. Seguem Avaliação, Aquisições e Férias."
-                : "No ar: o Quadro de Pessoal com as duas listas (Porto e TCM), estagiários com decisão no fim e o tempo de quem veio transferido. Seguem Avaliação, Aquisições e Férias."
+                ? "No ar: Faturação com Cotações e Faturas, o Quadro de Pessoal com as duas listas (Porto e TCM), estagiários e tempo de quem veio transferido, e os Pedidos de Aquisição. Seguem Avaliação e Férias."
+                : "No ar: o Quadro de Pessoal com as duas listas (Porto e TCM), estagiários com decisão no fim, o tempo de quem veio transferido e os Pedidos de Aquisição. Seguem Avaliação e Férias."
             }
             corTexto="text-amber-900/75 dark:text-white/75"
             pill={pillNoAr}

@@ -12,7 +12,10 @@
  *      - HTML da descrição limpo no servidor;
  *      - número repetido no mesmo tipo é RECUSADO (a fatura 002/26
  *        duplicada no histórico nasceu exactamente deste buraco);
- *      - "Elaborado por" vem da SESSÃO, não do formulário.
+ *      - sem assinatura escolhida, "Elaborado por" vem da SESSÃO; com
+ *        assinatura escolhida, sai no papel o nome que o editor mandou
+ *        (cotação escrita por um colega e assinada pela direção). O
+ *        utilizador_id segue sempre a sessão: quem fez fica na base.
  *
  * Numeração (decisão do Filomeno): 001/2026, por tipo, reinicia a cada
  * ano. Documentos novos exigem o ano com 4 dígitos.
@@ -24,6 +27,7 @@ import { autorizado, autorizadoEmAlguma, eErro, erroBase } from "@/lib/guarda-ap
 import {
   validarDocEntrada,
   numeroDuplicado,
+  assinaturaCriacao,
   hojeISO,
   type DocFaturacao,
   type ClienteFat,
@@ -194,6 +198,10 @@ export async function POST(req: NextRequest) {
     }
 
     const agora = new Date().toISOString();
+    const assin = assinaturaCriacao(
+      { nome: dados.assinatura_nome, cargo: dados.assinatura_cargo },
+      { nome: auth.utilizador.nome, cargo: auth.utilizador.cargo || "" }
+    );
     const docLimpo = {
       tipo: dados.tipo,
       numero: dados.numero,
@@ -219,8 +227,8 @@ export async function POST(req: NextRequest) {
       total: dados.total,
       total_mzn: dados.total_mzn,
       utilizador_id: String(auth.utilizador.id ?? "") || null,
-      utilizador_nome: auth.utilizador.nome,
-      utilizador_cargo: auth.utilizador.cargo || "",
+      utilizador_nome: assin.nome,
+      utilizador_cargo: assin.cargo,
       criado_em: agora,
       atualizado_em: agora
     };

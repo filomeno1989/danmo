@@ -110,7 +110,12 @@ export function EditorClient({
   const [descontoTipo, setDescontoTipo] = useState<TipoDesconto>("fixo");
   const [descontoVal, setDescontoVal] = useState("0");
   const [itens, setItens] = useState<Linha[]>([]);
-  const [autorOriginal, setAutorOriginal] = useState<{ nome: string; cargo: string } | null>(null);
+  /* Assinatura (Elaborado por): nome e cargo que saem no papel. São
+     editáveis: uma cotação escrita por um colega pode sair assinada
+     pela direção. O utilizador_id gravado continua a ser a conta da
+     sessão (auditoria); este par é conteúdo do documento. */
+  const [assinNome, setAssinNome] = useState(nomeUtilizador);
+  const [assinCargo, setAssinCargo] = useState(cargoUtilizador);
   const [fonteConversao, setFonteConversao] = useState("");
   const [aImprimirAnexo, setAImprimirAnexo] = useState(false);
   /* Descrição rica à espera de entrar no ecrã. O HTML não pode ser escrito
@@ -144,9 +149,8 @@ export function EditorClient({
       setDescontoTipo((doc.desconto_tipo || "fixo") as TipoDesconto);
       setDescontoVal(String(doc.desconto_input ?? 0));
       setItens((itensBD || []).map(linhaDeItem));
-      if (doc.utilizador_nome) {
-        setAutorOriginal({ nome: doc.utilizador_nome, cargo: doc.utilizador_cargo || "" });
-      }
+      setAssinNome(doc.utilizador_nome || "");
+      setAssinCargo(doc.utilizador_cargo || "");
       setRichCarga((c) => ({ html: String(doc.assunto || ""), chave: c.chave + 1 }));
     },
     []
@@ -191,7 +195,8 @@ export function EditorClient({
           setDocId("");
           setDocTipo("fatura");
           setFonteConversao(r.documento.numero);
-          setAutorOriginal(null);
+          setAssinNome(nomeUtilizador);
+          setAssinCargo(cargoUtilizador);
           setData(hojeISO());
           const s = await pedir<{ numero: string }>("/api/faturacao/proximo-numero?tipo=fatura");
           if (!vivo) return;
@@ -223,7 +228,7 @@ export function EditorClient({
     return () => {
       vivo = false;
     };
-  }, [idEdit, idFonte, preencherDeDoc]);
+  }, [idEdit, idFonte, preencherDeDoc, nomeUtilizador, cargoUtilizador]);
 
   /* ---------- descrição rica ---------- */
 
@@ -387,6 +392,28 @@ export function EditorClient({
 
   const temMaterialCliente = itens.some((l) => l.item_tipo === "material_cliente");
 
+  /* Nomes que já assinaram documentos (com o cargo de cada um) + a pessoa
+     da sessão. Alimentam o datalist do Elaborado por; escolher um nome
+     conhecido preenche o cargo; escrever outro qualquer é livre. */
+  const sugestoesAssinatura = useMemo(() => {
+    const pares: [string, string][] = [];
+    const vistos = new Set<string>();
+    const add = (n: string, c: string) => {
+      const nome = n.trim();
+      if (!nome || vistos.has(nome)) return;
+      vistos.add(nome);
+      pares.push([nome, c.trim()]);
+    };
+    add(nomeUtilizador, cargoUtilizador);
+    for (const d of dados?.documentos || []) {
+      add(String(d.utilizador_nome || ""), String(d.utilizador_cargo || ""));
+    }
+    pares.sort((a, b) =>
+      a[0] === nomeUtilizador ? -1 : b[0] === nomeUtilizador ? 1 : a[0].localeCompare(b[0])
+    );
+    return pares;
+  }, [dados, nomeUtilizador, cargoUtilizador]);
+
   /* ---------- guardar ---------- */
 
   const corpoDoc = () => ({
@@ -406,6 +433,8 @@ export function EditorClient({
     enviado_nome: envNome,
     enviado_cargo: envCargo,
     assunto: richRef.current ? richRef.current.innerHTML : "",
+    assinatura_nome: assinNome.trim(),
+    assinatura_cargo: assinCargo.trim(),
     desconto_input: Number(descontoVal) || 0,
     desconto_tipo: descontoTipo,
     itens: itens.map((l, i) => ({
@@ -524,7 +553,6 @@ export function EditorClient({
     tarifas: tarifasAtivas,
     materiais: dados?.materiais || []
   };
-  const autor = autorOriginal || { nome: nomeUtilizador, cargo: cargoUtilizador };
 
   return (
     <div className="space-y-5 pb-24">
@@ -735,16 +763,30 @@ export function EditorClient({
                   )}
                 </div>
               </Campo>
-              <Campo rotulo="Elaborado por">
-                <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
-                  <div className="text-sm font-semibold">{autor.nome}</div>
-                  {autor.cargo && <div className="text-xs text-ambar-texto dark:text-amber-400">{autor.cargo}</div>}
-                  <div className="mt-1 text-[0.68rem] text-muted-foreground">
-                    {docId
-                      ? "Autor original do documento - mantém-se quando outra pessoa edita."
-                      : "Preenchido com a pessoa da sessão; sai igual na impressão."}
-                  </div>
+              <Campo rotulo="Elaborado por (assinatura)">
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    value={assinNome}
+                    list="assinaturas-conhecidas"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setAssinNome(v);
+                      const par = sugestoesAssinatura.find(([n]) => n === v.trim());
+                      if (par) setAssinCargo(par[1]);
+                    }}
+                    placeholder="Nome de quem assina"
+                  />
+                  <Input
+                    value={assinCargo}
+                    onChange={(e) => setAssinCargo(e.target.value)}
+                    placeholder="Cargo (opcional)"
+                  />
                 </div>
+                <datalist id="assinaturas-conhecidas">
+                  {sugestoesAssinatura.map(([n]) => (
+                    <option key={n} value={n} />
+                  ))}
+                </datalist>
               </Campo>
             </CardContent>
           </Card>

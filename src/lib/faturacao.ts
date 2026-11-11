@@ -41,6 +41,8 @@ export const TIPO_CLIENTE_INFO: Record<TipoCliente, string> = {
   outro: "Tarifa personalizada - definir manualmente"
 };
 
+export type Assinatura = { nome: string; cargo: string };
+
 export type ItemFaturacao = {
   id?: string;
   ordem: number;
@@ -507,6 +509,8 @@ export type DocEntrada = {
   enviado_nome: string;
   enviado_cargo: string;
   assunto: string;
+  assinatura_nome: string;
+  assinatura_cargo: string;
   desconto_input: number;
   desconto_tipo: string;
   itens: {
@@ -540,6 +544,8 @@ export type ValidacaoDoc = {
     enviado_nome: string;
     enviado_cargo: string;
     assunto: string;
+    assinatura_nome: string;
+    assinatura_cargo: string;
     desconto_input: number;
     desconto_tipo: TipoDesconto;
     itens: ItemFaturacao[];
@@ -553,6 +559,36 @@ export type ValidacaoDoc = {
 
 const corta = (v: unknown, max: number) =>
   String(v === undefined || v === null ? "" : v).slice(0, max);
+
+/**
+ * Assinatura do documento para CRIAÇÃO: o nome escolhido no editor
+ * (cotação feita para a direção assinada pela direção, e não por quem
+ * a escreveu) tem prioridade; sem escolha, assina a pessoa da sessão,
+ * como sempre. O utilizador_id da base continua a ser quem FEZ o
+ * documento (auditoria), o nome/cargo impressos são conteúdo do papel.
+ */
+export function assinaturaCriacao(
+  escolhida: Assinatura,
+  sessao: Assinatura
+): Assinatura {
+  const nome = escolhida.nome || sessao.nome;
+  const cargo = escolhida.nome ? escolhida.cargo : sessao.cargo;
+  return { nome, cargo };
+}
+
+/**
+ * Assinatura para EDIÇÃO: só muda quando um nome novo vem no corpo
+ * (o editor manda sempre o que está no ecrã). Sem nome, devolve null
+ * e o documento mantém o autor original: um PATCH antigo sem esses
+ * campos não apaga nem altera a assinatura por engano.
+ */
+export function assinaturaEdicao(
+  escolhida: Assinatura,
+  actual: Assinatura
+): Assinatura | null {
+  if (!escolhida.nome) return null;
+  return { nome: escolhida.nome, cargo: escolhida.cargo };
+}
 
 /**
  * Valida e normaliza um documento recebido do navegador:
@@ -661,6 +697,8 @@ export function validarDocEntrada(
       enviado_nome: corta(c.enviado_nome, 120),
       enviado_cargo: corta(c.enviado_cargo, 120),
       assunto: sanitizarHTMLRico(corta(c.assunto, 20000)),
+      assinatura_nome: corta(c.assinatura_nome, 120).trim(),
+      assinatura_cargo: corta(c.assinatura_cargo, 120).trim(),
       desconto_input: descontoInput,
       desconto_tipo: descontoTipo,
       itens,

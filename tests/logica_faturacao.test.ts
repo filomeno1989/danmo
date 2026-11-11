@@ -21,6 +21,8 @@ const {
   renderAssuntoImpresso,
   textoSemTags,
   validarDocEntrada,
+  assinaturaCriacao,
+  assinaturaEdicao,
   fmtData,
   dataExtenso,
   totaisAnoPorTipo
@@ -328,6 +330,67 @@ describe("validarDocEntrada", () => {
     );
     expect(v.ok).toBeTrue();
     expect(v.dados?.itens[0].item_tipo).toBe("mao");
+  });
+
+  test("assinatura escolhida vem no documento (trim e corte a 120)", () => {
+    const v = validarDocEntrada(
+      {
+        ...corpoValido,
+        assinatura_nome: "  Eng. Brito  ",
+        assinatura_cargo: " Direcção Geral "
+      },
+      tecnicos,
+      { novo: true }
+    );
+    expect(v.ok).toBeTrue();
+    expect(v.dados?.assinatura_nome).toBe("Eng. Brito");
+    expect(v.dados?.assinatura_cargo).toBe("Direcção Geral");
+    const longo = validarDocEntrada(
+      { ...corpoValido, assinatura_nome: "N".repeat(300) },
+      tecnicos,
+      { novo: true }
+    );
+    expect(longo.dados?.assinatura_nome.length).toBe(120);
+  });
+
+  test("sem assinatura no corpo, os campos saem vazios (a rota decide)", () => {
+    const v = validarDocEntrada(corpoValido, tecnicos, { novo: true });
+    expect(v.ok).toBeTrue();
+    expect(v.dados?.assinatura_nome).toBe("");
+    expect(v.dados?.assinatura_cargo).toBe("");
+  });
+});
+
+describe("assinatura (Elaborado por editável)", () => {
+  const SESSAO = { nome: "Assistente Ana", cargo: "Assistente" };
+
+  test("criação: nome escolhido substitui o da sessão", () => {
+    const a = assinaturaCriacao({ nome: "Eng. Brito", cargo: "Direcção Geral" }, SESSAO);
+    expect(a).toEqual({ nome: "Eng. Brito", cargo: "Direcção Geral" });
+  });
+
+  test("criação: sem nome escolhido, assina a pessoa da sessão (comportamento antigo)", () => {
+    const a = assinaturaCriacao({ nome: "", cargo: "" }, SESSAO);
+    expect(a).toEqual(SESSAO);
+  });
+
+  test("criação: nome escolhido com cargo vazio fica sem cargo no papel", () => {
+    const a = assinaturaCriacao({ nome: "Eng. Brito", cargo: "" }, SESSAO);
+    expect(a).toEqual({ nome: "Eng. Brito", cargo: "" });
+  });
+
+  test("edição: com nome novo grava nome e cargo", () => {
+    const a = assinaturaEdicao(
+      { nome: "Direcção Geral", cargo: "Direcção" },
+      { nome: "Assistente Ana", cargo: "Assistente" }
+    );
+    expect(a).toEqual({ nome: "Direcção Geral", cargo: "Direcção" });
+  });
+
+  test("edição: sem nome mantém o autor original (null não mexe)", () => {
+    expect(
+      assinaturaEdicao({ nome: "", cargo: "" }, { nome: "Assistente Ana", cargo: "Assistente" })
+    ).toBeNull();
   });
 });
 

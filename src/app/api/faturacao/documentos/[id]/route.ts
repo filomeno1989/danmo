@@ -3,9 +3,10 @@
  *
  * GET: documento + linhas (editor e actualizações do painel).
  * PATCH: guardar alterações. Igual ao POST: o servidor recalcula tudo,
- *        limpa o HTML, recusa número repetido e MANTÉM o autor original
- *        (quem editou por último não passa a ser o "Elaborado por" -
- *        correcção de comportamento sobre o hub antigo).
+ *        limpa o HTML e recusa número repetido. O autor original mantém-se
+ *        a menos que o editor mande uma assinatura escolhida (nome no
+ *        campo Elaborado por): então nome e cargo impressos mudam, mas
+ *        o utilizador_id (quem fez) nunca muda por edição.
  * DELETE: apagar documento e linhas. As linhas saem primeiro: sem elas
  *        o documento apagado deixava órfãos se algo falhasse a meio.
  */
@@ -16,6 +17,7 @@ import { autorizado, eErro, erroBase } from "@/lib/guarda-api";
 import {
   validarDocEntrada,
   numeroDuplicado,
+  assinaturaEdicao,
   type DocFaturacao,
   type ItemFaturacao,
   type TecnicoFat
@@ -86,6 +88,10 @@ export async function PATCH(req: NextRequest, ctx: Contexto) {
       );
     }
 
+    const assin = assinaturaEdicao(
+      { nome: dados.assinatura_nome, cargo: dados.assinatura_cargo },
+      { nome: actual.utilizador_nome || "", cargo: actual.utilizador_cargo || "" }
+    );
     const docLimpo = {
       tipo: dados.tipo,
       numero: dados.numero,
@@ -110,6 +116,8 @@ export async function PATCH(req: NextRequest, ctx: Contexto) {
       iva_amt: dados.iva_amt,
       total: dados.total,
       total_mzn: dados.total_mzn,
+      utilizador_nome: assin ? assin.nome : actual.utilizador_nome,
+      utilizador_cargo: assin ? assin.cargo : actual.utilizador_cargo,
       atualizado_em: new Date().toISOString()
     };
     await update<DocFaturacao>("documentos", `id=eq.${docId}`, docLimpo);

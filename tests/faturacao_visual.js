@@ -313,6 +313,27 @@ const docPorId = (id) =>
   ok("Editor: atalhos de tarifa visíveis", (await pg.locator('button[title="Standard"]').count()) >= 1);
   ok("Editor: extenso presente", (await pg.content()).includes("São: Zero meticais"));
 
+  /* Assinatura editável: nasce da sessão e aceita outro nome. */
+  ok(
+    "Editor: Elaborado por nasce da sessão e é editável",
+    (await pg.inputValue('input[placeholder="Nome de quem assina"]')) === "Modo Estrutura"
+  );
+  ok(
+    "Editor: cargo da sessão preenchido",
+    (await pg.inputValue('input[placeholder="Cargo (opcional)"]')) === "Apenas para desenvolver o desenho"
+  );
+  ok(
+    "Editor: datalist sugere quem já assinou documentos",
+    (await pg.locator('#assinaturas-conhecidas option[value="Filomeno Manuel"]').count()) === 1
+  );
+  /* Escolher um nome conhecido preenche o cargo sozinho. */
+  await pg.fill('input[placeholder="Nome de quem assina"]', "Filomeno Manuel");
+  await pg.waitForTimeout(200);
+  ok(
+    "Editor: escolher nome conhecido preenche o cargo (Direcção)",
+    (await pg.inputValue('input[placeholder="Cargo (opcional)"]')) === "Direcção"
+  );
+
   /* prova ao pixel: cabeçalho e linhas na MESMA grelha (diferença 0px).
      O cabeçalho era um <tr> dentro de outro <tr>: HTML inválido, o
      navegador içava as células e as larguras ficavam desconexas. */
@@ -361,6 +382,10 @@ const docPorId = (id) =>
     (await pg.inputValue('input[placeholder="001/2026"]')) === "012/2026"
   );
   ok("Editor conversão: cliente copiado", (await pg.inputValue('input[placeholder="Nome da empresa"]')) === "Cornelder de Moçambique (CdM)");
+  ok(
+    "Editor conversão: assinatura volta à sessão (fatura nova, autor novo)",
+    (await pg.inputValue('input[placeholder="Nome de quem assina"]')) === "Modo Estrutura"
+  );
   ok("Editor conversão: linha técnica copiada (Técnico Mecânico)", html.includes("Técnico Mecânico"));
 
   /* A descrição rica NUNCA entrava no ecrã: o HTML era escrito no ref
@@ -390,6 +415,10 @@ const docPorId = (id) =>
       String(corpo.assunto || "").includes("mão de obra") && String(corpo.assunto || "").includes("reparações"),
       JSON.stringify(String(corpo.assunto || "").slice(0, 80))
     );
+    ok(
+      "Editor conversão: assinatura da sessão vai no POST",
+      corpo.assinatura_nome === "Modo Estrutura" && corpo.assinatura_cargo === "Apenas para desenvolver o desenho"
+    );
   }
 
   /* ---------- 6. Editor: editar documento com material do cliente ---------- */
@@ -400,6 +429,14 @@ const docPorId = (id) =>
   ok("Editor edição: linha Do cliente marcada", html.includes("Do cliente"));
   ok("Editor edição: aviso do Anexo de Material", html.includes("Anexo de Material"));
   ok("Editor edição: autor original mantido", html.includes("Filomeno Manuel"));
+  ok(
+    "Editor edição: assinatura original no campo editável",
+    (await pg.inputValue('input[placeholder="Nome de quem assina"]')) === "Filomeno Manuel"
+  );
+  /* Trocar a assinatura: é o caso real do Filomeno (cotação nascida com o
+     nome de quem a escreveu, para sair assinada por outro). */
+  await pg.fill('input[placeholder="Nome de quem assina"]', "Direcção Geral");
+  await pg.fill('input[placeholder="Cargo (opcional)"]', "Presidência");
 
   /* Descrição também na EDIÇÃO (o mesmo bug esvaziava o campo e, ao
      gravar, apagava a descrição do documento na base). */
@@ -420,6 +457,11 @@ const docPorId = (id) =>
     JSON.stringify(metodosDoc.map((x) => x.m))
   );
   const patchCorpo = metodosDoc.find((x) => x.m === "PATCH")?.corpo;
+  ok(
+    "Editor edição: PATCH leva a assinatura escolhida (nome e cargo)",
+    patchCorpo?.assinatura_nome === "Direcção Geral" && patchCorpo?.assinatura_cargo === "Presidência",
+    JSON.stringify({ n: patchCorpo?.assinatura_nome, c: patchCorpo?.assinatura_cargo })
+  );
   ok(
     "Editor edição: PATCH mantém a descrição (não apaga na base)",
     String(patchCorpo?.assunto || "").includes("mão de obra") && String(patchCorpo?.assunto || "").includes("reparações"),

@@ -13,6 +13,8 @@
  *   reset-senha          { utilizador_id, senha_nova, chave }  (destrutiva)
  *   nivel                { utilizador_id, nivel }
  *   resolver-solicitacao { solicitacao_id, aplicar, resposta }
+ *   recuperacoes         {}                                 (Fase 8)
+ *   gerar-codigo-recuperacao { utilizador_id, chave }        (Fase 8)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -69,6 +71,17 @@ const SOLICITACOES_FICTICIAS = [
 const MATRIZ_FICTICIA = [
   { pagina: "stock", ver: true, mexer: true, apagar: false },
   { pagina: "stock.entradas", ver: true, mexer: true, apagar: true }
+];
+const RECUPERACOES_FICTICIAS = [
+  {
+    utilizador_id: "u3",
+    usuario: "DM0120",
+    nome: "Técnico de HST (exemplo)",
+    pedido_em: "2026-11-13T08:12:00Z",
+    codigo_gerado_em: null,
+    expira_em: null,
+    usado_em: null
+  }
 ];
 
 function semSessao() {
@@ -145,6 +158,12 @@ export async function POST(req: NextRequest) {
   if (modoEstrutura()) {
     if (action === "matriz") {
       return NextResponse.json({ ok: true, matriz: MATRIZ_FICTICIA });
+    }
+    if (action === "recuperacoes") {
+      return NextResponse.json({ ok: true, recuperacoes: RECUPERACOES_FICTICIAS });
+    }
+    if (action === "gerar-codigo-recuperacao") {
+      return NextResponse.json({ ok: true, codigo: "K7PQX2MN" });
     }
     return NextResponse.json({ ok: true, estrutura: true });
   }
@@ -231,6 +250,51 @@ export async function POST(req: NextRequest) {
           p_resposta: String(corpo.resposta || "")
         });
         return NextResponse.json({ ok: true });
+      }
+      case "recuperacoes": {
+        try {
+          const lista = await rpc("recuperacoes_lista", { p_token: token });
+          return NextResponse.json({
+            ok: true,
+            recuperacoes: Array.isArray(lista) ? lista : []
+          });
+        } catch (e) {
+          const err = e as Error & { status?: number };
+          if (err.status === 404) {
+            return NextResponse.json(
+              {
+                ok: false,
+                erro:
+                  "As funções da recuperação ainda não estão na base. Cola o SQL da Fase 8 (recuperação de senha) no Supabase."
+              },
+              { status: 503 }
+            );
+          }
+          throw err;
+        }
+      }
+      case "gerar-codigo-recuperacao": {
+        try {
+          const d = await rpc<{ codigo: string }>("recuperacao_gerar_codigo", {
+            p_token: token,
+            p_chave_admin: String(corpo.chave || ""),
+            p_utilizador_id: String(corpo.utilizador_id || "")
+          });
+          return NextResponse.json({ ok: true, codigo: d?.codigo || "" });
+        } catch (e) {
+          const err = e as Error & { status?: number };
+          if (err.status === 404) {
+            return NextResponse.json(
+              {
+                ok: false,
+                erro:
+                  "As funções da recuperação ainda não estão na base. Cola o SQL da Fase 8 (recuperação de senha) no Supabase."
+              },
+              { status: 503 }
+            );
+          }
+          throw err;
+        }
       }
       default:
         return NextResponse.json({ ok: false, erro: "Acção desconhecida." }, { status: 400 });

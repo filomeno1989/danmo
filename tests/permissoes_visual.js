@@ -1,10 +1,10 @@
 /**
- * Teste visual das PERMISSÕES POR UTILIZADOR (Fase 7 R1).
+ * Teste visual das PERMISSÕES POR UTILIZADOR (Fase 7 R1 + Fase 8).
  *
- * Cobre: a página /permissoes (3 abas: Utilizadores, Matriz, Solicitações),
- * a página /perfil (Os meus dados: conta, cadastro, pedir alteração, trocar
- * senha), o home com o cartão Permissões & Contas, o menu com o item
- * Permissões (admin) e o submenu completo com bloqueados marcados.
+ * Cobre: a página /permissoes (4 abas: Utilizadores, Matriz, Solicitações,
+ * Recuperações), a página /perfil (Os meus dados: conta, cadastro, pedir
+ * alteração, trocar senha), o home com o cartão Permissões & Contas, o menu
+ * com o item Permissões (admin) e o submenu completo com bloqueados marcados.
  *
  * Ambiente: servidor dev SEM chaves (modo estrutura) na porta 3458 +
  * mocks de rede no estilo da base real (Playwright route), igual aos
@@ -71,6 +71,18 @@ const MATRIZ_GESTOR = [
   { pagina: "stock.saidas", ver: true, mexer: true, apagar: false }
 ];
 
+const RECUPERACOES = [
+  {
+    utilizador_id: "u-mecanico",
+    usuario: "DM0120",
+    nome: "Mecânico Chefe",
+    pedido_em: "2026-11-13T08:12:00Z",
+    codigo_gerado_em: null,
+    expira_em: null,
+    usado_em: null
+  }
+];
+
 const PERFIL = {
   ok: true,
   dados: {
@@ -120,6 +132,12 @@ const PERFIL = {
       const corpo = rota.request().postDataJSON() || {};
       if (corpo.action === "matriz") {
         return rota.fulfill({ json: { ok: true, matriz: MATRIZ_GESTOR } });
+      }
+      if (corpo.action === "recuperacoes") {
+        return rota.fulfill({ json: { ok: true, recuperacoes: RECUPERACOES } });
+      }
+      if (corpo.action === "gerar-codigo-recuperacao") {
+        return rota.fulfill({ json: { ok: true, codigo: "K7PQX2MN" } });
       }
       return rota.fulfill({ json: { ok: true } });
     }
@@ -189,7 +207,12 @@ const PERFIL = {
   await pg.waitForTimeout(900);
   let html = await pg.content();
   ok("Permissoes: titulo e subtitulo", html.includes("Permissões"));
-  ok("Permissoes: 3 abas", html.includes("Matriz de permissões") && html.includes("Solicitações"));
+  ok(
+    "Permissoes: 4 abas",
+    html.includes("Matriz de permissões") &&
+      html.includes("Solicitações") &&
+      html.includes("Recuperações (1)")
+  );
   ok("Permissoes: pendente com badge Por aprovar", html.includes("Por aprovar"));
   ok("Permissoes: conta admin sem acções (acesso total)", html.includes("Acesso total (administração)"));
   ok("Permissoes: desactivada em cartao proprio", html.includes("Contas desactivadas"));
@@ -263,6 +286,39 @@ const PERFIL = {
   await pg.waitForTimeout(700);
   const ignorou = postsPermissoes.find((c) => c.action === "resolver-solicitacao" && c.aplicar === false);
   ok("Solicitacoes: ignorar envia resposta", Boolean(ignorou), JSON.stringify(postsPermissoes));
+
+  /* ---------- 5b. /permissoes: aba Recuperações (Fase 8) ---------- */
+  await pg.locator('button:has-text("Recuperações")').click();
+  await pg.waitForTimeout(600);
+  html = await pg.content();
+  ok(
+    "Recuperacoes: pedido com badge à espera de código",
+    html.includes("Mecânico Chefe") && html.includes("À espera de código")
+  );
+
+  postsPermissoes.length = 0;
+  await pg.getByRole("button", { name: "Gerar código", exact: true }).first().click();
+  await pg.waitForTimeout(600);
+  html = await pg.content();
+  ok(
+    "Recuperacoes: dialog pede a chave de administração",
+    html.includes("Gerar código de recuperação") && html.includes("Chave de administração")
+  );
+  await pg.fill("#chave-recuperacao", "chave-do-filomeno");
+  await pg.getByRole("button", { name: "Gerar código", exact: true }).last().click();
+  await pg.waitForTimeout(700);
+  html = await pg.content();
+  const gerou = postsPermissoes.find(
+    (c) => c.action === "gerar-codigo-recuperacao" && c.utilizador_id === "u-mecanico"
+  );
+  ok("Recuperacoes: gerar manda utilizador + chave", Boolean(gerou), JSON.stringify(postsPermissoes));
+  ok(
+    "Recuperacoes: código aparece UMA vez no dialog com copiar",
+    html.includes("K7PQX2MN") && (await pg.getByRole("button", { name: "Copiar", exact: true }).count()) === 1
+  );
+  // o modal tem o X com aria-label "Fechar" e o botão "Fechar": o último é o nosso
+  await pg.getByRole("button", { name: "Fechar", exact: true }).last().click();
+  await pg.waitForTimeout(400);
 
   /* ---------- 6. /perfil: Os meus dados ---------- */
   await pg.goto(`${BASE}/perfil`, { waitUntil: "domcontentloaded" });

@@ -43,6 +43,37 @@ const FOTOS = "/home/z/my-project/danmo/tests";
   await page.waitForURL(`${BASE}/`, { timeout: 30000 });
   await page.waitForTimeout(1500);
 
+  // 1c. Recuperação de senha (Fase 8): link -> pedir -> código + nova senha
+  await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Esqueci a minha senha" }).click();
+  await page.waitForTimeout(500);
+  let corpoRec = await page.textContent("body");
+  ok("Login: link abre a etapa Recuperar o meu acesso", corpoRec.includes("Recuperar o meu acesso"));
+  await page.fill("#rec-codigo", "DM0120");
+  await page.getByRole("button", { name: "Pedir código de recuperação" }).click();
+  await page.waitForTimeout(800);
+  corpoRec = await page.textContent("body");
+  ok(
+    "Login: pedir avança para definir a nova senha com aviso do pedido",
+    corpoRec.includes("Define a tua nova senha") && corpoRec.includes("Pedido registado")
+  );
+  await page.fill("#rec-codigo-2", "DM0120");
+  await page.fill("#rec-codigo-recebido", "K7PQX2MN");
+  await page.fill("#rec-senha", "nova1234");
+  await page.fill("#rec-confirmar", "nova1234");
+  await page.getByRole("button", { name: "Recuperar o acesso" }).click();
+  await page.waitForTimeout(800);
+  corpoRec = await page.textContent("body");
+  ok("Login: acesso recuperado com sucesso", corpoRec.includes("Acesso recuperado com sucesso"));
+  await page.getByRole("button", { name: "Voltar ao início de sessão" }).click();
+  await page.waitForTimeout(500);
+  corpoRec = await page.textContent("body");
+  ok("Login: volta ao ecrã de entrar após recuperar", corpoRec.includes("Código de utilizador"));
+
+  // volta para dentro da app (a sessão de 1b continua viva)
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(1500);
+
   // 2. Topbar: nome correcto + pílula de data/hora ao centro
   const corpo = await page.textContent("body");
   ok("Topbar tem 'Portal Danmo Service System, Lda'",

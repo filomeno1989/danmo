@@ -29,7 +29,8 @@ import {
   ShieldCheck,
   ArrowLeft,
   BadgeCheck,
-  UserRoundSearch
+  UserRoundSearch,
+  KeyRound
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { trocarTemaInstantaneo } from "@/components/theme-provider";
@@ -41,7 +42,15 @@ import { Separator } from "@/components/ui/separator";
 import { PasswordInput } from "@/components/ui/password-input";
 import type { FundoLogin } from "@/lib/uso-comum";
 
-type Etapa = "entrar" | "registo_codigo" | "registo_dados" | "trocar" | "trocada";
+type Etapa =
+  | "entrar"
+  | "registo_codigo"
+  | "registo_dados"
+  | "trocar"
+  | "trocada"
+  | "recuperar_codigo"
+  | "recuperar_definir"
+  | "recuperada";
 type DadosRegisto = {
   nome: string;
   departamento: string;
@@ -148,6 +157,14 @@ function LoginConteudo() {
   const [senhaConfirmar, setSenhaConfirmar] = useState("");
   const [aTrocar, setATrocar] = useState(false);
 
+  // Recuperar o acesso (Fase 8, sem email: código mediado pela administração)
+  const [recCodigo, setRecCodigo] = useState("");
+  const [recCodigoRecebido, setRecCodigoRecebido] = useState("");
+  const [recSenha, setRecSenha] = useState("");
+  const [recConfirmar, setRecConfirmar] = useState("");
+  const [aPedir, setAPedir] = useState(false);
+  const [aAplicar, setAAplicar] = useState(false);
+
   const refCodigo = useRef<HTMLInputElement>(null);
   const refRegCodigo = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -166,6 +183,19 @@ function LoginConteudo() {
     setDadosRegisto(null);
     setRegSenha("");
     setRegConfirmar("");
+    setRecCodigo("");
+    setRecCodigoRecebido("");
+    setRecSenha("");
+    setRecConfirmar("");
+  }
+
+  function abrirRecuperacao() {
+    limparMensagens();
+    setRecCodigo(codigo);
+    setRecCodigoRecebido("");
+    setRecSenha("");
+    setRecConfirmar("");
+    setEtapaManual("recuperar_codigo");
   }
 
   async function entrar(e: React.FormEvent) {
@@ -304,6 +334,80 @@ function LoginConteudo() {
     } catch {
       setErro("Sem ligação ao servidor. Verifica a internet e tenta de novo.");
       setATrocar(false);
+    }
+  }
+
+  async function pedirRecuperacao(e: React.FormEvent) {
+    e.preventDefault();
+    limparMensagens();
+    if (!recCodigo.trim()) {
+      setErro("Escreve o teu código de colaborador.");
+      return;
+    }
+    setAPedir(true);
+    try {
+      const r = await fetch("/api/auth/recuperar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "pedir", codigo: recCodigo })
+      });
+      const dados = await r.json();
+      if (!r.ok || !dados.ok) {
+        setErro(dados.erro || "Não foi possível registar o pedido.");
+        setAPedir(false);
+        return;
+      }
+      limparMensagens();
+      setAvisoManual(
+        "Pedido registado. Recebe o código de recuperação com a administração e escreve-o abaixo."
+      );
+      setAPedir(false);
+      setEtapaManual("recuperar_definir");
+    } catch {
+      setErro("Sem ligação ao servidor. Verifica a internet e tenta de novo.");
+      setAPedir(false);
+    }
+  }
+
+  async function aplicarRecuperacao(e: React.FormEvent) {
+    e.preventDefault();
+    limparMensagens();
+    if (!recCodigo.trim() || !recCodigoRecebido.trim() || !recSenha || !recConfirmar) {
+      setErro("Preenche os quatro campos, por favor.");
+      return;
+    }
+    if (recSenha !== recConfirmar) {
+      setErro("A confirmação não coincide com a nova senha.");
+      return;
+    }
+    if (recSenha.length < 6) {
+      setErro("A nova senha precisa de ter pelo menos 6 caracteres.");
+      return;
+    }
+    setAAplicar(true);
+    try {
+      const r = await fetch("/api/auth/recuperar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "aplicar",
+          codigo: recCodigo,
+          codigo_recuperacao: recCodigoRecebido,
+          nova: recSenha
+        })
+      });
+      const dados = await r.json();
+      if (!r.ok || !dados.ok) {
+        setErro(dados.erro || "Não foi possível recuperar o acesso.");
+        setAAplicar(false);
+        return;
+      }
+      limparMensagens();
+      setAAplicar(false);
+      setEtapaManual("recuperada");
+    } catch {
+      setErro("Sem ligação ao servidor. Verifica a internet e tenta de novo.");
+      setAAplicar(false);
     }
   }
 
@@ -671,9 +775,173 @@ function LoginConteudo() {
           )}
 
           {etapa === "entrar" && (
-            <p className="mt-6 text-center text-xs text-muted-foreground">
-              Dificuldade em entrar? Fala com a administração.
-            </p>
+            <div className="mt-5 text-center">
+              <button
+                type="button"
+                onClick={abrirRecuperacao}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-primario transition-colors hover:text-primario/80"
+              >
+                <KeyRound className="size-4" aria-hidden />
+                Esqueci a minha senha
+              </button>
+            </div>
+          )}
+
+          {etapa === "recuperar_codigo" && (
+            <form onSubmit={pedirRecuperacao} className="space-y-4">
+              <div>
+                <p className="text-[1.05rem] font-bold">Recuperar o meu acesso</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Escreve o teu código: a administração recebe o pedido e
+                  passa-te o código de recuperação.
+                </p>
+              </div>
+              <Separator />
+              <div className="space-y-1.5">
+                <Label htmlFor="rec-codigo">Código de utilizador</Label>
+                <Input
+                  id="rec-codigo"
+                  autoComplete="username"
+                  autoCapitalize="characters"
+                  placeholder="Ex.: DM0069"
+                  value={recCodigo}
+                  onChange={(e) => setRecCodigo(e.target.value)}
+                  className="h-11 uppercase"
+                  required
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={aPedir}
+                className="h-11 w-full bg-ambar text-[#101b2d] font-bold hover:bg-ambar-hover"
+              >
+                {aPedir ? (
+                  <>
+                    <LoaderCircle className="animate-spin" aria-hidden />
+                    A registar o pedido...
+                  </>
+                ) : (
+                  "Pedir código de recuperação"
+                )}
+              </Button>
+              <button
+                type="button"
+                onClick={voltarAoEntrar}
+                className="flex w-full items-center justify-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+                Voltar ao início de sessão
+              </button>
+            </form>
+          )}
+
+          {etapa === "recuperar_definir" && (
+            <form onSubmit={aplicarRecuperacao} className="space-y-4">
+              <div>
+                <p className="text-[1.05rem] font-bold">Define a tua nova senha</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Com o código de recuperação que a administração te passou.
+                </p>
+              </div>
+              <Separator />
+              <div className="space-y-1.5">
+                <Label htmlFor="rec-codigo-2">Código de utilizador</Label>
+                <Input
+                  id="rec-codigo-2"
+                  autoComplete="username"
+                  autoCapitalize="characters"
+                  placeholder="Ex.: DM0069"
+                  value={recCodigo}
+                  onChange={(e) => setRecCodigo(e.target.value)}
+                  className="h-11 uppercase"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="rec-codigo-recebido">Código de recuperação</Label>
+                <Input
+                  id="rec-codigo-recebido"
+                  autoComplete="one-time-code"
+                  autoCapitalize="characters"
+                  placeholder="8 caracteres da administração"
+                  value={recCodigoRecebido}
+                  onChange={(e) => setRecCodigoRecebido(e.target.value.toUpperCase())}
+                  className="h-11 font-mono uppercase tracking-widest"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="rec-senha">Nova senha</Label>
+                <PasswordInput
+                  id="rec-senha"
+                  value={recSenha}
+                  onChange={setRecSenha}
+                  placeholder="Pelo menos 6 caracteres"
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="rec-confirmar">Confirmar nova senha</Label>
+                <PasswordInput
+                  id="rec-confirmar"
+                  value={recConfirmar}
+                  onChange={setRecConfirmar}
+                  placeholder="Escreve a mesma senha"
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={aAplicar}
+                className="h-11 w-full bg-ambar text-[#101b2d] font-bold hover:bg-ambar-hover"
+              >
+                {aAplicar ? (
+                  <>
+                    <LoaderCircle className="animate-spin" aria-hidden />
+                    A recuperar...
+                  </>
+                ) : (
+                  "Recuperar o acesso"
+                )}
+              </Button>
+              <button
+                type="button"
+                onClick={voltarAoEntrar}
+                className="flex w-full items-center justify-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+                Voltar ao início de sessão
+              </button>
+            </form>
+          )}
+
+          {etapa === "recuperada" && (
+            <div className="space-y-5 text-center">
+              <ShieldCheck className="mx-auto size-12 text-sucesso" aria-hidden />
+              <div>
+                <p className="text-[1.05rem] font-bold">Acesso recuperado com sucesso</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Entra agora com o teu código e a nova senha.
+                </p>
+              </div>
+              <Button
+                onClick={() => {
+                  setEtapaManual("entrar");
+                  setSenha("");
+                  setRecCodigo("");
+                  setRecCodigoRecebido("");
+                  setRecSenha("");
+                  setRecConfirmar("");
+                  setAvisoManual("");
+                  setErro("");
+                }}
+                className="h-11 w-full bg-ambar text-[#101b2d] font-bold hover:bg-ambar-hover"
+              >
+                Voltar ao início de sessão
+              </Button>
+            </div>
           )}
         </CardContent>
       </Card>

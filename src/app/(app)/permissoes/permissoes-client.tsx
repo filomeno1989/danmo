@@ -18,6 +18,7 @@ import {
   BadgeCheck,
   ChevronRight,
   CircleSlash,
+  Copy,
   KeyRound,
   Search,
   ShieldCheck,
@@ -54,6 +55,16 @@ type Solicitacao = {
   criado_em: string;
   resolvido_em: string | null;
   resposta: string;
+};
+
+type Recuperacao = {
+  utilizador_id: string;
+  usuario: string;
+  nome: string;
+  pedido_em: string;
+  codigo_gerado_em: string | null;
+  expira_em: string | null;
+  usado_em: string | null;
 };
 
 type LinhaMatriz = { pagina: string; ver: boolean; mexer: boolean; apagar: boolean };
@@ -138,11 +149,12 @@ function Interruptor({
 }
 
 export function PermissoesClient({ nomeAdmin }: { nomeAdmin: string }) {
-  const [aba, setAba] = useState<"utilizadores" | "matriz" | "solicitacoes">(
-    "utilizadores"
-  );
+  const [aba, setAba] = useState<
+    "utilizadores" | "matriz" | "solicitacoes" | "recuperacoes"
+  >("utilizadores");
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
+  const [recuperacoes, setRecuperacoes] = useState<Recuperacao[]>([]);
   const [aCarregar, setACarregar] = useState(true);
   const [busca, setBusca] = useState("");
 
@@ -172,6 +184,12 @@ export function PermissoesClient({ nomeAdmin }: { nomeAdmin: string }) {
   } | null>(null);
   const [respostaResolver, setRespostaResolver] = useState("");
 
+  /* ---- Recuperações de senha (Fase 8) ---- */
+  const [dialogRecuperacao, setDialogRecuperacao] = useState<Recuperacao | null>(null);
+  const [chaveRecuperacao, setChaveRecuperacao] = useState("");
+  const [codigoGerado, setCodigoGerado] = useState("");
+  const [aGerar, setAGerar] = useState(false);
+
   const [aCorrer, setACorrer] = useState(false);
 
   const carregar = useCallback(async () => {
@@ -185,6 +203,14 @@ export function PermissoesClient({ nomeAdmin }: { nomeAdmin: string }) {
       toast.error((e as Error).message);
     } finally {
       setACarregar(false);
+    }
+    try {
+      const r = await pedir<{ recuperacoes: Recuperacao[] }>("/api/portal/permissoes", {
+        action: "recuperacoes"
+      });
+      setRecuperacoes(r.recuperacoes || []);
+    } catch {
+      setRecuperacoes([]);
     }
   }, []);
 
@@ -337,6 +363,29 @@ export function PermissoesClient({ nomeAdmin }: { nomeAdmin: string }) {
     }
   };
 
+  const gerarCodigoRecuperacao = async () => {
+    if (!dialogRecuperacao) return;
+    setAGerar(true);
+    try {
+      const d = await pedir<{ codigo: string }>("/api/portal/permissoes", {
+        action: "gerar-codigo-recuperacao",
+        utilizador_id: dialogRecuperacao.utilizador_id,
+        chave: chaveRecuperacao
+      });
+      setCodigoGerado(d.codigo || "");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setAGerar(false);
+    }
+  };
+
+  function abrirDialogRecuperacao(r: Recuperacao) {
+    setDialogRecuperacao(r);
+    setChaveRecuperacao("");
+    setCodigoGerado("");
+  }
+
   const activar = async () => {
     if (!dialogActivar) return;
     const vaiActivar = !(dialogActivar.ativo !== false);
@@ -449,7 +498,8 @@ export function PermissoesClient({ nomeAdmin }: { nomeAdmin: string }) {
           [
             ["utilizadores", `Utilizadores${pendentes.length ? ` (${pendentes.length} por aprovar)` : ""}`],
             ["matriz", "Matriz de permissões"],
-            ["solicitacoes", `Solicitações${pendentesNovas.length ? ` (${pendentesNovas.length})` : ""}`]
+            ["solicitacoes", `Solicitações${pendentesNovas.length ? ` (${pendentesNovas.length})` : ""}`],
+            ["recuperacoes", `Recuperações${recuperacoes.length ? ` (${recuperacoes.length})` : ""}`]
           ] as const
         ).map(([id, label]) => (
           <button
@@ -507,6 +557,11 @@ export function PermissoesClient({ nomeAdmin }: { nomeAdmin: string }) {
           gravar={gravar}
           aGravar={aGravar}
           modulosComPaginas={modulosComPaginas}
+        />
+      ) : aba === "recuperacoes" ? (
+        <AbaRecuperacoes
+          pedidos={recuperacoes}
+          gerar={abrirDialogRecuperacao}
         />
       ) : (
         <AbaSolicitacoes
@@ -714,6 +769,66 @@ export function PermissoesClient({ nomeAdmin }: { nomeAdmin: string }) {
               Redefinir
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        aberto={Boolean(dialogRecuperacao)}
+        fechar={() => setDialogRecuperacao(null)}
+        titulo="Gerar código de recuperação"
+        subtitulo={
+          dialogRecuperacao
+            ? `${dialogRecuperacao.nome} (${dialogRecuperacao.usuario})`
+            : ""
+        }
+      >
+        <div className="space-y-4 px-5 py-4">
+          {codigoGerado ? (
+            <div className="space-y-4">
+              <p className="text-center font-mono text-3xl font-bold tracking-[0.3em] text-primario">
+                {codigoGerado}
+              </p>
+              <div className="flex justify-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(codigoGerado);
+                      toast.success("Código copiado.");
+                    } catch {
+                      toast.error("Não foi possível copiar. Copia à mão.");
+                    }
+                  }}
+                >
+                  <Copy className="size-4" aria-hidden />
+                  Copiar
+                </Button>
+                <Button onClick={() => setDialogRecuperacao(null)}>Fechar</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="chave-recuperacao">Chave de administração</Label>
+                <Input
+                  id="chave-recuperacao"
+                  type="password"
+                  value={chaveRecuperacao}
+                  onChange={(e) => setChaveRecuperacao(e.target.value)}
+                  placeholder="Confirma com a tua chave"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setDialogRecuperacao(null)}>
+                  Cancelar
+                </Button>
+                <Button onClick={gerarCodigoRecuperacao} disabled={aGerar || !chaveRecuperacao}>
+                  <KeyRound className="size-4" aria-hidden />
+                  Gerar código
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
 
@@ -1295,6 +1410,90 @@ function AbaSolicitacoes({
         Cada pessoa vê o estado dos seus próprios pedidos em Os meus dados.
       </p>
     </div>
+  );
+}
+
+/* ================================================================
+ * ABA RECUPERAÇÕES (pedidos de "Esqueci a minha senha", Fase 8)
+ * ================================================================ */
+
+function estadoRecuperacao(r: Recuperacao): {
+  texto: string;
+  classe: string;
+} {
+  if (!r.codigo_gerado_em) {
+    return { texto: "À espera de código", classe: "bg-aviso-bg text-aviso border-aviso/40" };
+  }
+  const expira = r.expira_em ? new Date(r.expira_em).getTime() : 0;
+  if (expira < Date.now()) {
+    return { texto: "Código expirado", classe: "bg-erro-bg text-erro border-erro/30" };
+  }
+  return { texto: "Código gerado", classe: "bg-sucesso-bg text-sucesso border-sucesso/30" };
+}
+
+function horaCurta(iso: string | null): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleTimeString("pt-PT", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Africa/Maputo"
+    });
+  } catch {
+    return "";
+  }
+}
+
+function AbaRecuperacoes({
+  pedidos,
+  gerar
+}: {
+  pedidos: Recuperacao[];
+  gerar: (r: Recuperacao) => void;
+}) {
+  return (
+    <Card className="card-sombra overflow-hidden py-0">
+      <div className="border-b border-border px-4 py-2.5">
+        <p className="text-[0.82rem] font-bold">Pedidos de recuperação ({pedidos.length})</p>
+      </div>
+      {pedidos.length === 0 ? (
+        <p className="px-4 py-6 text-center text-[0.8rem] text-muted-foreground">
+          Nenhum pedido de recuperação.
+        </p>
+      ) : (
+        pedidos.map((r) => {
+          const estado = estadoRecuperacao(r);
+          return (
+            <div
+              key={r.utilizador_id}
+              className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-b-0"
+            >
+              <div className="min-w-0">
+                <p className="flex flex-wrap items-center gap-2 text-[0.9rem] font-semibold">
+                  {r.nome}
+                  <Badge variant="outline" className={estado.classe}>
+                    {estado.texto}
+                  </Badge>
+                </p>
+                <p className="mt-0.5 text-[0.78rem] text-muted-foreground">
+                  {r.usuario}
+                  {r.pedido_em
+                    ? ` - pediu em ${dataCurta(r.pedido_em)} às ${horaCurta(r.pedido_em)}`
+                    : ""}
+                  {r.expira_em && estado.texto === "Código gerado"
+                    ? ` - código expira às ${horaCurta(r.expira_em)}`
+                    : ""}
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => gerar(r)}>
+                <KeyRound className="size-3.5" aria-hidden />
+                {r.codigo_gerado_em ? "Gerar outro código" : "Gerar código"}
+              </Button>
+            </div>
+          );
+        })
+      )}
+    </Card>
   );
 }
 

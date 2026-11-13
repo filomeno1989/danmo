@@ -14,6 +14,11 @@
  *    - máquina é link para o histórico (/oficina/maquina/{equipment_id});
  *    - pesquisa sem resultados mostra "Nenhuma obra com os filtros escolhidos."
  *
+ * A grelha abre no mês CORRENTE do navegador: os fixtures seguem o
+ * calendário (mês e nº de dias calculados à hora), para o teste rodar em
+ * qualquer mês sem morrer - era a dependência de data que fazia os
+ * fixtures de Outubro falharem em Novembro.
+ *
  * Ambiente: servidor dev SEM chaves (modo estrutura) + mock de rede.
  */
 
@@ -21,16 +26,28 @@ const { chromium } = require("/home/z/.npm-global/lib/node_modules/playwright");
 
 const BASE = process.env.BASE || "http://localhost:3458";
 
+/* Mês corrente do navegador (a grelha nasce nele) + nº de dias do mês. */
+const AGORA = new Date();
+const MES = `${AGORA.getFullYear()}-${String(AGORA.getMonth() + 1).padStart(2, "0")}`;
+const NDIAS = new Date(AGORA.getFullYear(), AGORA.getMonth() + 1, 0).getDate();
+const dd = (n) => String(n).padStart(2, "0");
+
 const EQUIPS = [
   { id: 1, code: "2.5-01", name: "Doosan", group_name: "FKL 2.5T", active: true },
   { id: 2, code: "45-17", name: "Sany", group_name: "RST 45T", active: true }
 ];
 
+/* Totais esperados, derivados dos mesmos NDIAS que a grelha desenha:
+   Disponível = (NDIAS-2) dias da máquina 1 + (NDIAS-1) da máquina 2, a
+   24 h cada; Avariada = dia 1 (manual) + dia 3 (obra) a 24 h cada;
+   Pneumático = dia 5 da obra a 24 h. */
+const HORAS_DISPONIVEL = (NDIAS - 2) * 24 + (NDIAS - 1) * 24;
+
 function construirDias() {
   const dias = [];
   let id = 1;
-  for (let dia = 1; dia <= 31; dia++) {
-    const data = `2026-10-${String(dia).padStart(2, "0")}`;
+  for (let dia = 1; dia <= NDIAS; dia++) {
+    const data = `${MES}-${dd(dia)}`;
     // máquina 1: dia 1 marcado à mão (Avariada), dia 3 vem da obra 68245
     if (dia === 1) {
       dias.push({ id: id++, equipment_id: 1, data, estado: "Avariada", horas_disponiveis: 0, hora_entrada: "08:00", hora_saida: null, observacao: "bombas" });
@@ -51,17 +68,17 @@ function construirDias() {
 
 const DIAS_GET = {
   ok: true,
-  mes: "2026-10",
+  mes: MES,
   equipamentos: EQUIPS,
   dias: construirDias(),
   transicoesAbertas: [
-    { id: 12, equipment_id: 2, estado: "Avariada", inicio: "2026-10-02T00:00:00+02:00", code: "45-17", nome: "Sany", obra: "72849", os_id: 12 }
+    { id: 12, equipment_id: 2, estado: "Avariada", inicio: `${MES}-02T00:00:00+02:00`, code: "45-17", nome: "Sany", obra: "72849", os_id: 12 }
   ],
   resumoSemanal: [
-    { semana: 41, pct: 91.1, maquinas: 2, dias: 4 },
-    { semana: 42, pct: 94.6, maquinas: 2, dias: 7 }
+    { semana: 1, pct: 91.1, maquinas: 2, dias: 4 },
+    { semana: 2, pct: 94.6, maquinas: 2, dias: 7 }
   ],
-  resumoMes: { horasDisponiveis: 1416, diasMarcados: 1 }
+  resumoMes: { horasDisponiveis: HORAS_DISPONIVEL, diasMarcados: 1 }
 };
 
 const FATURACAO_GET = {
@@ -108,11 +125,11 @@ const FATURACAO_GET = {
   await pagina.goto(`${BASE}/disponibilidade/grelha`, { waitUntil: "networkidle" });
 
   // dia de obra: tooltip com a obra
-  const celulaObra = pagina.locator("button[title*='2.5-01 · 2026-10-03']");
+  const celulaObra = pagina.locator(`button[title*='2.5-01 · ${MES}-03']`);
   ok("Grelha: celula do dia da obra tem a obra no tooltip", (await celulaObra.count()) === 1 && (await celulaObra.getAttribute("title") || "").includes("Obra 68245"), await celulaObra.getAttribute("title").catch(() => ""));
 
   // dia implícito: verde Disponível sem marcação
-  const celulaAuto = pagina.locator("button[title*='2.5-01 · 2026-10-02']");
+  const celulaAuto = pagina.locator(`button[title*='2.5-01 · ${MES}-02']`);
   const classeAuto = (await celulaAuto.getAttribute("class")) || "";
   ok("Grelha: dia implicito Disponivel pinta de verde cheio", classeAuto.includes("bg-sucesso") && !classeAuto.includes("bg-sucesso-bg"), classeAuto);
 
@@ -130,9 +147,9 @@ const FATURACAO_GET = {
   ok("Grelha: Paradas neste momento mostra Obra 72849 com link", (await linkParada.count()) > 0 && (await linkParada.textContent() || "").includes("Obra 72849"));
 
   // horas do mês por estado contam os dias sintetizados:
-  // Disponível = (31-3) + (31-1) dias-máquina... m1: 28x24 + dia2 24 = 696; m2: 30x24 = 720 -> 1416
+  // m1: NDIAS-2 dias Disponível + dia 2 (24h) = (NDIAS-1)x24; m2: (NDIAS-1)x24
   const corpoA = normalizar(await pagina.textContent("body"));
-  ok("Grelha: horas de Disponível contam dias automaticos (1416 h)", corpoA.includes("1416 h"));
+  ok(`Grelha: horas de Disponível contam dias automaticos (${HORAS_DISPONIVEL} h)`, corpoA.includes(`${HORAS_DISPONIVEL} h`));
   // (o cartão fica identificado pelo h2: as paradas em curso também têm li de estado e vêm antes no DOM)
   const liAvariada = pagina.locator("div.card-sombra:has(h2:has-text('Horas do mês por estado')) li:has-text('Avariada')").first();
   ok("Grelha: horas de Avariada = 48 h (marcada + obra)", (await liAvariada.textContent() || "").includes("48 h"));

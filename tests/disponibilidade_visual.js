@@ -12,6 +12,19 @@
 const { chromium } = require("/home/z/.npm-global/lib/node_modules/playwright");
 
 const BASE = process.env.BASE || "http://localhost:3458";
+
+/* A grelha abre no mês CORRENTE do navegador e o painel no ano/mês
+   correntes: os fixtures seguem o calendário para o teste rodar em
+   qualquer mês sem morrer - era a dependência de data que fazia os
+   fixtures de Outubro falharem em Novembro. */
+const AGORA = new Date();
+const MES = `${AGORA.getFullYear()}-${String(AGORA.getMonth() + 1).padStart(2, "0")}`;
+const NDIAS = new Date(AGORA.getFullYear(), AGORA.getMonth() + 1, 0).getDate();
+const MESES_PT = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
+
 let passaram = 0;
 let falharam = 0;
 
@@ -135,9 +148,14 @@ const PAINEL_FROTA = {
   porFrota: []
 };
 
-/* Painel de um ano sem dados (ex.: 2026 enquanto o excel esta a trabalhar) */
+/* Painel de um ano sem dados (ex.: 2026 enquanto o excel esta a trabalhar).
+   comparacaoAnos fica SEM o 2026 e seguintes: é o ano vazio do cenário, e
+   assim o salto automático aterra sempre no 2025 (o ano real dos excels),
+   seja qual for o ano em que o teste roda - com o 2026 na lista, em 2027
+   aterraría no 2026 vazio e as barras do 2025 nunca apareciam. */
 const PAINEL_VAZIO = {
   ...PAINEL,
+  comparacaoAnos: PAINEL.comparacaoAnos.filter((c) => c.ano < 2026),
   resumoMensal: Array.from({ length: 12 }, (_, i) => ({
     mes: i + 1,
     horasA: 0,
@@ -185,10 +203,10 @@ const DIAS_GET = {
   equipamentos: EQUIPS,
   inactivasEscondidas: 1,
   dias: [
-    { id: 1, equipment_id: 1, data: "2026-10-01", estado: "Disponível", horas_disponiveis: 24, hora_entrada: null, hora_saida: null, observacao: null },
-    { id: 2, equipment_id: 1, data: "2026-10-02", estado: "Avariada", horas_disponiveis: 0, hora_entrada: "08:30", hora_saida: null, observacao: "bombas injetoras" },
-    { id: 3, equipment_id: 1, data: "2026-10-03", estado: "Aguarda Acessório", horas_disponiveis: 0, hora_entrada: null, hora_saida: null, observacao: null },
-    { id: 4, equipment_id: 2, data: "2026-10-01", estado: "Pneumático", horas_disponiveis: 0, hora_entrada: null, hora_saida: "14:00", observacao: null }
+    { id: 1, equipment_id: 1, data: `${MES}-01`, estado: "Disponível", horas_disponiveis: 24, hora_entrada: null, hora_saida: null, observacao: null },
+    { id: 2, equipment_id: 1, data: `${MES}-02`, estado: "Avariada", horas_disponiveis: 0, hora_entrada: "08:30", hora_saida: null, observacao: "bombas injetoras" },
+    { id: 3, equipment_id: 1, data: `${MES}-03`, estado: "Aguarda Acessório", horas_disponiveis: 0, hora_entrada: null, hora_saida: null, observacao: null },
+    { id: 4, equipment_id: 2, data: `${MES}-01`, estado: "Pneumático", horas_disponiveis: 0, hora_entrada: null, hora_saida: "14:00", observacao: null }
   ],
   transicoesAbertas: PARADAS_GRELHA,
   resumoSemanal: [
@@ -314,8 +332,14 @@ let postsSemana = [];
   ok("Painel: KPI disponibilidade 84,2%", (await pagina.locator("text=84.2%").count()) > 0);
   ok("Painel: nota da meta 80%", (await pagina.locator("text=Meta 80%").count()) > 0);
   ok("Painel: KPI horometro 12.480 h", (await pagina.locator("text=/12[ .,\u00A0\u202F]?480 h/").count()) > 0);
-  ok("Painel: grafico dos 12 meses", (await pagina.locator("text=Disponibilidade por mês em 2026").count()) > 0);
-  ok("Painel: comparacao com mes anterior", (await pagina.locator("text=Comparação com Setembro").count()) > 0);
+  ok("Painel: grafico dos 12 meses (ano corrente)", (await pagina.locator(`text=Disponibilidade por mês em ${AGORA.getFullYear()}`).count()) > 0);
+  // a comparação só existe do Fevereiro em diante (em Janeiro o mês
+  // anterior é do ano passado e o painel não a mostra)
+  if (AGORA.getMonth() >= 1) {
+    ok("Painel: comparacao com mes anterior", (await pagina.locator(`text=Comparação com ${MESES_PT[AGORA.getMonth() - 1]}`).count()) > 0);
+  } else {
+    ok("Painel: Janeiro não compara (mês anterior é do ano passado)", (await pagina.locator("text=Comparação com").count()) === 0);
+  }
   ok("Painel: seccao comparacao entre anos", (await pagina.locator("h2:has-text('Comparação entre anos')").count()) > 0);
   ok("Painel: 5 anos no comparativo", (await pagina.locator("span:text-is('2022')").count()) >= 1);
   ok("Painel: horas por estado fisico", (await pagina.locator("h2:has-text('Horas por estado físico')").count()) > 0);
@@ -408,7 +432,7 @@ let postsSemana = [];
   await pagina.goto(`${BASE}/disponibilidade/grelha`, { waitUntil: "networkidle" });
   ok("Grelha: cabecalho", (await pagina.locator("h1:has-text('Grelha Diária')").count()) > 0);
   ok("Grelha: maquina 2.5-01 na tabela", (await pagina.locator("th:has-text('2.5-01')").count()) > 0);
-  ok("Grelha: 31 dias no mes", (await pagina.locator("thead th").count()) >= 32);
+  ok(`Grelha: ${NDIAS} dias no mês corrente`, (await pagina.locator("thead th").count()) === NDIAS + 1);
   ok("Grelha: legenda com 7 estados", (await pagina.locator("li:has-text('Pneumático')").count()) > 0);
   ok("Grelha: paradas neste momento mostra 2.5-01", (await pagina.locator("li span:has-text('2.5-01')").count()) > 0);
   ok("Grelha: inactiva 99-99 fora da tabela por defeito", (await pagina.locator("th:has-text('99-99')").count()) === 0);
@@ -435,10 +459,10 @@ let postsSemana = [];
   ok("Grelha: resumo por semana (ISO)", (await pagina.locator("text=Semana 41").count()) > 0);
   ok("Grelha: horas do mes por estado", (await pagina.locator("h2:has-text('Horas do mês por estado')").count()) > 0);
 
-  // abrir modal do dia 2 de Outubro da 2.5-01 (celula com Avariada)
-  await pagina.locator("button[title*='2.5-01 · 2026-10-02']").click();
+  // abrir modal do dia 2 do mês corrente da 2.5-01 (celula com Avariada)
+  await pagina.locator(`button[title*='2.5-01 · ${MES}-02']`).click();
   await pagina.waitForTimeout(300);
-  ok("Grelha: modal do dia abre com maquina e data", (await pagina.locator("text=2.5-01 · 2026-10-02").count()) > 0);
+  ok("Grelha: modal do dia abre com maquina e data", (await pagina.locator(`text=2.5-01 · ${MES}-02`).count()) > 0);
   ok("Grelha: modal com 7 botoes de estado", (await pagina.locator("button:text-is('Disponível')").count()) > 0);
   ok("Grelha: hora entrada preenchida", (await pagina.locator("input[type='time']").first().inputValue()) === "08:30");
 
@@ -449,8 +473,8 @@ let postsSemana = [];
   await pagina.waitForTimeout(500);
   ok("Grelha: gravou dia + repeticao (3 marcacoes no POST)", postsDias.length === 1 && postsDias[0]?.marcacoes?.length === 3, JSON.stringify(postsDias));
 
-  // clique direito cicla estados -> marcacao pendente
-  await pagina.locator("button[title*='70-01 · 2026-10-05']").click({ button: "right" });
+  // clique direito cicla estados -> marcacao pendente (dia 5 existe em todos os meses)
+  await pagina.locator(`button[title*='70-01 · ${MES}-05']`).click({ button: "right" });
   await pagina.waitForTimeout(300);
   ok("Grelha: botao de gravar lote aparece com 1 marcacao", (await pagina.locator("button:has-text('Gravar 1 marcação')").count()) > 0);
   await pagina.locator("button:has-text('Gravar 1 marcação')").click();

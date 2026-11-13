@@ -21,6 +21,7 @@ import {
   Cog,
   Package,
   Briefcase,
+  Wrench,
   Layers,
   ArrowRight,
   type LucideIcon
@@ -166,6 +167,7 @@ export function PainelInicio({
   podeStock,
   podeFaturacao,
   podeQuadro,
+  podeFerramentaria,
   eAdmin,
   fundos,
   avisos
@@ -176,6 +178,7 @@ export function PainelInicio({
   podeStock: boolean;
   podeFaturacao: boolean;
   podeQuadro: boolean;
+  podeFerramentaria: boolean;
   eAdmin: boolean;
   fundos?: Parameters<typeof HeroiSaudacao>[0]["fundosIniciais"];
   avisos?: AvisosHome | null;
@@ -242,7 +245,7 @@ export function PainelInicio({
             marcaAgua={Package}
             titulo="Gestão de Stock"
             corTitulo="text-red-950 dark:text-white"
-            texto="Já está no ar: Materiais, Entradas, Saídas, Painel, Relatórios e Configurações, com stock calculado no servidor e o stock nunca negativo. Depois: Ferramentaria e RH."
+            texto="Já está no ar: Materiais, Entradas, Saídas, Painel, Relatórios e Configurações, com stock calculado no servidor e o stock nunca negativo."
             corTexto="text-red-900/75 dark:text-white/75"
             pill={pillNoAr}
             seta="border-red-700/30 text-red-900 hover:bg-red-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
@@ -269,6 +272,23 @@ export function PainelInicio({
             seta="border-amber-700/30 text-amber-900 hover:bg-amber-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
             href={podeFaturacao ? "/faturacao" : "/rh/quadro"}
             rotulo={podeFaturacao ? "Abrir a Faturação da Administração" : "Abrir o Quadro de Pessoal"}
+          />
+        </SemPermissaoAplicada>
+
+        <SemPermissaoAplicada permitido={podeFerramentaria}>
+          <CartaoFase
+            classeFundo="fase-cinza text-slate-950 dark:text-white"
+            icone={Wrench}
+            tile="bg-slate-700 text-white dark:bg-white/15 dark:text-white"
+            marcaAgua={Wrench}
+            titulo="Ferramentaria"
+            corTitulo="text-slate-900 dark:text-white"
+            texto="No ar: Inventário, Empréstimos com devolução controlada, Danos, Ferramenteiros, Relatórios e Configurações, com disponibilidade e devoluções decididas no servidor."
+            corTexto="text-slate-900/75 dark:text-white/75"
+            pill={pillNoAr}
+            seta="border-slate-700/30 text-slate-900 hover:bg-slate-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
+            href="/ferramentaria"
+            rotulo="Abrir a Ferramentaria"
           />
         </SemPermissaoAplicada>
 

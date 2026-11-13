@@ -110,10 +110,38 @@ describe("pode(): as 3 marcas", () => {
 });
 
 describe("PAGINAS: o mapa das páginas atribuíveis", () => {
-  test("são as 42 páginas reais dos 6 módulos no ar (18 + 6 da Faturação + 3 do RH + 4 da Aquisição + 4 das Férias + 7 do HST)", () => {
-    expect(PAGINAS.length).toBe(42);
+  test("são as 50 páginas reais dos 7 módulos no ar (18 + 6 da Faturação + 3 do RH + 4 da Aquisição + 4 das Férias + 7 do HST + 8 da Ferramentaria)", () => {
+    expect(PAGINAS.length).toBe(50);
     const modulos = new Set(PAGINAS.map((p) => p.modulo));
-    expect([...modulos].sort()).toEqual(["admin", "disponibilidade", "hst", "oficina", "stock"]);
+    expect([...modulos].sort()).toEqual(["admin", "disponibilidade", "ferramentaria", "hst", "oficina", "stock"]);
+  });
+  test("a Ferramentaria entra na matriz com as 8 páginas do módulo", () => {
+    const ferr = PAGINAS.filter((p) => p.pagina.startsWith("ferramentaria"));
+    expect(ferr.length).toBe(8);
+    expect(ferr.map((p) => p.pagina).sort()).toEqual([
+      "ferramentaria",
+      "ferramentaria.configuracoes",
+      "ferramentaria.danos",
+      "ferramentaria.devolucoes",
+      "ferramentaria.emprestimos",
+      "ferramentaria.ferramenteiros",
+      "ferramentaria.inventario",
+      "ferramentaria.relatorios"
+    ]);
+    expect(ferr.every((p) => p.modulo === "ferramentaria")).toBe(true);
+    expect(ferr.find((p) => p.pagina === "ferramentaria")?.href).toBe("/ferramentaria");
+    expect(ferr.find((p) => p.pagina === "ferramentaria.inventario")?.href).toBe("/ferramentaria/inventario");
+    expect(ferr.find((p) => p.pagina === "ferramentaria.emprestimos")?.href).toBe("/ferramentaria/emprestimos");
+    expect(ferr.find((p) => p.pagina === "ferramentaria.devolucoes")?.href).toBe("/ferramentaria/devolucoes");
+    expect(ferr.find((p) => p.pagina === "ferramentaria.danos")?.href).toBe("/ferramentaria/danos");
+    expect(ferr.find((p) => p.pagina === "ferramentaria.ferramenteiros")?.href).toBe("/ferramentaria/ferramenteiros");
+    expect(ferr.find((p) => p.pagina === "ferramentaria.relatorios")?.href).toBe("/ferramentaria/relatorios");
+    expect(ferr.find((p) => p.pagina === "ferramentaria.configuracoes")?.href).toBe("/ferramentaria/configuracoes");
+  });
+  test("labelPagina prefixa a Ferramentaria (Painel sozinho não diz nada na matriz)", () => {
+    expect(labelPagina("ferramentaria")).toContain("Ferramentaria");
+    expect(labelPagina("ferramentaria.inventario")).toContain("Ferramentaria");
+    expect(labelPagina("ferramentaria.configuracoes")).toContain("Ferramentaria");
   });
   test("o Portal HST entra na matriz com as 7 páginas do módulo", () => {
     const hst = PAGINAS.filter((p) => p.pagina.startsWith("hst"));

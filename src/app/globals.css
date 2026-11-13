@@ -438,6 +438,15 @@
   border-color: rgba(96, 165, 250, 0.32);
 }
 
+.fase-cinza {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-color: color-mix(in srgb, #475569 26%, transparent);
+}
+.dark .fase-cinza {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 55%, #3f4d63 100%);
+  border-color: rgba(148, 163, 184, 0.32);
+}
+
 /* ============ Painel lateral do cartão "Sobre este painel" ============ */
 
 /* Acompanha o tema: no claro fica claro (com brilhos da marca), no

@@ -165,16 +165,17 @@ export const MODULOS: Modulo[] = [
     id: "ferramentaria",
     label: "Ferramentaria",
     icone: "Wrench",
-    fase: 5,
+    // No ar (migração do hub): 8 páginas reais da ferramentaria.
+    fase: 0,
     sub: [
-      { label: "Painel", href: "/em-migracao?mod=ferramentaria" },
-      { label: "Inventário", href: "/em-migracao?mod=ferramentaria" },
-      { label: "Empréstimos", href: "/em-migracao?mod=ferramentaria" },
-      { label: "Devoluções", href: "/em-migracao?mod=ferramentaria" },
-      { label: "Danos", href: "/em-migracao?mod=ferramentaria" },
-      { label: "Ferramenteiros", href: "/em-migracao?mod=ferramentaria" },
-      { label: "Relatórios", href: "/em-migracao?mod=ferramentaria" },
-      { label: "Configurações", href: "/em-migracao?mod=ferramentaria" }
+      { label: "Painel", href: "/ferramentaria", pagina: "ferramentaria" },
+      { label: "Inventário", href: "/ferramentaria/inventario", pagina: "ferramentaria.inventario" },
+      { label: "Empréstimos", href: "/ferramentaria/emprestimos", pagina: "ferramentaria.emprestimos" },
+      { label: "Devoluções", href: "/ferramentaria/devolucoes", pagina: "ferramentaria.devolucoes" },
+      { label: "Danos", href: "/ferramentaria/danos", pagina: "ferramentaria.danos" },
+      { label: "Ferramenteiros", href: "/ferramentaria/ferramenteiros", pagina: "ferramentaria.ferramenteiros" },
+      { label: "Relatórios", href: "/ferramentaria/relatorios", pagina: "ferramentaria.relatorios" },
+      { label: "Configurações", href: "/ferramentaria/configuracoes", pagina: "ferramentaria.configuracoes" }
     ]
   },
   {
@@ -240,6 +241,7 @@ export function labelPagina(pagina: string): string {
   // "Novo Pedido"... ficam ambíguas sem o módulo).
   // Plano de Férias: idem (Plano Anual, Folha do Mês...).
   // Portal HST: idem (Painel, Acidentes, Áreas de Risco...).
+  // Ferramentaria: idem (Painel, Inventário, Empréstimos...).
   const prefixo = pagina.startsWith("faturacao")
     ? "Faturação - "
     : pagina.startsWith("rh.")
@@ -250,7 +252,9 @@ export function labelPagina(pagina: string): string {
           ? "Férias - "
           : pagina.startsWith("hst")
             ? "HST - "
-            : "";
+            : pagina.startsWith("ferramentaria")
+              ? "Ferramentaria - "
+              : "";
   const mod = moduloPorId(p.modulo);
   return `${prefixo}${p.label} (${mod?.label || p.modulo})`;
 }

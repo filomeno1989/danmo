@@ -148,15 +148,17 @@ export const MODULOS: Modulo[] = [
     id: "hst",
     label: "Portal HST",
     icone: "AlertTriangle",
-    fase: 5,
+    // No ar (migração do hub): 8 páginas reais do departamento de
+    // Higiene e Segurança do Trabalho.
+    fase: 0,
     sub: [
-      { label: "Painel", href: "/em-migracao?mod=hst" },
-      { label: "Acidentes", href: "/em-migracao?mod=hst" },
-      { label: "Areas de Risco", href: "/em-migracao?mod=hst" },
-      { label: "EPIs", href: "/em-migracao?mod=hst" },
-      { label: "Tensao Arterial", href: "/em-migracao?mod=hst" },
-      { label: "Relatorios", href: "/em-migracao?mod=hst" },
-      { label: "Configuracao", href: "/em-migracao?mod=hst" }
+      { label: "Painel", href: "/hst", pagina: "hst" },
+      { label: "Acidentes", href: "/hst/acidentes", pagina: "hst.acidentes" },
+      { label: "Áreas de Risco", href: "/hst/areas", pagina: "hst.areas" },
+      { label: "EPIs", href: "/hst/epis", pagina: "hst.epis" },
+      { label: "Tensão Arterial", href: "/hst/tensao", pagina: "hst.tensao" },
+      { label: "Relatórios", href: "/hst/relatorios", pagina: "hst.relatorios" },
+      { label: "Configuração", href: "/hst/configuracoes", pagina: "hst.configuracoes" }
     ]
   },
   {
@@ -237,6 +239,7 @@ export function labelPagina(pagina: string): string {
   // Pedidos de Aquisição: mesma razão da Faturação (4 páginas "Painel",
   // "Novo Pedido"... ficam ambíguas sem o módulo).
   // Plano de Férias: idem (Plano Anual, Folha do Mês...).
+  // Portal HST: idem (Painel, Acidentes, Áreas de Risco...).
   const prefixo = pagina.startsWith("faturacao")
     ? "Faturação - "
     : pagina.startsWith("rh.")
@@ -245,7 +248,9 @@ export function labelPagina(pagina: string): string {
         ? "Aquisição - "
         : pagina.startsWith("ferias")
           ? "Férias - "
-          : "";
+          : pagina.startsWith("hst")
+            ? "HST - "
+            : "";
   const mod = moduloPorId(p.modulo);
   return `${prefixo}${p.label} (${mod?.label || p.modulo})`;
 }

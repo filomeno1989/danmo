@@ -110,10 +110,31 @@ describe("pode(): as 3 marcas", () => {
 });
 
 describe("PAGINAS: o mapa das páginas atribuíveis", () => {
-  test("são as 35 páginas reais dos 5 módulos no ar (18 + 6 da Faturação + 3 do RH + 4 da Aquisição + 4 das Férias)", () => {
-    expect(PAGINAS.length).toBe(35);
+  test("são as 42 páginas reais dos 6 módulos no ar (18 + 6 da Faturação + 3 do RH + 4 da Aquisição + 4 das Férias + 7 do HST)", () => {
+    expect(PAGINAS.length).toBe(42);
     const modulos = new Set(PAGINAS.map((p) => p.modulo));
-    expect([...modulos].sort()).toEqual(["admin", "disponibilidade", "oficina", "stock"]);
+    expect([...modulos].sort()).toEqual(["admin", "disponibilidade", "hst", "oficina", "stock"]);
+  });
+  test("o Portal HST entra na matriz com as 7 páginas do módulo", () => {
+    const hst = PAGINAS.filter((p) => p.pagina.startsWith("hst"));
+    expect(hst.length).toBe(7);
+    expect(hst.map((p) => p.pagina).sort()).toEqual([
+      "hst",
+      "hst.acidentes",
+      "hst.areas",
+      "hst.configuracoes",
+      "hst.epis",
+      "hst.relatorios",
+      "hst.tensao"
+    ]);
+    expect(hst.every((p) => p.modulo === "hst")).toBe(true);
+    expect(hst.find((p) => p.pagina === "hst")?.href).toBe("/hst");
+    expect(hst.find((p) => p.pagina === "hst.acidentes")?.href).toBe("/hst/acidentes");
+    expect(hst.find((p) => p.pagina === "hst.areas")?.href).toBe("/hst/areas");
+    expect(hst.find((p) => p.pagina === "hst.epis")?.href).toBe("/hst/epis");
+    expect(hst.find((p) => p.pagina === "hst.tensao")?.href).toBe("/hst/tensao");
+    expect(hst.find((p) => p.pagina === "hst.relatorios")?.href).toBe("/hst/relatorios");
+    expect(hst.find((p) => p.pagina === "hst.configuracoes")?.href).toBe("/hst/configuracoes");
   });
   test("as Férias entram na matriz com as 4 páginas do grupo Plano de Férias", () => {
     const fe = PAGINAS.filter((p) => p.pagina.startsWith("ferias"));

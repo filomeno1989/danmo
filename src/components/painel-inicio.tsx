@@ -242,7 +242,7 @@ export function PainelInicio({
             marcaAgua={Package}
             titulo="Gestão de Stock"
             corTitulo="text-red-950 dark:text-white"
-            texto="Já está no ar: Materiais, Entradas, Saídas, Painel, Relatórios e Configurações, com stock calculado no servidor e o stock nunca negativo. Depois: Ferramentaria, HST e RH."
+            texto="Já está no ar: Materiais, Entradas, Saídas, Painel, Relatórios e Configurações, com stock calculado no servidor e o stock nunca negativo. Depois: Ferramentaria e RH."
             corTexto="text-red-900/75 dark:text-white/75"
             pill={pillNoAr}
             seta="border-red-700/30 text-red-900 hover:bg-red-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
@@ -261,8 +261,8 @@ export function PainelInicio({
             corTitulo="text-amber-950 dark:text-white"
             texto={
               podeFaturacao
-                ? "No ar: Faturação com Cotações e Faturas, o Quadro de Pessoal com as duas listas (Porto e TCM), estagiários e tempo de quem veio transferido, e os Pedidos de Aquisição. Segue a Avaliação de Desempenho."
-                : "No ar: o Quadro de Pessoal com as duas listas (Porto e TCM), estagiários com decisão no fim, o tempo de quem veio transferido e os Pedidos de Aquisição. Segue a Avaliação de Desempenho."
+                ? "No ar: Faturação com Cotações e Faturas, o Quadro de Pessoal com as duas listas (Porto e TCM), estagiários e tempo de quem veio transferido, e os Pedidos de Aquisição. O Portal HST também já está no ar; segue a Avaliação de Desempenho."
+                : "No ar: o Quadro de Pessoal com as duas listas (Porto e TCM), estagiários com decisão no fim, o tempo de quem veio transferido e os Pedidos de Aquisição. O Portal HST também já está no ar; segue a Avaliação de Desempenho."
             }
             corTexto="text-amber-900/75 dark:text-white/75"
             pill={pillNoAr}

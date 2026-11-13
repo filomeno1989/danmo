@@ -188,7 +188,7 @@ const pedidoPorId = (id) => (id === "aq-002" ? PEDIDO_002 : id === "aq-001" ? PE
   const home = await pg.content();
   ok(
     "Home: cartao Admin. Oficinal menciona os Pedidos de Aquisição no ar",
-    home.includes("e os Pedidos de Aquisição. Segue a Avaliação de Desempenho")
+    home.includes("e os Pedidos de Aquisição. O Portal HST também já está no ar; segue a Avaliação de Desempenho")
   );
 
   /* ---------- 2. Menu: grupo Pedidos de Aquisição com 4 páginas ---------- */

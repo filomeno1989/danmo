@@ -18,6 +18,7 @@
  */
 
 const { chromium } = require("/home/z/.npm-global/lib/node_modules/playwright");
+const fs = require("fs");
 
 const BASE = process.env.BASE || "http://localhost:3459";
 let passaram = 0;
@@ -39,6 +40,13 @@ const HOJE = new Date();
 const ANO = HOJE.getFullYear();
 const MES = String(HOJE.getMonth() + 1).padStart(2, "0");
 const MES_ANTERIOR = String(HOJE.getMonth() || 12).padStart(2, "0");
+const DIA_HOJE = String(HOJE.getDate()).padStart(2, "0");
+const DATA_2ATRAS = (() => {
+  const d = new Date(Date.now() - 2 * 86400000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+})();
+/** YYYY-MM-DD -> DD/MM/YYYY (igual ao fmtDataHst da lib, sem fuso). */
+const fmt2 = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 
 const ACIDENTE_001 = {
   id: 9,
@@ -220,7 +228,7 @@ const MEDICOES = [
     classificacao: "Limitrofe",
     medido_por: "Filomeno Manuel Joaquim Alexandre",
     observacoes: null,
-    data_medicao: `${ANO}-${MES}-12T08:55:00`
+    data_medicao: `${ANO}-${MES}-${DIA_HOJE}T08:55:00`
   },
   {
     id: 2,
@@ -232,7 +240,7 @@ const MEDICOES = [
     classificacao: "Limítrofe",
     medido_por: "Filomeno Manuel Joaquim Alexandre",
     observacoes: "Queixa de dores de cabeça",
-    data_medicao: `${ANO}-${MES}-09T09:00:00`
+    data_medicao: `${DATA_2ATRAS}T09:00:00`
   }
 ];
 
@@ -519,13 +527,33 @@ const LISTA_ACCIDENTES = {
   ok("EPIs: POST da entrega capturado com qtd 2", postsEntrega.length === 1 && postsEntrega[0]?.quantidade === 2);
   ok("EPIs: POST leva colaborador e epi_id", postsEntrega[0]?.colaborador_nome === "Olindo J. Pinto" && postsEntrega[0]?.epi_id === 1);
 
-  /* ---------- 9. Tensão arterial: graus correctos ---------- */
+  /* ---------- 9. Tensão arterial: graus correctos + campanha diária ---------- */
   await pg.goto(`${BASE}/hst/tensao`, { waitUntil: "domcontentloaded" });
   await pg.waitForTimeout(1200);
   corpo = await pg.content();
   ok("Tensão: cartão do Olindo com HTA Grau 1 (150/70)", corpo.includes("Olindo J. Pinto") && corpo.includes("HTA Grau 1"));
   ok("Tensão: cartão do Filomeno com Normal (120/80 recalculado)", corpo.includes("Filomeno Manuel Joaquim Alexandre") && corpo.includes("Normal"));
   ok("Tensão: o grau guardado errado do hub NUNCA aparece", !corpo.includes("Limitrofe"));
+
+  // Campanha diária: Olindo (última alta há 2 dias) na fila, Filomeno fora
+  ok("Tensão: painel da campanha diária", corpo.includes("Campanha diária: tensão alta"));
+  const contador = (await pg.locator("[data-campanha-contador]").textContent() || "").replace(/\s+/g, " ").trim();
+  ok("Tensão: contador do dia (0 de 1 medidos)", contador.includes("0 de 1"), `texto: ${contador}`);
+  ok("Tensão: Olindo na fila sem medir há 2 dias", corpo.includes("Não medido há 2 dia(s)"));
+  ok("Tensão: fila com estado Falta medir", corpo.includes("Falta medir"));
+  ok("Tensão: indicadores do período", corpo.includes("Medições no período") && corpo.includes("Média da tensão") && corpo.includes("Medições de hoje"));
+  ok("Tensão: filtros de datas e botões de saída", corpo.includes('aria-label="Data inicial"') && corpo.includes('aria-label="Data final"') && corpo.includes("CSV") && corpo.includes("Relatório"));
+
+  // CSV do período
+  const [descTen] = await Promise.all([
+    pg.waitForEvent("download", { timeout: 30000 }),
+    pg.locator('button:has-text("CSV")').first().click()
+  ]);
+  ok("Tensão: CSV descarrega com nome tensao-arterial", descTen.suggestedFilename().startsWith("tensao-arterial"), descTen.suggestedFilename());
+  const CAMINHO_CSV_TEN = "/tmp/tensao-teste.csv";
+  await descTen.saveAs(CAMINHO_CSV_TEN);
+  const bufTen = fs.readFileSync(CAMINHO_CSV_TEN);
+  ok("Tensão: CSV com BOM, cabeçalho e hora separada", bufTen[0] === 0xef && bufTen.toString("utf8").includes("Data;Hora;Colaborador;Sistolica;Diastolica") && bufTen.toString("utf8").includes("08:55"));
 
   // Filtro por classificação alta
   await pg.locator('select[aria-label="Filtrar por classificação"]').selectOption("alta");
@@ -535,6 +563,23 @@ const LISTA_ACCIDENTES = {
   await pg.locator('select[aria-label="Filtrar por classificação"]').selectOption("");
   await pg.waitForTimeout(300);
 
+  // Nova medição: dropdown de pesquisa por NOME OU CÓDIGO (pedido do Filomeno)
+  await pg.locator('button:has-text("Nova Medição")').first().click();
+  await pg.waitForTimeout(300);
+  await pg.locator("#m-colab").click();
+  await pg.waitForTimeout(250);
+  await pg.locator('input[aria-label="Pesquisar colaborador"]').fill("DM0011");
+  await pg.waitForTimeout(300);
+  corpo = await pg.content();
+  ok("Tensão: pesquisa pelo CÓDIGO DM0011 acha o Olindo", corpo.includes("Olindo J. Pinto"));
+  await pg.locator('ul[role="listbox"] button:has-text("Olindo J. Pinto")').click();
+  await pg.waitForTimeout(250);
+  const valorColab = await pg.locator("#m-colab").inputValue();
+  ok("Tensão: escolha no dropdown preenche o nome", valorColab === "Olindo J. Pinto", valorColab);
+  ok("Tensão: campo de data e hora da medição preenchido com agora", (await pg.locator("#m-data").inputValue()).length >= 16);
+  await pg.locator('div[role="dialog"] button:has-text("Cancelar")').click();
+  await pg.waitForTimeout(200);
+
   // Ficha por colaborador
   await pg.goto(`${BASE}/hst/tensao/pessoa?colab=${encodeURIComponent("Olindo J. Pinto")}`, { waitUntil: "domcontentloaded" });
   await pg.waitForTimeout(1200);
@@ -543,10 +588,19 @@ const LISTA_ACCIDENTES = {
   ok("Ficha: resumo Total de medições = 1", corpo.includes("Total de medições"));
   ok("Ficha: evolução das últimas 20 presente", corpo.includes("Evolução da tensão"));
   ok("Ficha: tabela com FC e Medido por", corpo.includes("Medido por") && corpo.includes("Queixa de dores de cabeça") || corpo.includes("Medido por"));
+  ok("Ficha: CSV e relatório individual à mão", corpo.includes("CSV") && corpo.includes(`/imprimir/hst/tensao?colab=${encodeURIComponent("Olindo J. Pinto")}`));
+
+  // CSV individual da ficha
+  const [descFicha] = await Promise.all([
+    pg.waitForEvent("download", { timeout: 30000 }),
+    pg.locator('button:has-text("CSV")').first().click()
+  ]);
+  ok("Ficha: CSV individual descarrega", descFicha.suggestedFilename().startsWith("tensao-"), descFicha.suggestedFilename());
 
   // Nova medição na ficha: POST sem classificacao (servidor calcula)
   await pg.locator('button:has-text("Nova Medição para este Colaborador")').first().click();
   await pg.waitForTimeout(300);
+  ok("Ficha: nova medição vem com data e hora de agora", (await pg.locator("#mc-data").inputValue()).length >= 16);
   await pg.locator('input[id="mc-sis"]').fill("150");
   await pg.locator('input[id="mc-dia"]').fill("70");
   await pg.waitForTimeout(200);
@@ -626,6 +680,34 @@ const LISTA_ACCIDENTES = {
   papel = await pgPapel.content();
   ok("Lista acidentes: título e período completo", papel.includes("Relatório de Acidentes e Incidentes") && papel.includes("todos os registos"));
   ok("Lista acidentes: as 3 linhas com atestado Sim/Não", papel.includes("AT-9988") || papel.includes("Sim"));
+
+  /* ---------- 16. Papel do controlo de tensão COLETIVO (A4) ---------- */
+  await pgPapel.goto(`${BASE}/imprimir/hst/tensao`, { waitUntil: "domcontentloaded" });
+  await pgPapel.waitForTimeout(1400);
+  papel = await pgPapel.content();
+  ok("Papel tensão: título da campanha", papel.includes("Controlo de Tensão Arterial (Campanha)"));
+  ok("Papel tensão: indicadores do período", papel.includes("Indicadores do Período") && papel.includes("Medições com tensão alta"));
+  ok("Papel tensão: resumo por colaborador com os 2", papel.includes("Resumo por Colaborador") && papel.includes("Olindo J. Pinto") && papel.includes("Filomeno Manuel Joaquim Alexandre"));
+  ok("Papel tensão: código do colaborador no quadro", papel.includes("DM0069") && papel.includes("DM0011"));
+  ok("Papel tensão: medições por ordem de data", papel.includes("Medições do Período (por ordem de data)"));
+  ok("Papel tensão: classificação recalculada no papel", papel.includes("HTA Grau 1") && !papel.includes("Limitrofe"));
+  ok("Papel tensão: assinaturas técnico e posto de saúde", papel.includes("O Técnico de HST") && papel.includes("Visto no Posto de Saúde"));
+
+  /* ---------- 17. Papel do controlo de tensão INDIVIDUAL (A4) ---------- */
+  await pgPapel.goto(`${BASE}/imprimir/hst/tensao?colab=${encodeURIComponent("Olindo J. Pinto")}`, { waitUntil: "domcontentloaded" });
+  await pgPapel.waitForTimeout(1400);
+  papel = await pgPapel.content();
+  ok("Papel individual: título com o nome", papel.includes("Controlo de Tensão Arterial - Olindo J. Pinto"));
+  ok("Papel individual: código do colaborador", papel.includes("DM0011"));
+  ok("Papel individual: sem quadro coletivo", !papel.includes("Resumo por Colaborador"));
+  ok("Papel individual: a medição do Olindo na lista", papel.includes("150") && papel.includes("Queixa de dores de cabeça"));
+
+  /* ---------- 18. Papel do controlo de tensão com PERÍODO ---------- */
+  await pgPapel.goto(`${BASE}/imprimir/hst/tensao?de=${DATA_2ATRAS}&ate=${DATA_2ATRAS}`, { waitUntil: "domcontentloaded" });
+  await pgPapel.waitForTimeout(1400);
+  papel = await pgPapel.content();
+  ok("Papel com período: só a medição do Olindo", papel.includes(`Período: ${fmt2(DATA_2ATRAS)} a ${fmt2(DATA_2ATRAS)}`) && !papel.includes("08:55"));
+  ok("Papel com período: 1 medição e 1 pessoa nos indicadores", papel.includes("Medições registadas"));
 
   await contexto.close();
   await browser.close();

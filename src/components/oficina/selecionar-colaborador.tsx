@@ -14,10 +14,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
-import type { ColaboradorLinha } from "@/lib/oficina";
+
+/**
+ * Pessoa mínima aceita na lista. Serve a oficina (ColaboradorLinha) e o
+ * HST (ColaboradorHST): só precisa de id e nome; o código é opcional.
+ */
+type PessoaLinha = {
+  id: number;
+  name?: string | null;
+  code?: string | null;
+};
 
 type Props = {
-  colaboradores: ColaboradorLinha[];
+  colaboradores: PessoaLinha[];
   value: string;
   onChange: (nome: string) => void;
   id?: string;
@@ -81,6 +90,8 @@ export function SelecionarColaborador({
     );
   }, [colaboradores, q]);
 
+  const nomeDe = (c: PessoaLinha): string => c.name || "";
+
   return (
     <div className="relative" ref={caixaRef}>
       <div className="relative">
@@ -98,7 +109,7 @@ export function SelecionarColaborador({
           onKeyDown={(e) => {
             if (e.key === "Escape") setAberta(false);
             if (e.key === "Enter" && sugeridas.length === 1) {
-              onChange(sugeridas[0].name);
+              onChange(nomeDe(sugeridas[0]));
               setAberta(false);
             }
           }}
@@ -133,7 +144,7 @@ export function SelecionarColaborador({
               onKeyDown={(e) => {
                 if (e.key === "Escape") setAberta(false);
                 if (e.key === "Enter" && sugeridas.length) {
-                  onChange(sugeridas[0].name);
+                  onChange(nomeDe(sugeridas[0]));
                   setAberta(false);
                 }
               }}
@@ -148,14 +159,14 @@ export function SelecionarColaborador({
                 <button
                   type="button"
                   role="option"
-                  aria-selected={c.name === value}
+                  aria-selected={nomeDe(c) === value}
                   onClick={() => {
-                    onChange(c.name);
+                    onChange(nomeDe(c));
                     setAberta(false);
                   }}
                   className={
                     "flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm " +
-                    (c.name === value ? "bg-accent/60" : "hover:bg-accent")
+                    (nomeDe(c) === value ? "bg-accent/60" : "hover:bg-accent")
                   }
                 >
                   <span className="truncate">{c.name}</span>

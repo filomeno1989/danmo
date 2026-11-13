@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import { LoaderCircle, PackageOpen, Pencil, Plus, Save, Search, Shirt } from "lucide-react";
 import { toast } from "sonner";
 import { Cabeca, enviar, pedir } from "@/components/oficina/ui-bits";
+import { SelecionarColaborador } from "@/components/oficina/selecionar-colaborador";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -356,14 +357,12 @@ export function EpisClient({ podeApagar }: { podeApagar: boolean }) {
         <div className="space-y-3">
           <div>
             <label className="mb-1 block text-xs font-semibold" htmlFor="ent-colab">Colaborador *</label>
-            <Input id="ent-colab" list="lista-colabs-epi" value={formEnt.colaborador_nome}
-              onChange={(e) => setFormEnt((f) => ({ ...f, colaborador_nome: e.target.value }))}
-              placeholder="Nome do colaborador" />
-            <datalist id="lista-colabs-epi">
-              {colabs.map((c) => (
-                <option key={c.id} value={c.name || ""} />
-              ))}
-            </datalist>
+            <SelecionarColaborador
+              id="ent-colab"
+              colaboradores={colabs}
+              value={formEnt.colaborador_nome}
+              onChange={(nome) => setFormEnt((f) => ({ ...f, colaborador_nome: nome }))}
+            />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold" htmlFor="ent-epi">EPI *</label>

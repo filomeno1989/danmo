@@ -2,16 +2,18 @@
  * /hst/tensao/pessoa - Histórico do colaborador (cliente).
  *
  * Resumo, evolução das últimas 20 medições (barras coloridas pela
- * classificação correcta), tabela completa e nova medição. Com permissão
- * de apagar, uma medição errada sai da ficha (o hub não deixava apagar
- * uma medição sozinha: só a limpeza nuclear).
+ * classificação correcta), tabela completa e nova medição com data e
+ * hora reais. CSV individual e relatório A4 desta pessoa (o papelinho
+ * que vai ao posto de saúde). Com permissão de apagar, uma medição
+ * errada sai da ficha (o hub não deixava apagar uma medição sozinha:
+ * só a limpeza nuclear).
  */
 
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { LoaderCircle, Save, Trash2 } from "lucide-react";
+import { Download, LoaderCircle, Printer, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Cabeca, enviar, pedir } from "@/components/oficina/ui-bits";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import {
   classificarTensao,
+  csvTensao,
   fmtDataHst,
   problemaValoresTensao,
   type MedicaoTensaoHST
@@ -42,7 +45,7 @@ export function PessoaClient({ colab, podeApagar }: { colab: string; podeApagar:
   const [falha, setFalha] = useState("");
 
   const [modal, setModal] = useState(false);
-  const [form, setForm] = useState({ sistolica: "", diastolica: "", frequencia_cardiaca: "", observacoes: "" });
+  const [form, setForm] = useState({ data_medicao: agoraLocal(), sistolica: "", diastolica: "", frequencia_cardiaca: "", observacoes: "" });
   const [aGravar, setAGravar] = useState(false);
 
   function carregar() {
@@ -88,6 +91,13 @@ export function PessoaClient({ colab, podeApagar }: { colab: string; podeApagar:
     return { ...classificarTensao(sys, dia), sys, dia };
   }, [form.sistolica, form.diastolica, form.frequencia_cardiaca]);
 
+  /** Agora local para o datetime-local (YYYY-MM-DDTHH:mm). */
+  function agoraLocal(): string {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  }
+
   async function gravar() {
     const sys = Number(form.sistolica);
     const dia = Number(form.diastolica);
@@ -103,16 +113,27 @@ export function PessoaClient({ colab, podeApagar }: { colab: string; podeApagar:
         sistolica: sys,
         diastolica: dia,
         frequencia_cardiaca: form.frequencia_cardiaca ? Number(form.frequencia_cardiaca) : null,
-        observacoes: form.observacoes
+        observacoes: form.observacoes,
+        data_medicao: form.data_medicao
       }, "Medição registada.");
       setModal(false);
-      setForm({ sistolica: "", diastolica: "", frequencia_cardiaca: "", observacoes: "" });
+      setForm({ data_medicao: agoraLocal(), sistolica: "", diastolica: "", frequencia_cardiaca: "", observacoes: "" });
       carregar();
     } catch {
       /* toast já avisou */
     } finally {
       setAGravar(false);
     }
+  }
+
+  function descarregarCSV() {
+    const csv = csvTensao(lista);
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tensao-${colab || "colaborador"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function apagarMedicao(m: MedicaoTensaoHST) {
@@ -132,6 +153,14 @@ export function PessoaClient({ colab, podeApagar }: { colab: string; podeApagar:
   return (
     <div className="space-y-5">
       <Cabeca titulo={colab} subtitulo="Histórico completo de medições de tensão arterial">
+        <Button variant="outline" onClick={descarregarCSV}>
+          <Download className="size-4" aria-hidden /> CSV
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={`/imprimir/hst/tensao?colab=${encodeURIComponent(colab)}`}>
+            <Printer className="size-4" aria-hidden /> Relatório
+          </Link>
+        </Button>
         <Button variant="outline" asChild>
           <Link href="/hst/tensao">Voltar à lista</Link>
         </Button>
@@ -264,6 +293,11 @@ export function PessoaClient({ colab, podeApagar }: { colab: string; podeApagar:
 
       <Modal aberto={modal} fechar={() => setModal(false)} titulo={`Nova Medição - ${colab}`} largura="max-w-md">
         <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold" htmlFor="mc-data">Data e hora da medição</label>
+            <Input id="mc-data" type="datetime-local" value={form.data_medicao}
+              onChange={(e) => setForm((f) => ({ ...f, data_medicao: e.target.value }))} />
+          </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="mb-1 block text-xs font-semibold" htmlFor="mc-sis">Sistólica *</label>

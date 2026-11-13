@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Cabeca, enviar, pedir } from "@/components/oficina/ui-bits";
+import { SelecionarColaborador } from "@/components/oficina/selecionar-colaborador";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -306,18 +307,12 @@ export function AcidentesClient({ podeApagar }: { podeApagar: boolean }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-xs font-semibold" htmlFor="fa-colab">Colaborador *</label>
-          <Input
+          <SelecionarColaborador
             id="fa-colab"
-            list="lista-colabs-hst"
+            colaboradores={dados?.colaboradores || []}
             value={form.colaborador_nome}
-            onChange={(e) => set("colaborador_nome", e.target.value)}
-            placeholder="Nome do colaborador"
+            onChange={(nome) => set("colaborador_nome", nome)}
           />
-          <datalist id="lista-colabs-hst">
-            {(dados?.colaboradores || []).map((c) => (
-              <option key={c.id} value={c.name || ""} />
-            ))}
-          </datalist>
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold" htmlFor="fa-data">Data / hora *</label>
@@ -802,9 +797,12 @@ export function AcidentesClient({ podeApagar }: { podeApagar: boolean }) {
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold" htmlFor="ac-resp">Responsável *</label>
-            <Input id="ac-resp" value={formAccao.responsavel}
-              onChange={(e) => setFormAccao((f) => ({ ...f, responsavel: e.target.value }))}
-              placeholder="Nome do responsável" />
+            <SelecionarColaborador
+              id="ac-resp"
+              colaboradores={dados?.colaboradores || []}
+              value={formAccao.responsavel}
+              onChange={(nome) => setFormAccao((f) => ({ ...f, responsavel: nome }))}
+            />
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold" htmlFor="ac-prazo">Prazo *</label>

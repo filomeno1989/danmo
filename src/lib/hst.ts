@@ -488,6 +488,135 @@ export function fmtDataHst(iso: string | null | undefined, comHora = false): str
   return comHora && hora ? `${dia}/${mes}/${ano} ${hora}` : `${dia}/${mes}/${ano}`;
 }
 
+/* ============ Controlo de tensão: campanha diária, período e CSV ============ */
+
+/**
+ * O Filomeno pediu controlo A SÉRIO: "temos colegas hipertensos, então
+ * devemos medir todos os dias e registrar no papelinho e enviar
+ * diariamente ao posto de saúde". Estas funções são o cérebro desse
+ * controlo, partilhadas pelo ecrã, pelo papel A4 e pelas provas.
+ */
+
+/** Corta o ISO no dia (YYYY-MM-DD) sem deslocar fuso: o dia é o que está gravado. */
+export function diaTensao(iso: string | null | undefined): string {
+  return String(iso || "").slice(0, 10);
+}
+
+/**
+ * Medições num intervalo de datas fechado nos dois lados ("de" e "ate"
+ * em YYYY-MM-DD; vazio = sem limite desse lado).
+ */
+export function medicoesNoPeriodo(
+  medicoes: MedicaoTensaoHST[],
+  de: string,
+  ate: string
+): MedicaoTensaoHST[] {
+  return medicoes.filter((m) => {
+    const dia = diaTensao(m.data_medicao);
+    if (!dia) return false;
+    if (de && dia < de) return false;
+    if (ate && dia > ate) return false;
+    return true;
+  });
+}
+
+/** Indicadores do período (linguagem simples, números redondos). */
+export type ResumoTensaoPeriodo = {
+  total: number; // medições no período
+  pessoas: number; // pessoas distintas medidas
+  mediaSys: number; // média das sistólicas
+  mediaDia: number; // média das diastólicas
+  medicoesHta: number; // medições com tensão alta
+  pctHta: number; // % das medições com tensão alta
+  diasComMedicao: number; // dias diferentes com pelo menos 1 medição
+};
+
+export function resumoTensaoPeriodo(medicoes: MedicaoTensaoHST[]): ResumoTensaoPeriodo {
+  const total = medicoes.length;
+  const somaSys = medicoes.reduce((s, m) => s + (Number(m.sistolica) || 0), 0);
+  const somaDia = medicoes.reduce((s, m) => s + (Number(m.diastolica) || 0), 0);
+  const hta = medicoes.filter((m) => eHta(Number(m.sistolica), Number(m.diastolica)));
+  return {
+    total,
+    pessoas: new Set(medicoes.map((m) => m.colaborador_nome || "")).size,
+    mediaSys: total ? Math.round(somaSys / total) : 0,
+    mediaDia: total ? Math.round(somaDia / total) : 0,
+    medicoesHta: hta.length,
+    pctHta: total ? Math.round((hta.length / total) * 100) : 0,
+    diasComMedicao: new Set(medicoes.map((m) => diaTensao(m.data_medicao))).size
+  };
+}
+
+/** Uma pessoa na fila da campanha diária. */
+export type CampanhaPessoa = {
+  nome: string;
+  ultima: MedicaoTensaoHST;
+  classificacao: ClassificacaoTensao;
+  estado: "medido_hoje" | "por_medir";
+  diasSemMedir: number; // dias desde a última medição (0 = hoje)
+};
+
+/**
+ * Campanha diária: quem tem a ÚLTIMA medição com tensão alta precisa de
+ * medir TODOS os dias até a tensão baixar. A fila ordena por quem está
+ * há mais dias sem medir, para o técnico saber por onde começar.
+ */
+export function campanhaTensao(medicoes: MedicaoTensaoHST[], hoje: string): CampanhaPessoa[] {
+  const ultima: Record<string, MedicaoTensaoHST> = {};
+  for (const m of medicoes) {
+    const nome = m.colaborador_nome || "";
+    if (!nome) continue;
+    if (!ultima[nome] || String(m.data_medicao) > String(ultima[nome].data_medicao)) {
+      ultima[nome] = m;
+    }
+  }
+  const lista: CampanhaPessoa[] = [];
+  for (const nome of Object.keys(ultima)) {
+    const u = ultima[nome];
+    if (!eHta(Number(u.sistolica), Number(u.diastolica))) continue;
+    const diaUltima = diaTensao(u.data_medicao);
+    let dias = 0;
+    if (diaUltima && diaUltima < hoje) {
+      dias = Math.round(
+        (new Date(hoje).getTime() - new Date(diaUltima).getTime()) / 86400000
+      );
+    }
+    lista.push({
+      nome,
+      ultima: u,
+      classificacao: classificarTensao(Number(u.sistolica), Number(u.diastolica)),
+      estado: diaUltima === hoje ? "medido_hoje" : "por_medir",
+      diasSemMedir: Math.max(0, dias)
+    });
+  }
+  return lista.sort(
+    (a, b) => b.diasSemMedir - a.diasSemMedir || a.nome.localeCompare(b.nome)
+  );
+}
+
+/** CSV de tensão (o papelinho digital que vai ao posto de saúde). */
+export function csvTensao(medicoes: MedicaoTensaoHST[]): string {
+  return paraCSV(
+    ["Data", "Hora", "Colaborador", "Sistolica", "Diastolica", "FC (bpm)", "Classificacao", "Medido por", "Observacoes"],
+    medicoes.map((m) => {
+      const iso = String(m.data_medicao || "");
+      return [
+        fmtDataHst(iso),
+        iso.length >= 16 ? iso.slice(11, 16) : "",
+        m.colaborador_nome || "",
+        m.sistolica,
+        m.diastolica,
+        m.frequencia_cardiaca == null ? "" : m.frequencia_cardiaca,
+        // Sempre recalculada: o hub gravou graus errados na base (ex.:
+        // "Limítrofe" numa 150/70) e o papelinho não pode levar erro.
+        classificarTensao(Number(m.sistolica), Number(m.diastolica)).texto,
+        m.medido_por || "",
+        m.observacoes || ""
+      ];
+    })
+  );
+}
+
 /** Nome do mês em português (resumo mensal). */
 export const MESES_HST = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -495,8 +624,8 @@ export const MESES_HST = [
 ];
 
 /** Alvo de pesquisa sem acentos (número, colaborador, área, descrição). */
-import { semAcentos } from "./uso-comum";
-export { semAcentos };
+import { paraCSV, semAcentos } from "./uso-comum";
+export { paraCSV, semAcentos };
 
 export function alvoPesquisaAcidente(a: AcidenteVisao): string {
   return semAcentos(

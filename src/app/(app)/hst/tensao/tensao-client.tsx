@@ -1,27 +1,36 @@
 /**
- * /hst/tensao - Medições de Tensão (cliente).
+ * /hst/tensao - Controlo de Tensão Arterial (cliente).
  *
- * Cartões por colaborador (última medição + total), filtro por nome e
- * por classificação, e o modal de nova medição com PRÉ-VISUALIZAÇÃO da
- * classificação enquanto se digita (a mesma função da lib corre no
- * navegador para avisar cedo e no servidor para gravar certo).
+ * A campanha do posto de saúde no portal: quem tem a última medição alta
+ * fica na fila e mede TODOS os dias, com estado do dia (Medido / Não
+ * medido, há quantos dias), indicadores do período, cartões por pessoa,
+ * CSV e papel A4 (individual ou coletivo) para enviar ao posto. A nova
+ * medição aceita data e hora reais (lançar de manhã ou recuperar o
+ * papelinho do dia) e o colaborador escolhe-se pela pesquisa por nome
+ * ou código (o mesmo campo da oficina).
  */
 
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { LoaderCircle, Save } from "lucide-react";
+import { CalendarDays, Download, LoaderCircle, Printer, Save, Stethoscope } from "lucide-react";
 import { toast } from "sonner";
 import { Cabeca, enviar, pedir } from "@/components/oficina/ui-bits";
+import { SelecionarColaborador } from "@/components/oficina/selecionar-colaborador";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import {
+  campanhaTensao,
   classificarTensao,
+  csvTensao,
   fmtDataHst,
+  medicoesNoPeriodo,
   problemaValoresTensao,
+  resumoTensaoPeriodo,
   semAcentos,
+  type CampanhaPessoa,
   type ColaboradorHST,
   type MedicaoTensaoHST
 } from "@/lib/hst";
@@ -38,16 +47,42 @@ const CORES_VALOR: Record<string, string> = {
   alta: "text-red-600"
 };
 
+/** Hoje local (YYYY-MM-DD), calculado uma vez por abertura do ecrã. */
+function hojeISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Agora local para o datetime-local (YYYY-MM-DDTHH:mm). */
+function agoraLocal(): string {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
+const FORM_VAZIO = {
+  colaborador_nome: "",
+  data_medicao: "",
+  sistolica: "",
+  diastolica: "",
+  frequencia_cardiaca: "",
+  observacoes: ""
+};
+
 export function TensaoClient() {
   const [medicoes, setMedicoes] = useState<MedicaoTensaoHST[] | null>(null);
   const [colabs, setColabs] = useState<ColaboradorHST[]>([]);
   const [falha, setFalha] = useState("");
   const [pesquisa, setPesquisa] = useState("");
   const [filtroCls, setFiltroCls] = useState("");
+  const [de, setDe] = useState("");
+  const [ate, setAte] = useState("");
 
   const [modal, setModal] = useState(false);
-  const [form, setForm] = useState({ colaborador_nome: "", sistolica: "", diastolica: "", frequencia_cardiaca: "", observacoes: "" });
+  const [form, setForm] = useState(FORM_VAZIO);
   const [aGravar, setAGravar] = useState(false);
+
+  const hoje = useState(hojeISO)[0];
 
   function carregar() {
     pedir<{ medicoes: MedicaoTensaoHST[] }>("/api/hst/medicoes")
@@ -61,11 +96,33 @@ export function TensaoClient() {
       .catch(() => {});
   }, []);
 
+  const codigoDe = useMemo(() => {
+    const mapa: Record<string, string> = {};
+    for (const c of colabs) mapa[c.name || ""] = c.code || "";
+    return mapa;
+  }, [colabs]);
+
+  /* Campanha diária: sempre sobre TODAS as medições (a fila é de hoje). */
+  const filaCampanha = useMemo(
+    () => (medicoes ? campanhaTensao(medicoes, hoje) : []),
+    [medicoes, hoje]
+  );
+  const medidosHoje = filaCampanha.filter((p) => p.estado === "medido_hoje").length;
+
+  /* Período: filtra indicadores, cartões e exportações. */
+  const noPeriodo = useMemo(
+    () => (medicoes ? medicoesNoPeriodo(medicoes, de, ate) : []),
+    [medicoes, de, ate]
+  );
+  const resumo = useMemo(() => resumoTensaoPeriodo(noPeriodo), [noPeriodo]);
+  const resumoHoje = useMemo(
+    () => resumoTensaoPeriodo(medicoesNoPeriodo(medicoes || [], hoje, hoje)),
+    [medicoes, hoje]
+  );
+
   const cartoes = useMemo(() => {
-    if (!medicoes) return [];
-    // Última medição por colaborador + total de medições.
     const mapa: Record<string, { nome: string; ultima: MedicaoTensaoHST; total: number }> = {};
-    for (const m of medicoes) {
+    for (const m of noPeriodo) {
       const nome = m.colaborador_nome || "";
       if (!mapa[nome]) {
         mapa[nome] = { nome, ultima: m, total: 0 };
@@ -86,7 +143,7 @@ export function TensaoClient() {
       );
     }
     return lista;
-  }, [medicoes, pesquisa, filtroCls]);
+  }, [noPeriodo, pesquisa, filtroCls]);
 
   // Pré-visualização da classificação enquanto se digita.
   const prev = useMemo(() => {
@@ -97,6 +154,11 @@ export function TensaoClient() {
     if (problema) return { erro: problema };
     return { ...classificarTensao(sys, dia), sys, dia };
   }, [form.sistolica, form.diastolica, form.frequencia_cardiaca]);
+
+  function abrirModal(nome = "", medicaoAgora = true) {
+    setForm({ ...FORM_VAZIO, colaborador_nome: nome, data_medicao: medicaoAgora ? agoraLocal() : "" });
+    setModal(true);
+  }
 
   async function gravar() {
     const sys = Number(form.sistolica);
@@ -113,14 +175,15 @@ export function TensaoClient() {
     setAGravar(true);
     try {
       await enviar("/api/hst/medicoes", {
-        colaborador_nome: form.colaborador_nome,
+        colaborador_nome: form.colaborador_nome.trim(),
         sistolica: sys,
         diastolica: dia,
         frequencia_cardiaca: form.frequencia_cardiaca ? Number(form.frequencia_cardiaca) : null,
-        observacoes: form.observacoes
+        observacoes: form.observacoes,
+        data_medicao: form.data_medicao
       }, "Medição registada.");
       setModal(false);
-      setForm({ colaborador_nome: "", sistolica: "", diastolica: "", frequencia_cardiaca: "", observacoes: "" });
+      setForm(FORM_VAZIO);
       carregar();
     } catch {
       /* toast já avisou */
@@ -129,16 +192,74 @@ export function TensaoClient() {
     }
   }
 
+  function descarregarCSV() {
+    const csv = csvTensao(noPeriodo);
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tensao-arterial${de ? `-${de}` : ""}${ate ? `-${ate}` : ""}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const linkPapel = `/imprimir/hst/tensao${de || ate ? `?de=${de}&ate=${ate}` : ""}`;
+
   if (falha) {
     return <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">{falha}</div>;
   }
 
   return (
     <div className="space-y-5">
-      <Cabeca titulo="Medições de Tensão Arterial" subtitulo="Controlo de tensão de cada colaborador">
-        <Button onClick={() => setModal(true)}>Nova Medição</Button>
+      <Cabeca titulo="Controlo de Tensão Arterial" subtitulo="Campanha diária, indicadores e envio ao posto de saúde">
+        <Button variant="outline" onClick={descarregarCSV}>
+          <Download className="size-4" aria-hidden /> CSV
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={linkPapel}>
+            <Printer className="size-4" aria-hidden /> Relatório
+          </Link>
+        </Button>
+        <Button onClick={() => abrirModal()}>Nova Medição</Button>
       </Cabeca>
 
+      {/* Campanha diária */}
+      <section aria-label="Campanha diária" className="card-sombra rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Stethoscope className="size-4 text-red-600" aria-hidden />
+            <h2 className="text-sm font-bold">Campanha diária: tensão alta</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <span data-campanha-contador className="text-sm font-bold">
+              Hoje: {medidosHoje} de {filaCampanha.length} medidos
+            </span>
+            <span className={`rounded-full px-2.5 py-0.5 text-[0.72rem] font-bold ${medidosHoje === filaCampanha.length && filaCampanha.length > 0 ? CORES_CLS.normal : CORES_CLS.alta}`}>
+              {filaCampanha.length === 0 ? "Sem fila" : medidosHoje === filaCampanha.length ? "Dia completo" : "Falta medir"}
+            </span>
+          </div>
+        </div>
+        {filaCampanha.length === 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">Nenhum colega com a última medição alta. A fila fica vazia até aparecer alguém com tensão alta.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {filaCampanha.map((p) => (
+              <LinhaCampanha key={p.nome} pessoa={p} codigo={codigoDe[p.nome] || ""} onMedir={() => abrirModal(p.nome)} />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Indicadores do período */}
+      <section aria-label="Indicadores" className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <Indicador rotulo="Medições no período" valor={String(resumo.total)} />
+        <Indicador rotulo="Pessoas medidas" valor={String(resumo.pessoas)} />
+        <Indicador rotulo="Média da tensão" valor={resumo.total ? `${resumo.mediaSys}/${resumo.mediaDia}` : "-"} />
+        <Indicador rotulo="Medições com tensão alta" valor={`${resumo.medicoesHta} (${resumo.pctHta}%)`} vermelho={resumo.medicoesHta > 0} />
+        <Indicador rotulo="Dias com registo" valor={String(resumo.diasComMedicao)} />
+        <Indicador rotulo="Medições de hoje" valor={String(resumoHoje.total)} />
+      </section>
+
+      {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-48">
           <Input placeholder="Pesquisar colaborador..." value={pesquisa}
@@ -151,12 +272,26 @@ export function TensaoClient() {
           <option value="limitrofe">Limítrofe</option>
           <option value="alta">HTA (Alta)</option>
         </select>
+        <div className="flex items-center gap-1">
+          <CalendarDays className="size-4 opacity-60" aria-hidden />
+          <Input type="date" aria-label="Data inicial" value={de} onChange={(e) => setDe(e.target.value)}
+            className="w-36" />
+          <span className="text-sm text-muted-foreground">a</span>
+          <Input type="date" aria-label="Data final" value={ate} onChange={(e) => setAte(e.target.value)}
+            className="w-36" />
+        </div>
+        {(de || ate) && (
+          <Button variant="ghost" size="sm" onClick={() => { setDe(""); setAte(""); }}>
+            Limpar datas
+          </Button>
+        )}
       </div>
 
+      {/* Cartões por pessoa */}
       {!medicoes ? (
         <p className="py-8 text-center text-sm text-muted-foreground">A carregar medições...</p>
       ) : cartoes.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma medição registada.</p>
+        <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma medição no período escolhido.</p>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {cartoes.map((c) => {
@@ -171,7 +306,7 @@ export function TensaoClient() {
                   <div className="min-w-0">
                     <div className="truncate font-bold">{c.nome}</div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      Última: {fmtDataHst(c.ultima.data_medicao, true)} | {c.total} medição(ões)
+                      Última: {fmtDataHst(c.ultima.data_medicao, true)} | {c.total} medição(ões) no período
                     </div>
                   </div>
                   <div className="text-right">
@@ -193,14 +328,17 @@ export function TensaoClient() {
         <div className="space-y-3">
           <div>
             <label className="mb-1 block text-xs font-semibold" htmlFor="m-colab">Colaborador *</label>
-            <Input id="m-colab" list="lista-colabs-ten" value={form.colaborador_nome}
-              onChange={(e) => setForm((f) => ({ ...f, colaborador_nome: e.target.value }))}
-              placeholder="Nome do colaborador" />
-            <datalist id="lista-colabs-ten">
-              {colabs.map((c) => (
-                <option key={c.id} value={c.name || ""} />
-              ))}
-            </datalist>
+            <SelecionarColaborador
+              id="m-colab"
+              colaboradores={colabs}
+              value={form.colaborador_nome}
+              onChange={(nome) => setForm((f) => ({ ...f, colaborador_nome: nome }))}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold" htmlFor="m-data">Data e hora da medição</label>
+            <Input id="m-data" type="datetime-local" value={form.data_medicao}
+              onChange={(e) => setForm((f) => ({ ...f, data_medicao: e.target.value }))} />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -248,6 +386,44 @@ export function TensaoClient() {
           </div>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+/* ============ Peças ============ */
+
+function LinhaCampanha({ pessoa, codigo, onMedir }: { pessoa: CampanhaPessoa; codigo: string; onMedir: () => void }) {
+  const medido = pessoa.estado === "medido_hoje";
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2" data-campanha-linha>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-bold">{pessoa.nome}</span>
+          {codigo ? <span className="shrink-0 text-xs font-semibold text-muted-foreground">{codigo}</span> : null}
+        </div>
+        <div className="mt-0.5 text-xs text-muted-foreground">
+          Última: {pessoa.ultima.sistolica}/{pessoa.ultima.diastolica} em {fmtDataHst(pessoa.ultima.data_medicao, true)} | {pessoa.classificacao.texto}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className={`rounded-full px-2.5 py-0.5 text-[0.72rem] font-bold ${medido ? CORES_CLS.normal : CORES_CLS.alta}`} data-estado-campanha>
+          {medido ? "Medido hoje" : `Não medido há ${pessoa.diasSemMedir} dia(s)`}
+        </span>
+        {!medido && (
+          <Button size="sm" variant="outline" onClick={onMedir}>
+            Medir
+          </Button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function Indicador({ rotulo, valor, vermelho = false }: { rotulo: string; valor: string; vermelho?: boolean }) {
+  return (
+    <div className="card-sombra rounded-lg border border-border bg-card p-3 text-center">
+      <div className={`text-lg font-bold ${vermelho ? "text-red-600" : ""}`}>{valor}</div>
+      <div className="mt-0.5 text-xs text-muted-foreground">{rotulo}</div>
     </div>
   );
 }

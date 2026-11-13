@@ -15,10 +15,14 @@ import {
   alertasPainelHst,
   alvoPesquisaAcidente,
   areasPorNivel,
+  campanhaTensao,
   classificarTensao,
+  csvTensao,
+  diaTensao,
   eHta,
   fmtDataHst,
   indicadoresResumoMensal,
+  medicoesNoPeriodo,
   numeroFmtHst,
   partirNumeroHst,
   problemaAccao,
@@ -28,6 +32,7 @@ import {
   problemaEntrega,
   problemaValoresTensao,
   proximoNumeroHst,
+  resumoTensaoPeriodo,
   statsPainelHst,
   vestirAcidente,
   type AccaoHST,
@@ -431,5 +436,121 @@ describe("indicadoresResumoMensal", () => {
     expect(d.acoesAtrasadas).toBe(1);
     expect(d.areasAtivas).toBe(1);
     expect(d.colabsHta.length).toBe(1);
+  });
+});
+
+/* ============ controlo de tensão: período, campanha e CSV ============ */
+
+describe("medicoesNoPeriodo", () => {
+  test("intervalo fechado nos dois lados (a medição da fronteira entra)", () => {
+    const lista = [
+      medicao({ id: 1, data_medicao: "2026-11-01T08:00" }),
+      medicao({ id: 2, data_medicao: "2026-11-05T09:30" }),
+      medicao({ id: 3, data_medicao: "2026-11-13T07:10" }),
+      medicao({ id: 4, data_medicao: "2026-10-31T22:00" }),
+      medicao({ id: 5, data_medicao: "2026-11-14T08:00" })
+    ];
+    const dentro = medicoesNoPeriodo(lista, "2026-11-01", "2026-11-13");
+    expect(dentro.map((m) => m.id).sort()).toEqual([1, 2, 3]);
+  });
+  test("limites vazios = tudo, e sem data fica de fora", () => {
+    const lista = [
+      medicao({ id: 1, data_medicao: "2026-11-01T08:00" }),
+      medicao({ id: 2, data_medicao: null }),
+      medicao({ id: 3, data_medicao: "2025-01-02T08:00" })
+    ];
+    expect(medicoesNoPeriodo(lista, "", "").length).toBe(2);
+    expect(medicoesNoPeriodo(lista, "2026-11-01", "").map((m) => m.id)).toEqual([1]);
+  });
+});
+
+describe("resumoTensaoPeriodo", () => {
+  test("contagens, médias e percentagem de HTA", () => {
+    const r = resumoTensaoPeriodo([
+      medicao({ id: 1, sistolica: 120, diastolica: 80, data_medicao: "2026-11-12T08:00" }),
+      medicao({ id: 2, colaborador_nome: "Olindo", sistolica: 150, diastolica: 95, data_medicao: "2026-11-12T09:00" }),
+      medicao({ id: 3, sistolica: 140, diastolica: 90, data_medicao: "2026-11-13T08:00" })
+    ]);
+    expect(r.total).toBe(3);
+    expect(r.pessoas).toBe(2);
+    expect(r.mediaSys).toBe(137); // 120+150+140=410/3
+    expect(r.mediaDia).toBe(88); // 80+95+90=265/3
+    expect(r.medicoesHta).toBe(2); // 150/95 e 140/90
+    expect(r.pctHta).toBe(67);
+    expect(r.diasComMedicao).toBe(2);
+  });
+  test("período vazio: zeros, nunca NaN", () => {
+    const r = resumoTensaoPeriodo([]);
+    expect(r.total).toBe(0);
+    expect(r.mediaSys).toBe(0);
+    expect(r.pctHta).toBe(0);
+  });
+});
+
+describe("campanhaTensao", () => {
+  test("só entra quem tem a ÚLTIMA medição alta; medido hoje sai do estado por_medir", () => {
+    const fila = campanhaTensao(
+      [
+        medicao({ id: 1, colaborador_nome: "Olindo", sistolica: 150, diastolica: 95, data_medicao: "2026-11-13T09:00" }),
+        medicao({ id: 2, colaborador_nome: "Filomeno", sistolica: 120, diastolica: 80, data_medicao: "2026-11-13T08:00" }),
+        medicao({ id: 3, colaborador_nome: "Helena", sistolica: 160, diastolica: 100, data_medicao: "2026-11-11T08:00" })
+      ],
+      "2026-11-13"
+    );
+    // Olindo (150/95 hoje) e Helena (160/100 há 2 dias) estão na fila; Filomeno normal fica fora.
+    expect(fila.map((p) => p.nome)).toEqual(["Helena", "Olindo"]);
+    expect(fila[0].estado).toBe("por_medir");
+    expect(fila[0].diasSemMedir).toBe(2);
+    expect(fila[1].estado).toBe("medido_hoje");
+    expect(fila[1].diasSemMedir).toBe(0);
+  });
+  test("medição antiga HTA atrás de uma normal recente TIRA a pessoa da fila", () => {
+    const fila = campanhaTensao(
+      [
+        medicao({ id: 1, colaborador_nome: "Olindo", sistolica: 170, diastolica: 105, data_medicao: "2026-10-01T08:00" }),
+        medicao({ id: 2, colaborador_nome: "Olindo", sistolica: 118, diastolica: 76, data_medicao: "2026-11-12T08:00" })
+      ],
+      "2026-11-13"
+    );
+    expect(fila.length).toBe(0);
+  });
+  test("medição do futuro não dá dias negativos", () => {
+    const fila = campanhaTensao(
+      [medicao({ id: 1, colaborador_nome: "X", sistolica: 150, diastolica: 95, data_medicao: "2026-11-20T08:00" })],
+      "2026-11-13"
+    );
+    expect(fila[0].diasSemMedir).toBe(0);
+    expect(fila[0].estado).toBe("por_medir");
+  });
+});
+
+describe("csvTensao", () => {
+  test("cabeçalho, BOM, data/hora separados e escapes", () => {
+    const csv = csvTensao([
+      medicao({
+        id: 7,
+        colaborador_nome: "Olindo; Filho",
+        sistolica: 150,
+        diastolica: 95,
+        frequencia_cardiaca: null,
+        observacoes: "Dor de cabeça \"forte\"",
+        data_medicao: "2026-11-12T08:55"
+      })
+    ]);
+    expect(csv.charCodeAt(0)).toBe(0xfeff); // BOM
+    const linhas = csv.slice(1).split("\n");
+    expect(linhas[0]).toBe("Data;Hora;Colaborador;Sistolica;Diastolica;FC (bpm);Classificacao;Medido por;Observacoes");
+    expect(linhas[1]).toContain("12/11/2026;08:55");
+    expect(linhas[1]).toContain('"Olindo; Filho"');
+    expect(linhas[1]).toContain('"Dor de cabeça ""forte"""');
+    expect(linhas[1]).toContain("150;95;;");
+    expect(linhas[1]).toContain("HTA Grau 1"); // classificação recalculada quando gravada errada
+  });
+});
+
+describe("diaTensao", () => {
+  test("corta o ISO no dia sem deslocar fuso", () => {
+    expect(diaTensao("2026-11-13T08:55:00.718Z")).toBe("2026-11-13");
+    expect(diaTensao(null)).toBe("");
   });
 });

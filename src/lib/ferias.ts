@@ -376,14 +376,5 @@ export function mesValido(m: unknown): number | null {
   return Number.isInteger(n) && n >= 1 && n <= 12 ? n : null;
 }
 
-/** CSV de qualquer tabela de linhas (o export da casa, com ; e BOM). */
-export function paraCSV(cabecalho: string[], linhas: (string | number | null)[][]): string {
-  const esc = (v: string | number | null) => {
-    const s = v == null ? "" : String(v);
-    return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  return (
-    "\uFEFF" +
-    [cabecalho, ...linhas].map((l) => l.map(esc).join(";")).join("\n")
-  );
-}
+/** CSV de qualquer tabela de linhas: fonte única no uso-comum, re-exportado. */
+export { paraCSV } from "./uso-comum";

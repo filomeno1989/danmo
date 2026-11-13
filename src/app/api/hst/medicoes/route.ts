@@ -5,14 +5,18 @@
  *      novas chegam com a classificação calculada no SERVIDOR com a
  *      cascata correcta (o hub calculava no navegador com um "||" que
  *      trocava graus: 150/70 aparecia "Limítrofe" em vez de HTA Grau 1).
- * POST: cria medição. Colaborador confirmado na base; valores validados
- *      (60-260 / 40-160 / diastólica < sistólica).
+ * POST: cria medição. Valores validados (60-260 / 40-160 / diastólica <
+ *      sistólica). A tabela hst_medicoes_tensao NÃO tem coluna
+ *      colaborador_id (comprovado na base real, bug 71ccfe8: o POST
+ *      morria com "Could not find the 'colaborador_id' column"), por
+ *      isso gravamos só o nome; a ligação ao colaborador da sessão é
+ *      feita na leitura, pelo nome, sem SQL novo.
  * DELETE: apaga uma medição errada (o hub não deixava apagar nada:
  *       só a limpeza nuclear de todas as tabelas).
  */
 
 import { NextResponse, NextRequest } from "next/server";
-import { del, insert, query, queryTudo } from "@/lib/supabase";
+import { del, insert, queryTudo } from "@/lib/supabase";
 import { autorizado, autorizadoEmAlguma, eErro, erroBase } from "@/lib/guarda-api";
 import {
   classificarTensao,
@@ -61,14 +65,9 @@ export async function POST(req: NextRequest) {
     }
 
     const nome = corpo.colaborador_nome.trim();
-    const [colab] = await query<{ id: number }>(
-      "collaborators",
-      `select=id&name=eq.${encodeURIComponent(nome)}&limit=1`
-    );
 
     const dados: Record<string, unknown> = {
       colaborador_nome: nome,
-      colaborador_id: colab?.id ?? null,
       sistolica: sys,
       diastolica: dia,
       frequencia_cardiaca: fc,

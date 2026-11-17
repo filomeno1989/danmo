@@ -110,10 +110,36 @@ describe("pode(): as 3 marcas", () => {
 });
 
 describe("PAGINAS: o mapa das páginas atribuíveis", () => {
-  test("são as 50 páginas reais dos 7 módulos no ar (18 + 6 da Faturação + 3 do RH + 4 da Aquisição + 4 das Férias + 7 do HST + 8 da Ferramentaria)", () => {
-    expect(PAGINAS.length).toBe(50);
+  test("são as 55 páginas reais dos 8 módulos no ar (18 + 6 da Faturação + 3 do RH + 4 da Aquisição + 4 das Férias + 7 do HST + 8 da Ferramentaria + 5 das Escalas)", () => {
+    expect(PAGINAS.length).toBe(55);
     const modulos = new Set(PAGINAS.map((p) => p.modulo));
-    expect([...modulos].sort()).toEqual(["admin", "disponibilidade", "ferramentaria", "hst", "oficina", "stock"]);
+    expect([...modulos].sort()).toEqual([
+      "admin",
+      "disponibilidade",
+      "ferramentaria",
+      "hst",
+      "oficina",
+      "stock"
+    ]);
+  });
+  test("as Escalas entram na matriz com as 5 páginas do módulo (prefixo Escalas)", () => {
+    const esc = PAGINAS.filter((p) => p.pagina.startsWith("escalas"));
+    expect(esc.length).toBe(5);
+    expect(esc.map((p) => p.pagina).sort()).toEqual([
+      "escalas.colaboradores",
+      "escalas.configuracoes",
+      "escalas.folgas",
+      "escalas.mensal",
+      "escalas.semanal"
+    ]);
+    expect(esc.every((p) => p.modulo === "admin")).toBe(true);
+    expect(esc.find((p) => p.pagina === "escalas.mensal")?.href).toBe("/escalas");
+    expect(esc.find((p) => p.pagina === "escalas.semanal")?.href).toBe("/escalas/semanal");
+    expect(esc.find((p) => p.pagina === "escalas.folgas")?.href).toBe("/escalas/folgas");
+    expect(esc.find((p) => p.pagina === "escalas.colaboradores")?.href).toBe("/escalas/colaboradores");
+    expect(esc.find((p) => p.pagina === "escalas.configuracoes")?.href).toBe("/escalas/configuracoes");
+    expect(labelPagina("escalas.mensal")).toBe("Escalas - Mensal (Admin. Oficinal)");
+    expect(labelPagina("escalas.folgas")).toBe("Escalas - Folgas Guardadas (Admin. Oficinal)");
   });
   test("a Ferramentaria entra na matriz com as 8 páginas do módulo", () => {
     const ferr = PAGINAS.filter((p) => p.pagina.startsWith("ferramentaria"));

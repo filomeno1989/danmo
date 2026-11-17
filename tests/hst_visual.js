@@ -691,7 +691,7 @@ const LISTA_ACCIDENTES = {
   ok("Papel tensão: código do colaborador no quadro", papel.includes("DM0069") && papel.includes("DM0011"));
   ok("Papel tensão: medições por ordem de data", papel.includes("Medições do Período (por ordem de data)"));
   ok("Papel tensão: classificação recalculada no papel", papel.includes("HTA Grau 1") && !papel.includes("Limitrofe"));
-  ok("Papel tensão: assinaturas técnico e posto de saúde", papel.includes("O Técnico de HST") && papel.includes("Visto no Posto de Saúde"));
+  ok("Papel tensão: só a assinatura do técnico (posto de saúde removido, controle interno)", papel.includes("O Técnico de HST") && !papel.includes("Visto no Posto de Saúde"));
 
   /* ---------- 17. Papel do controlo de tensão INDIVIDUAL (A4) ---------- */
   await pgPapel.goto(`${BASE}/imprimir/hst/tensao?colab=${encodeURIComponent("Olindo J. Pinto")}`, { waitUntil: "domcontentloaded" });

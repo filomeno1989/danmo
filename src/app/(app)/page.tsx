@@ -51,7 +51,6 @@ export default async function PaginaInicio() {
       podeOficina={pode(sessao, "oficina", "ver")}
       podeStock={pode(sessao, "stock", "ver")}
       podeFerramentaria={pode(sessao, "ferramentaria", "ver")}
-      podeEscalas={pode(sessao, "escalas.mensal", "ver") || pode(sessao, "escalas.semanal", "ver")}
       podeFaturacao={podeVerAlgum(sessao, PAGINAS_FATURACAO)}
       podeQuadro={podeQuadro}
       eAdmin={sessao?.utilizador.nivel === "admin"}

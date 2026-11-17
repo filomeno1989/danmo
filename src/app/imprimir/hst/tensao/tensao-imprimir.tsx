@@ -246,9 +246,8 @@ export function TensaoImprimir({ colab, de, ate }: Props) {
           </section>
         )}
 
-        <section className="mt-6 grid grid-cols-2 gap-6 text-[0.7rem]">
-          <div className="border-t border-slate-400 pt-1 text-center">O Técnico de HST</div>
-          <div className="border-t border-slate-400 pt-1 text-center">Visto no Posto de Saúde</div>
+        <section className="mt-6 flex justify-center text-[0.7rem]">
+          <div className="w-56 border-t border-slate-400 pt-1 text-center">O Técnico de HST</div>
         </section>
 
         <footer className="mt-8 flex items-center justify-between border-t border-slate-300 pt-2 text-[0.62rem] text-slate-500">

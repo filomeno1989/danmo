@@ -127,16 +127,6 @@ export const MODULOS: Modulo[] = [
           { label: "Tarifas", href: "/faturacao/tarifas", pagina: "faturacao.tarifas" },
           { label: "Relatórios", href: "/faturacao/relatorios", pagina: "faturacao.relatorios" }
         ]
-      },
-      {
-        label: "Escalas",
-        itens: [
-          { label: "Mensal", href: "/escalas", pagina: "escalas.mensal" },
-          { label: "Semanal", href: "/escalas/semanal", pagina: "escalas.semanal" },
-          { label: "Folgas Guardadas", href: "/escalas/folgas", pagina: "escalas.folgas" },
-          { label: "Colaboradores & Contactos", href: "/escalas/colaboradores", pagina: "escalas.colaboradores" },
-          { label: "Configurações", href: "/escalas/configuracoes", pagina: "escalas.configuracoes" }
-        ]
       }
     ]
   },
@@ -252,7 +242,6 @@ export function labelPagina(pagina: string): string {
   // Plano de Férias: idem (Plano Anual, Folha do Mês...).
   // Portal HST: idem (Painel, Acidentes, Áreas de Risco...).
   // Ferramentaria: idem (Painel, Inventário, Empréstimos...).
-  // Escalas: idem (Mensal, Semanal, Folgas...).
   const prefixo = pagina.startsWith("faturacao")
     ? "Faturação - "
     : pagina.startsWith("rh.")
@@ -265,9 +254,7 @@ export function labelPagina(pagina: string): string {
             ? "HST - "
             : pagina.startsWith("ferramentaria")
               ? "Ferramentaria - "
-              : pagina.startsWith("escalas")
-                ? "Escalas - "
-                : "";
+              : "";
   const mod = moduloPorId(p.modulo);
   return `${prefixo}${p.label} (${mod?.label || p.modulo})`;
 }

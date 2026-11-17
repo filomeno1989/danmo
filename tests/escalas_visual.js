@@ -1,14 +1,13 @@
 /**
- * Teste visual da ESCALAS (Admin. Oficinal > Escalas).
+ * Teste visual da ESCALAS no estado OCULTO (decisão do Filomeno: o
+ * módulo tem bugs e não acopla agora; código fica no repositório).
  *
- * Cobre: bloqueio sem sessão (página e papéis), cartão no Home, menu
- * com o grupo Escalas, Mensal (grelha, legenda, feriado a vermelho,
- * saldo de folgas, aviso de auditoria LD+turno, barra de código que
- * grava, gerador do ciclo com aviso), Semanal (Sáb a Sex, bloco de
- * turnos, contactos, link do papel), Folgas Guardadas (saldo com
- * meios dias e registos), Colaboradores (busca sem acentos), 
- * Configurações (registo, grupos, feriados, importador) e os dois
- * papéis A4 (mensal e semanal) com contagens e nota.
+ * Cobre: bloqueio sem sessão (página e papéis), Escalas INVISÍVEL no
+ * sistema (sem grupo no menu, sem cartão no Home, sem linhas na matriz
+ * de permissões) e, com o URL directo, o módulo continua vivo para o
+ * admin: Mensal (grelha, legenda, feriado, saldo, aviso de auditoria,
+ * barra de código, gerador do ciclo), Semanal, Folgas, Colaboradores,
+ * Configurações e os dois papéis A4.
  *
  * Ambiente: servidor dev SEM chaves (modo estrutura) + mocks de rede
  * no estilo da base real (Playwright route), igual aos outros testes.
@@ -207,12 +206,18 @@ const MOCK_CONFIG = {
     });
   });
 
-  /* ---------- 1. Home e menu ---------- */
+  /* ---------- 1. Escalas invisível no sistema ---------- */
   const pgHome = await contexto.newPage();
   await pgHome.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
   await pgHome.waitForTimeout(900);
   const home = await pgHome.content();
-  ok("Home: cartao das Escalas com pill No ar", home.includes("Abrir as Escalas") && home.includes("Escala Mensal editável"));
+  ok("Oculto: Home sem o cartao das Escalas", !home.includes("Abrir as Escalas") && !home.includes("Escala Mensal editável"));
+  ok("Oculto: menu sem link nenhum de /escalas", !home.includes('href="/escalas"'));
+  await pgHome.goto(`${BASE}/permissoes`, { waitUntil: "domcontentloaded" });
+  await pgHome.waitForTimeout(900);
+  const matriz = await pgHome.content();
+  ok("Oculto: matriz sem linha nenhuma das Escalas", !matriz.includes("escalas.") && !matriz.includes("Escalas - "));
+  await pgHome.close();
 
   /* ---------- 2. Mensal ---------- */
   const pg = await contexto.newPage();

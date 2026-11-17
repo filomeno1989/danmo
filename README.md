@@ -28,7 +28,6 @@ correr no servidor e o navegador mostra apenas o resultado. Vantagens directas:
 | Admin. Oficinal        | Pedidos de Aquisição                      | No ar   |
 | Admin. Oficinal        | Plano de Férias                           | No ar   |
 | Admin. Oficinal        | Faturação (Cotações e Faturas)            | No ar   |
-| Admin. Oficinal        | Escalas (Mensal, Semanal, Folgas)         | No ar   |
 | Gestão de Stock        | Materiais, Entradas, Saídas, Relatórios   | No ar   |
 | Portal HST             | Acidentes, Áreas de Risco, EPIs, Tensão   | No ar   |
 | Ferramentaria          | Inventário, Empréstimos, Danos            | No ar   |
@@ -38,35 +37,24 @@ correr no servidor e o navegador mostra apenas o resultado. Vantagens directas:
 Páginas novas nascem SEM linha na matriz de permissões: ninguém as vê até a
 administração destravar à mão na página Permissões.
 
-## O módulo Escalas (Fase 9)
+## O módulo Escalas (OCULTO, Fase 9)
 
-A escala mensal e a escala semanal saíram do Excel para o portal.
+A escala mensal e a semanal saíram do Excel para o portal, mas o Filomeno
+decidiu NÃO acoplar o módulo agora: está com bugs e, ao contrário do que se
+queria, ficou mais trabalhoso fazer a escala. O código TODO continua no
+repositório, porém invisível no sistema:
 
-- **Mensal**: a grelha de sempre (colaboradores x dias com os códigos da
-  legenda da casa: 07/19, 19/07, Norm., Folga, Sup., Esc., LD, FRD, CCIS, TDP).
-  Edição por célula, por intervalo de dias e 4 ferramentas em lote: Férias do
-  plano (LD vem de ferias_plano), Gerar ciclo de turnos A-D (padrão 07/19
-  07/19 19/07 19/07 + 4 folgas com desfasamento 2 dias entre grupos; quem tem
-  férias no mês fica fora com aviso de auditoria), Feriados (FRD vem de
-  ferias_feriados) e Norm. nas vazias. Contagens por área e do dia, nota
-  importante do mês.
-- **Semanal**: nasce da mensal com um clique, semana de Sábado a Sexta, com o
-  bloco dos turnos dia a dia e os contactos que o cliente usa para ligar.
-- **Folgas Guardadas**: as folgas que a gente acumula (aceita meios dias), com
-  saldo por pessoa e gozo marcado por data.
-- **Colaboradores & Contactos**: o registo da gente da escala (código, nome,
-  contacto, categoria, área, grupo de turno A-D, ordem de afixação).
-- **Configurações**: importador do Excel mensal (o ficheiro é lido no próprio
-  navegador e nunca sai da máquina) e feriados.
-- **Papéis A4** para a vitrine: /imprimir/escalas/mensal e
-  /imprimir/escalas/semanal (paisagem, com contagens, legenda e nota).
+- sem grupo no menu (Admin. Oficinal), sem cartão no Início e SEM linhas na
+  matriz de permissões;
+- quem não é admin recebe página bloqueada e APIs com 403; o admin ainda
+  consegue abrir por URL directo para futuros testes.
 
-Para activar, uma única vez:
-
-1. Colar o `sql/fase9-escalas.sql` no Supabase (SQL Editor > New query > RUN);
-2. Em Admin. Oficinal > Escalas > Configurações, importar o ESCALA MENSAL
-   (importa o registo, as grelhas dos meses e o saldo de folgas);
-3. Distribuir as 5 páginas na matriz (Permissões) a quem deve usar.
+Para voltar a acoplar quando as correções justificarem: voltar a colocar o
+grupo "Escalas" com as 5 páginas em `src/lib/permissoes.ts` (MODULOS, grupo
+Admin. Oficinal), o prefixo "Escalas - " em labelPagina, o cartão no
+`painel-inicio.tsx` e a prova das 55 páginas em `tests/logica_permissoes.test.ts`.
+A migração dos dados continua igual: colar `sql/fase9-escalas.sql` no Supabase
+e importar o Excel em Configurações (o importador é tudo lido no navegador).
 
 ## Configuração (2 chaves, uma vez só)
 

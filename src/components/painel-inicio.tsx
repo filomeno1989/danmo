@@ -14,7 +14,6 @@ import { HeroiSaudacao } from "@/components/heroi-saudacao";
 import {
   Cake,
   CalendarClock,
-  CalendarDays,
   CircleCheck,
   CircleSlash,
   Shield,
@@ -169,7 +168,6 @@ export function PainelInicio({
   podeFaturacao,
   podeQuadro,
   podeFerramentaria,
-  podeEscalas,
   eAdmin,
   fundos,
   avisos
@@ -181,7 +179,6 @@ export function PainelInicio({
   podeFaturacao: boolean;
   podeQuadro: boolean;
   podeFerramentaria: boolean;
-  podeEscalas: boolean;
   eAdmin: boolean;
   fundos?: Parameters<typeof HeroiSaudacao>[0]["fundosIniciais"];
   avisos?: AvisosHome | null;
@@ -292,23 +289,6 @@ export function PainelInicio({
             seta="border-slate-700/30 text-slate-900 hover:bg-slate-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
             href="/ferramentaria"
             rotulo="Abrir a Ferramentaria"
-          />
-        </SemPermissaoAplicada>
-
-        <SemPermissaoAplicada permitido={podeEscalas}>
-          <CartaoFase
-            classeFundo="fase-cinza text-slate-950 dark:text-white"
-            icone={CalendarDays}
-            tile="bg-slate-700 text-white dark:bg-white/15 dark:text-white"
-            marcaAgua={CalendarDays}
-            titulo="Escalas"
-            corTitulo="text-slate-900 dark:text-white"
-            texto="No ar: a Escala Mensal editável (com gerador do ciclo de turnos A-D, feriados e férias do plano), a Semanal nascida dela com um clique e as Folgas Guardadas."
-            corTexto="text-slate-900/75 dark:text-white/75"
-            pill={pillNoAr}
-            seta="border-slate-700/30 text-slate-900 hover:bg-slate-900/10 dark:border-white/35 dark:text-white dark:hover:bg-white/15"
-            href="/escalas"
-            rotulo="Abrir as Escalas"
           />
         </SemPermissaoAplicada>
 

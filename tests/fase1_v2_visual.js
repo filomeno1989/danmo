@@ -86,10 +86,10 @@ const FOTOS = "/home/z/my-project/danmo/tests";
   const activo = await page.locator('a[aria-current="page"]').textContent();
   ok("Item activo é 'Início'", (activo || "").includes("Início"));
   ok("Admin vê 'Definições' no menu", corpo.includes("Definições"));
-  // Fase 6: Admin. Oficinal entrou no ar (Faturação), logo "Fase 6"
-  // saiu do menu; ficam Fase 5 (HST e Ferramentaria).
-  ok("Fases marcadas no menu (Admin. Oficinal no ar: fase 6 saiu do menu)",
-     !corpo.includes("Fase 4") && corpo.includes("Fase 5") && !corpo.includes("Fase 6") && !corpo.includes("Fase 7"));
+  // Todos os módulos já entraram no ar (HST e Ferramentaria entraram na
+  // Fase 5): o menu já não tem cartaz de fase nenhum.
+  ok("Menu sem cartaz de fase (HST e Ferramentaria já no ar)",
+     !corpo.includes("Fase 4") && !corpo.includes("Fase 5") && !corpo.includes("Fase 6") && !corpo.includes("Fase 7"));
 
   // 4. Herói: saudação + selos + cartões de fase (nas cores do logo)
   ok("Herói tem 'Olá,'", corpo.includes("Olá,"));

@@ -22,6 +22,7 @@ import {
   diasDeCampanha,
   eHta,
   estatisticaMedicacao,
+  filtroMembrosRelatorio,
   fmtDataHst,
   indicadoresResumoMensal,
   medicoesNoPeriodo,
@@ -31,6 +32,7 @@ import {
   problemaAccao,
   problemaAcidente,
   problemaArea,
+  problemaDatasCampanha,
   problemaEpi,
   problemaEntrega,
   problemaValoresTensao,
@@ -691,5 +693,29 @@ describe("campanhas numeradas (Fase 11)", () => {
     expect(diasDeCampanha("2026-11-30", "2026-11-14")).toBe(0);
     expect(diasDeCampanha(null, "2026-11-14")).toBe(0);
     expect(diasDeCampanha("", "2026-11-14")).toBe(0);
+  });
+});
+
+describe("datas geridas e relatório da campanha (Fase 12)", () => {
+  test("datas boas passam; fim antes do início e formato mau são apanhados", () => {
+    expect(problemaDatasCampanha("2026-11-01")).toBe(null);
+    expect(problemaDatasCampanha("2026-11-01", "2026-11-19")).toBe(null);
+    expect(problemaDatasCampanha("2026-11-01", "2026-10-01")).toContain("não pode ser antes");
+    expect(problemaDatasCampanha("")).toContain("AAAA-MM-DD");
+    expect(problemaDatasCampanha("11/01/2026")).toContain("AAAA-MM-DD");
+    expect(problemaDatasCampanha("2026-11-01", "fim maluco")).toContain("válida");
+  });
+  test("relatório da campanha ABERTA: só quem está nela agora (o tirado não entra)", () => {
+    expect(filtroMembrosRelatorio({ id: "c0", estado: "aberta", fim: null })).toBe(
+      "campanha_id=eq.c0&ativo=eq.true"
+    );
+  });
+  test("relatório da campanha ARQUIVADA: quem estava no arquivo fica; quem saiu antes, não", () => {
+    expect(filtroMembrosRelatorio({ id: "c9", estado: "arquivada", fim: "2026-11-18" })).toBe(
+      "campanha_id=eq.c9&or=(ativo.eq.true,fim.eq.2026-11-18)"
+    );
+    expect(filtroMembrosRelatorio({ id: "c9", estado: "arquivada", fim: null })).toBe(
+      "campanha_id=eq.c9&ativo=eq.true"
+    );
   });
 });

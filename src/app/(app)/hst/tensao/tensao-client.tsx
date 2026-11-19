@@ -122,11 +122,20 @@ export function TensaoClient() {
   const [modalCampanha, setModalCampanha] = useState(false);
   const [novoMembro, setNovoMembro] = useState("");
   const [aMembro, setAMembro] = useState(false);
+  // Datas geridas pela equipa: início ao abrir, correcção do início,
+  // fim ao arquivar.
+  const [dataAbrir, setDataAbrir] = useState(hojeISO());
+  const [dataFim, setDataFim] = useState(hojeISO());
+  const [dataInicioEditar, setDataInicioEditar] = useState(hojeISO());
 
   const [modalMed, setModalMed] = useState(false);
   const [medAlvo, setMedAlvo] = useState("");
   const [formMed, setFormMed] = useState(FORM_MED_VAZIO);
   const [aMed, setAMed] = useState(false);
+
+  // Medicação registada JUNTO com a medição (caixa "faz medicação?").
+  const [fazMed, setFazMed] = useState(false);
+  const [formMedNova, setFormMedNova] = useState(FORM_MED_VAZIO);
 
   const hoje = useState(hojeISO)[0];
 
@@ -309,7 +318,15 @@ export function TensaoClient() {
 
   function abrirModal(nome = "", medicaoAgora = true) {
     setForm({ ...FORM_VAZIO, colaborador_nome: nome, data_medicao: medicaoAgora ? agoraLocal() : "" });
+    setFazMed(false);
+    setFormMedNova({ ...FORM_MED_VAZIO, desde: hojeISO() });
     setModal(true);
+  }
+
+  function abrirGerir() {
+    setDataFim(hojeISO());
+    setDataInicioEditar(campanha?.inicio || hojeISO());
+    setModalCampanha(true);
   }
 
   async function gravar() {
@@ -317,6 +334,10 @@ export function TensaoClient() {
     const dia = Number(form.diastolica);
     if (!form.colaborador_nome.trim()) {
       toast.warning("Indica o colaborador.");
+      return;
+    }
+    if (fazMed && !formMedNova.medicamento.trim()) {
+      toast.warning("Indica o medicamento ou desmarca a caixa de medicação.");
       return;
     }
     const problema = problemaValoresTensao(sys, dia, form.frequencia_cardiaca ? Number(form.frequencia_cardiaca) : null);
@@ -334,8 +355,20 @@ export function TensaoClient() {
         observacoes: form.observacoes,
         data_medicao: form.data_medicao
       }, "Medição registada.");
+      if (fazMed) {
+        await enviar("/api/hst/medicacao", {
+          colaborador_id: idDe[form.colaborador_nome.trim()] ?? null,
+          colaborador_nome: form.colaborador_nome.trim(),
+          medicamento: formMedNova.medicamento.trim(),
+          dosagem: formMedNova.dosagem,
+          desde: formMedNova.desde || hojeISO(),
+          regular: formMedNova.regular
+        }, "Medicação registada.");
+      }
       setModal(false);
       setForm(FORM_VAZIO);
+      setFazMed(false);
+      setFormMedNova({ ...FORM_MED_VAZIO, desde: hojeISO() });
       carregar();
     } catch {
       /* toast já avisou */
@@ -346,11 +379,24 @@ export function TensaoClient() {
 
   async function abrirCampanha() {
     const proximo = proximoNumeroCampanha(arquivadas[0]?.numero);
-    if (!window.confirm(`Abrir ${rotuloCampanha(proximo)}? O pessoal que já está em controle entra nela automaticamente.`)) return;
+    if (!window.confirm(`Abrir ${rotuloCampanha(proximo)} com início em ${dataAbrir}? O pessoal que já está em controle entra nela automaticamente.`)) return;
     setAMembro(true);
     try {
-      await enviar("/api/hst/campanha", { acao: "abrir" }, `${rotuloCampanha(proximo)} aberta.`);
+      await enviar("/api/hst/campanha", { acao: "abrir", inicio: dataAbrir }, `${rotuloCampanha(proximo)} aberta.`);
       setModalCampanha(false);
+      carregarCampanha();
+    } catch {
+      /* toast já avisou */
+    } finally {
+      setAMembro(false);
+    }
+  }
+
+  async function guardarDatasCampanha() {
+    if (!campanha) return;
+    setAMembro(true);
+    try {
+      await enviar("/api/hst/campanha", { acao: "datas", inicio: dataInicioEditar }, "Início da campanha actualizado.");
       carregarCampanha();
     } catch {
       /* toast já avisou */
@@ -361,10 +407,10 @@ export function TensaoClient() {
 
   async function arquivarCampanha() {
     if (!campanha) return;
-    if (!window.confirm(`Arquivar ${rotulo}? O pessoal sai da fila (fica no histórico) e o relatório continua disponível a qualquer momento.`)) return;
+    if (!window.confirm(`Arquivar ${rotulo} com fim em ${dataFim}? O pessoal sai da fila (fica no histórico) e o relatório continua disponível a qualquer momento.`)) return;
     setAMembro(true);
     try {
-      await enviar("/api/hst/campanha", { acao: "arquivar" }, `${rotulo} arquivada.`);
+      await enviar("/api/hst/campanha", { acao: "arquivar", fim: dataFim }, `${rotulo} arquivada.`);
       setModalCampanha(false);
       carregarCampanha();
     } catch {
@@ -464,7 +510,7 @@ export function TensaoClient() {
   return (
     <div className="space-y-5">
       <Cabeca titulo="Controlo de Tensão Arterial" subtitulo="Campanha de controle, indicadores e envio ao posto de saúde">
-        <Button variant="outline" onClick={() => setModalCampanha(true)}>
+        <Button variant="outline" onClick={abrirGerir}>
           <Users className="size-4" aria-hidden /> Gerir campanha
         </Button>
         <Button variant="outline" onClick={() => descarregarCSV(noPeriodo, nomeCsv())}>
@@ -727,6 +773,55 @@ export function TensaoClient() {
               )}
             </div>
           ) : null}
+          {/* Medicação registada JUNTO com a medição: só aparece se a
+              caixa estiver activa */}
+          <label className="flex items-center gap-2 text-sm font-semibold" htmlFor="m-faz-med">
+            <input
+              id="m-faz-med"
+              type="checkbox"
+              className="size-4"
+              checked={fazMed}
+              onChange={(e) => setFazMed(e.target.checked)}
+            />
+            O colaborador faz medicação para a tensão?
+          </label>
+          {form.colaborador_nome && (medDe[form.colaborador_nome] || []).length > 0 ? (
+            <p className="text-xs text-violet-600">Já registada: {(medDe[form.colaborador_nome] || []).join(", ")}</p>
+          ) : null}
+          {fazMed ? (
+            <div className="space-y-3 rounded-md border border-violet-300 bg-violet-50 p-3 dark:border-violet-900 dark:bg-violet-950/30" data-med-na-medicao>
+              <p className="text-xs text-muted-foreground">
+                Medicação para {form.colaborador_nome || "o colaborador escolhido"}: fica na ficha da pessoa e nas linhas da campanha com a estatística desde o início.
+              </p>
+              <div>
+                <label className="mb-1 block text-xs font-semibold" htmlFor="mm-medicamento">Medicamento *</label>
+                <Input id="mm-medicamento" value={formMedNova.medicamento}
+                  onChange={(e) => setFormMedNova((f) => ({ ...f, medicamento: e.target.value }))} placeholder="Ex.: Losartan 50 mg" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold" htmlFor="mm-dosagem">Dosagem</label>
+                  <Input id="mm-dosagem" value={formMedNova.dosagem}
+                    onChange={(e) => setFormMedNova((f) => ({ ...f, dosagem: e.target.value }))} placeholder="1 comprimido / dia" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold" htmlFor="mm-desde">Início *</label>
+                  <Input id="mm-desde" type="date" value={formMedNova.desde}
+                    onChange={(e) => setFormMedNova((f) => ({ ...f, desde: e.target.value }))} />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4"
+                  checked={formMedNova.regular}
+                  onChange={(e) => setFormMedNova((f) => ({ ...f, regular: e.target.checked }))}
+                  aria-label="Tomada regular da nova medicação"
+                />
+                Tomada regular (todos os dias, como orientado)
+              </label>
+            </div>
+          ) : null}
           <div>
             <label className="mb-1 block text-xs font-semibold" htmlFor="m-obs">Observações</label>
             <textarea id="m-obs" className="min-h-16 w-full rounded-md border bg-transparent px-3 py-2 text-sm"
@@ -748,7 +843,7 @@ export function TensaoClient() {
         <div className="space-y-3">
           {campanhaAberta ? (
             <div className="rounded-md bg-muted px-3 py-2 text-sm" data-campanha-gestao>
-              <span className="font-bold">{rotulo} aberta</span> desde {fmtDataHst(campanha?.inicio || "", true)} (dia {diaCampanha}) com {membros.length} pessoa(s). Ao ARQUIVAR, a campanha fica no histórico com relatório disponível a qualquer momento e a próxima abre com o número seguinte. Tirar alguém NÃO apaga nada: fica no histórico com a data de saída.
+              <span className="font-bold">{rotulo} aberta</span> desde {fmtDataHst(campanha?.inicio || "", true)} (dia {diaCampanha}) com {membros.length} pessoa(s). As datas são geridas aqui: corrigem o início, e ao ARQUIVAR escolhem o fim. A campanha fica no histórico com relatório disponível a qualquer momento e a próxima abre com o número seguinte. Tirar alguém NÃO apaga nada: fica no histórico com a data de saída.
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">
@@ -818,7 +913,22 @@ export function TensaoClient() {
                   </ul>
                 )}
               </div>
-              <div className="flex justify-end">
+              <div className="flex flex-wrap items-end gap-2 rounded-md border border-border px-3 py-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold" htmlFor="camp-inicio-editar">Início da campanha</label>
+                  <Input id="camp-inicio-editar" type="date" value={dataInicioEditar}
+                    onChange={(e) => setDataInicioEditar(e.target.value)} className="w-44" />
+                </div>
+                <Button size="sm" variant="outline" onClick={guardarDatasCampanha} disabled={aMembro} data-guardar-datas>
+                  Guardar datas
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-end justify-end gap-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold" htmlFor="camp-fim">Fim da campanha (ao arquivar)</label>
+                  <Input id="camp-fim" type="date" value={dataFim}
+                    onChange={(e) => setDataFim(e.target.value)} className="w-44" />
+                </div>
                 <Button variant="outline" onClick={arquivarCampanha} disabled={aMembro} data-arquivar>
                   <Archive className="size-4" aria-hidden /> Arquivar campanha
                 </Button>
@@ -826,6 +936,11 @@ export function TensaoClient() {
             </>
           ) : (
             <div className="flex flex-col items-start gap-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold" htmlFor="camp-inicio">Início da campanha</label>
+                <Input id="camp-inicio" type="date" value={dataAbrir}
+                  onChange={(e) => setDataAbrir(e.target.value)} className="w-44" />
+              </div>
               <Button onClick={abrirCampanha} disabled={aMembro} data-abrir-campanha>
                 {aMembro ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <Users className="size-4" aria-hidden />}
                 Abrir {rotuloCampanha(proximaCampanha)}

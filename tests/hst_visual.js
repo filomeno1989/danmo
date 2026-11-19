@@ -401,10 +401,14 @@ const LISTA_ACCIDENTES = {
     return rota.fulfill({ json: { ok: true } });
   });
   const patchesMedicao = [];
+  const postsMedicao = [];
   await contexto.route("**/api/hst/medicoes", async (rota) => {
     const m = rota.request().method();
     if (m === "GET") return rota.fulfill({ json: { ok: true, medicoes: MEDICOES } });
-    if (m === "POST") return rota.fulfill({ json: { ok: true, medicao: MEDICOES[0] } });
+    if (m === "POST") {
+      postsMedicao.push(rota.request().postDataJSON());
+      return rota.fulfill({ json: { ok: true, medicao: MEDICOES[0] } });
+    }
     if (m === "PATCH") {
       patchesMedicao.push(rota.request().postDataJSON());
       return rota.fulfill({ json: { ok: true, medicao: MEDICOES[1] } });
@@ -667,10 +671,18 @@ const LISTA_ACCIDENTES = {
   await pg.waitForTimeout(600);
   ok("Tensão: POST da medicação capturado com o colaborador", postsMedicacao.length === 1 && postsMedicacao[0]?.colaborador_nome === "Olindo J. Pinto" && postsMedicacao[0]?.medicamento === "Hidroclorotiazida 25 mg", JSON.stringify(postsMedicacao));
 
-  // Arquivar a campanha: fica no histórico, nada é apagado
+  // Datas GERIDAS pela equipa: corrigir o início da campanha aberta
+  ok("Tensão: datas geridas no dialog (início editável e fim ao arquivar)", corpo.includes('id="camp-inicio-editar"') && corpo.includes('id="camp-fim"') && corpo.includes("Guardar datas"));
+  await pg.locator('input[id="camp-inicio-editar"]').fill(DATA_10ATRAS);
+  await pg.locator("[data-guardar-datas]").click();
+  await pg.waitForTimeout(600);
+  ok("Tensão: POST acao=datas com o início escolhido", postsCampanha.length === 1 && postsCampanha[0]?.acao === "datas" && postsCampanha[0]?.inicio === DATA_10ATRAS, JSON.stringify(postsCampanha));
+
+  // Arquivar a campanha com a DATA DE FIM escolhida (fica no histórico)
+  await pg.locator('input[id="camp-fim"]').fill(DATA_2ATRAS);
   await pg.locator("[data-arquivar]").click();
   await pg.waitForTimeout(600);
-  ok("Tensão: arquivar mandou POST acao=arquivar", postsCampanha.length === 1 && postsCampanha[0]?.acao === "arquivar", JSON.stringify(postsCampanha));
+  ok("Tensão: arquivar mandou POST acao=arquivar com o fim escolhido", postsCampanha.length === 2 && postsCampanha[1]?.acao === "arquivar" && postsCampanha[1]?.fim === DATA_2ATRAS, JSON.stringify(postsCampanha));
   await pg.keyboard.press("Escape");
   await pg.waitForTimeout(250);
 
@@ -721,7 +733,22 @@ const LISTA_ACCIDENTES = {
   const valorColab = await pg.locator("#m-colab").inputValue();
   ok("Tensão: escolha no dropdown preenche o nome", valorColab === "Olindo J. Pinto", valorColab);
   ok("Tensão: campo de data e hora da medição preenchido com agora", (await pg.locator("#m-data").inputValue()).length >= 16);
-  await pg.locator('div[role="dialog"] button:has-text("Cancelar")').click();
+
+  // Medicação dentro da NOVA MEDIÇÃO: a caixa activa é que abre os campos
+  corpo = await pg.content();
+  ok("Tensão: campo de medicação SÓ aparece com a caixa activa", !corpo.includes('id="mm-medicamento"') && corpo.includes("O colaborador faz medicação para a tensão?"));
+  await pg.locator('input[id="m-faz-med"]').check();
+  await pg.waitForTimeout(250);
+  corpo = await pg.content();
+  ok("Tensão: caixa activa abre os campos e mostra a medicação que já existe", corpo.includes('id="mm-medicamento"') && corpo.includes("Já registada: Losartan 50 mg"), corpo.includes("Já registada"));
+  await pg.locator("#m-sis").fill("150");
+  await pg.locator("#m-dia").fill("70");
+  await pg.locator('input[id="mm-medicamento"]').fill("Enalapril 10 mg");
+  await pg.locator('div[role="dialog"] button:has-text("Registar")').click();
+  await pg.waitForTimeout(700);
+  ok("Tensão: POST da medição capturado", postsMedicao.length === 1 && postsMedicao[0]?.colaborador_nome === "Olindo J. Pinto" && postsMedicao[0]?.sistolica === 150, JSON.stringify(postsMedicao));
+  ok("Tensão: POST da medicação capturado JUNTO com a medição", postsMedicacao.length === 2 && postsMedicacao[1]?.medicamento === "Enalapril 10 mg" && String(postsMedicacao[1]?.desde || "").length === 10, JSON.stringify(postsMedicacao));
+  await pg.locator('div[role="dialog"] button:has-text("Cancelar")').click().catch(() => {});
   await pg.waitForTimeout(200);
 
   // Ficha por colaborador

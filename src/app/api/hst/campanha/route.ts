@@ -1,23 +1,29 @@
 /**
- * /api/hst/campanha - A CAMPANHA DE CONTROLE da tensão arterial (Fase 11).
+ * /api/hst/campanha - A CAMPANHA DE CONTROLE da tensão arterial (Fase 11/12).
  *
- * A campanha tem NUMERAÇÃO e CICLO DE VIDA: o técnico ABRE a Campanha 01
- * escolhendo o pessoal que passa a medir com acompanhamento; quando o
- * controle termina, ARQUIVA (fica no histórico para consultar ou gerar
- * o relatório a qualquer momento) e a campanha seguinte nasce com o
- * número seguinte (nunca reusa). Quem não está na campanha mede normal
- * para controle pessoal. Com a campanha aberta, o % de tensão alta do
- * painel conta SOBRE o pessoal da campanha.
+ * A campanha tem NUMERAÇÃO, DATAS GERIDAS PELA EQUIPA e CICLO DE VIDA:
+ * o técnico ABRE a Campanha 01 escolhendo a data de início e o pessoal
+ * que passa a medir com acompanhamento; pode CORRIGIR o início enquanto
+ * estiver aberta; quando o controle termina, ARQUIVA escolhendo a data
+ * de fim (fica no histórico para consultar ou gerar o relatório a
+ * qualquer momento) e a campanha seguinte nasce com o número seguinte
+ * (nunca reusa). Quem não está na campanha mede normal para controle
+ * pessoal. Com a campanha aberta, o % de tensão alta do painel conta
+ * SOBRE o pessoal da campanha.
  *
  * GET: campanha aberta + membros activos + arquivadas (e a contagem do
  *      pessoal antigo sem campanha numerada, para o ecrã avisar).
- *      Com ?id=<uuid> devolve UMA campanha (mesmo arquivada) e TODO o
- *      pessoal que passou por ela: é o que o papel da campanha usa.
- * POST: { acao: "abrir" } cria a campanha com o número seguinte e LIGA
- *       automaticamente o pessoal activo que ficou sem campanha; sem
- *       acao (ou "entrar") mete um colaborador na campanha aberta
- *       (409 se já estiver); { acao: "arquivar" } fecha a campanha
- *       aberta e tira o pessoal da fila (nada é apagado).
+ *      Com ?id=<uuid> devolve UMA campanha e o pessoal do RELATÓRIO:
+ *      na aberta são os que estão nela AGORA (quem foi tirado não
+ *      aparece); na arquivada são os que estavam nela quando foi
+ *      arquivada (quem saiu antes não aparece). É o que o papel usa.
+ * POST: { acao: "abrir", inicio? } cria a campanha com o número
+ *       seguinte e a data de início ESCOLHIDA (ou hoje) e LIGA
+ *       automaticamente o pessoal activo que ficou sem campanha;
+ *       { acao: "datas", inicio } corrige o início da campanha aberta;
+ *       { acao: "arquivar", fim? } fecha a campanha aberta na data de
+ *       fim ESCOLHIDA (ou hoje); sem acao (ou "entrar") mete um
+ *       colaborador na campanha aberta (409 se já estiver).
  * DELETE: TIRA o colaborador da campanha SEM apagar nada (a linha fica
  *         com ativo=false e a data de saída: é o histórico).
  */
@@ -25,11 +31,23 @@
 import { NextResponse, NextRequest } from "next/server";
 import { insert, queryTudo, update } from "@/lib/supabase";
 import { autorizado, autorizadoEmAlguma, eErro, erroBase } from "@/lib/guarda-api";
-import { proximoNumeroCampanha, type CampanhaHST, type LinhaCampanhaHST } from "@/lib/hst";
+import {
+  filtroMembrosRelatorio,
+  problemaDatasCampanha,
+  proximoNumeroCampanha,
+  type CampanhaHST,
+  type LinhaCampanhaHST
+} from "@/lib/hst";
 
 /** Hoje em Maputo (UTC+2, sem hora de verão). */
 function hojeMaputo(): string {
   return new Date(Date.now() + 2 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** Data validada do corpo (AAAA-MM-DD) ou null quando não veio. */
+function dataDoCorpo(valor: string | undefined): string | null {
+  const v = String(valor || "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
 }
 
 export async function GET(req: NextRequest) {
@@ -47,9 +65,15 @@ export async function GET(req: NextRequest) {
       if (!campanha) {
         return NextResponse.json({ ok: false, erro: "Campanha não encontrada." }, { status: 404 });
       }
+      // O relatório respeita as REMOÇÕES: quem foi tirado (ativo=false
+      // com data de saída própria) não entra. Na campanha ABERTA entram
+      // os que estão nela agora; na ARQUIVADA entram os que estavam
+      // quando foi arquivada (fim deles = fim da campanha, gravação
+      // antiga) ou continuam marcados como estavam (fim vazio).
+      const filtroMembros = filtroMembrosRelatorio(campanha);
       const membros = await queryTudo<LinhaCampanhaHST>(
         "hst_tensao_campanha",
-        `select=*&campanha_id=eq.${id}&order=inicio.asc,criado_em.asc`
+        `select=*&${filtroMembros}&order=inicio.asc,criado_em.asc`
       );
       return NextResponse.json({ ok: true, campanha, membros });
     }
@@ -91,9 +115,11 @@ export async function POST(req: NextRequest) {
   if (eErro(auth)) return auth;
   try {
     const corpo = (await req.json()) as {
-      acao?: "abrir" | "arquivar" | "entrar";
+      acao?: "abrir" | "arquivar" | "entrar" | "datas";
       colaborador_id?: number | null;
       colaborador_nome?: string;
+      inicio?: string;
+      fim?: string;
     };
     const acao = corpo.acao || "entrar";
 
@@ -108,6 +134,11 @@ export async function POST(req: NextRequest) {
           { status: 409 }
         );
       }
+      const inicio = dataDoCorpo(corpo.inicio) || hojeMaputo();
+      const avisoDatas = problemaDatasCampanha(inicio);
+      if (avisoDatas) {
+        return NextResponse.json({ ok: false, erro: avisoDatas }, { status: 400 });
+      }
       const numeradas = await queryTudo<{ numero: number }>(
         "hst_tensao_campanhas",
         "select=numero&order=numero.desc"
@@ -115,6 +146,7 @@ export async function POST(req: NextRequest) {
       const numero = proximoNumeroCampanha(numeradas[0]?.numero);
       const [campanha] = await insert<CampanhaHST>("hst_tensao_campanhas", {
         numero,
+        inicio,
         criado_por: auth.utilizador.nome
       });
       // O pessoal activo antigo (sem campanha numerada) entra nesta
@@ -123,6 +155,27 @@ export async function POST(req: NextRequest) {
         campanha_id: campanha.id
       });
       return NextResponse.json({ ok: true, campanha });
+    }
+
+    if (acao === "datas") {
+      // Correcção do INÍCIO da campanha aberta (as equipas gerem as datas).
+      const abertas = await queryTudo<CampanhaHST>(
+        "hst_tensao_campanhas",
+        "select=*&estado=eq.aberta&order=numero.desc"
+      );
+      const campanha = abertas[0];
+      if (!campanha) {
+        return NextResponse.json({ ok: false, erro: "Não há campanha aberta para ajustar." }, { status: 409 });
+      }
+      const inicio = dataDoCorpo(corpo.inicio);
+      if (!inicio) {
+        return NextResponse.json(
+          { ok: false, erro: problemaDatasCampanha(corpo.inicio) || "Indica a data de início." },
+          { status: 400 }
+        );
+      }
+      await update("hst_tensao_campanhas", `id=eq.${campanha.id}`, { inicio });
+      return NextResponse.json({ ok: true });
     }
 
     if (acao === "arquivar") {
@@ -134,16 +187,17 @@ export async function POST(req: NextRequest) {
       if (!campanha) {
         return NextResponse.json({ ok: false, erro: "Não há campanha aberta para arquivar." }, { status: 409 });
       }
-      const fim = hojeMaputo();
+      const fim = dataDoCorpo(corpo.fim) || hojeMaputo();
+      const avisoDatas = problemaDatasCampanha(campanha.inicio, fim);
+      if (avisoDatas) {
+        return NextResponse.json({ ok: false, erro: avisoDatas }, { status: 400 });
+      }
+      // Fecha SÓ a campanha: o pessoal fica como está (quem foi tirado
+      // continua fora, quem estava continua no relatório arquivado).
       await update("hst_tensao_campanhas", `id=eq.${campanha.id}`, {
         estado: "arquivada",
         fim
       });
-      await update(
-        "hst_tensao_campanha",
-        `campanha_id=eq.${campanha.id}&ativo=eq.true`,
-        { ativo: false, fim }
-      );
       return NextResponse.json({ ok: true });
     }
 

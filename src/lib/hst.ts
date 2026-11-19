@@ -665,6 +665,46 @@ export function diasDeCampanha(inicio: string | null | undefined, hoje: string):
   return diff + 1;
 }
 
+/**
+ * Valida as datas geridas pela equipa: início da campanha (e fim, quando
+ * se arquiva). Devolve o aviso em português ou null se estiver bom.
+ */
+export function problemaDatasCampanha(
+  inicio: string | null | undefined,
+  fim?: string | null
+): string | null {
+  const i = String(inicio || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(i)) {
+    return "Indica a data de início da campanha (AAAA-MM-DD).";
+  }
+  const f = String(fim || "");
+  if (f) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) {
+      return "Indica uma data de fim válida (AAAA-MM-DD).";
+    }
+    if (f < i) {
+      return "A data de fim não pode ser antes do início da campanha.";
+    }
+  }
+  return null;
+}
+
+/**
+ * Filtro PostgREST do pessoal que ENTRA no relatório da campanha,
+ * respeitando as remoções: na campanha ABERTA só quem está nela agora
+ * (ativo=true); na ARQUIVADA quem estava nela quando foi arquivada
+ * (marca antiga: ativo=false mas fim = fim da campanha) e quem continua
+ * sem data de saída. Quem foi TIRADO antes (saída própria) nunca entra.
+ */
+export function filtroMembrosRelatorio(
+  campanha: Pick<CampanhaHST, "id" | "estado" | "fim">
+): string {
+  if (campanha.estado === "arquivada" && campanha.fim) {
+    return `campanha_id=eq.${campanha.id}&or=(ativo.eq.true,fim.eq.${campanha.fim})`;
+  }
+  return `campanha_id=eq.${campanha.id}&ativo=eq.true`;
+}
+
 /** A medicação que uma pessoa toma (activo=false = pausada, nunca apagada). */
 export type MedicacaoTensaoHST = {
   id: string;

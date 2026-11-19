@@ -17,10 +17,12 @@ import { Button } from "@/components/ui/button";
 import { pedir } from "@/components/oficina/ui-bits";
 import {
   classificarTensao,
+  estatisticaMedicacao,
   fmtDataHst,
   medicoesNoPeriodo,
   resumoTensaoPeriodo,
   type ColaboradorHST,
+  type MedicacaoTensaoHST,
   type MedicaoTensaoHST
 } from "@/lib/hst";
 import { BotaoImprimirHst } from "../botao-imprimir";
@@ -30,18 +32,23 @@ type Props = { colab: string; de: string; ate: string };
 export function TensaoImprimir({ colab, de, ate }: Props) {
   const [medicoes, setMedicoes] = useState<MedicaoTensaoHST[] | null>(null);
   const [colabs, setColabs] = useState<ColaboradorHST[]>([]);
+  const [medicacao, setMedicacao] = useState<MedicacaoTensaoHST[]>([]);
   const [falha, setFalha] = useState("");
 
   useEffect(() => {
     let vivo = true;
     Promise.all([
       pedir<{ medicoes: MedicaoTensaoHST[] }>("/api/hst/medicoes"),
-      pedir<{ colaboradores: ColaboradorHST[] }>("/api/hst/colaboradores")
+      pedir<{ colaboradores: ColaboradorHST[] }>("/api/hst/colaboradores"),
+      pedir<{ medicacao: MedicacaoTensaoHST[] }>(
+        colab ? `/api/hst/medicacao?colab=${encodeURIComponent(colab)}` : "/api/hst/medicacao"
+      ).catch(() => ({ medicacao: [] as MedicacaoTensaoHST[] }))
     ])
-      .then(([med, col]) => {
+      .then(([med, col, med2]) => {
         if (!vivo) return;
         setMedicoes(med.medicoes || []);
         setColabs(col.colaboradores || []);
+        setMedicacao((med2.medicacao || []).filter((m) => m.activo));
       })
       .catch((e: Error) => {
         if (vivo) setFalha(e.message);
@@ -49,7 +56,7 @@ export function TensaoImprimir({ colab, de, ate }: Props) {
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [colab]);
 
   const dentro = useMemo(
     () => (medicoes ? medicoesNoPeriodo(medicoes, de, ate).filter((m) => !colab || m.colaborador_nome === colab) : []),
@@ -154,6 +161,46 @@ export function TensaoImprimir({ colab, de, ate }: Props) {
             </tbody>
           </table>
         </section>
+
+        {individual && medicacao.length > 0 && (
+          <section className="mt-5" data-tensao-medicacao>
+            <h2 className="mb-2 border-b border-slate-300 pb-1 text-[0.7rem] font-bold uppercase tracking-wide">
+              Medicação em Curso
+            </h2>
+            <table className="w-full border-collapse text-[0.75rem]">
+              <thead>
+                <tr className="bg-slate-900 text-white" style={{ printColorAdjust: "exact" }}>
+                  <th className="border border-slate-900 px-2 py-1 text-left">Medicamento</th>
+                  <th className="border border-slate-900 px-2 py-1 text-left">Dosagem</th>
+                  <th className="border border-slate-900 px-2 py-1 text-left">Desde</th>
+                  <th className="border border-slate-900 px-2 py-1 text-center">Tomada</th>
+                  <th className="border border-slate-900 px-2 py-1 text-left">Estatística desde o início</th>
+                </tr>
+              </thead>
+              <tbody>
+                {medicacao.map((m) => {
+                  const est = estatisticaMedicacao(
+                    (medicoes || []).filter((x) => x.colaborador_nome === colab),
+                    String(m.desde || "")
+                  );
+                  return (
+                    <tr key={m.id}>
+                      <td className="border border-slate-300 px-2 py-1 font-bold">{m.medicamento}</td>
+                      <td className="border border-slate-300 px-2 py-1">{m.dosagem || "-"}</td>
+                      <td className="border border-slate-300 px-2 py-1">{fmtDataHst(m.desde || "", true)}</td>
+                      <td className="border border-slate-300 px-2 py-1 text-center">{m.regular ? "Regular" : "Irregular"}</td>
+                      <td className="border border-slate-300 px-2 py-1">
+                        {est
+                          ? `média ${est.desde.mediaSys}/${est.desde.mediaDia} | altas ${est.desde.alta} de ${est.desde.total} (${est.desde.pctAlta}%)${est.antes.total > 0 ? ` | antes: média ${est.antes.mediaSys}/${est.antes.mediaDia}, altas ${est.antes.pctAlta}%` : ""}`
+                          : "sem medições desde o início"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </section>
+        )}
 
         {!individual && porPessoa.length > 0 && (
           <section className="mt-5">

@@ -617,6 +617,236 @@ export function csvTensao(medicoes: MedicaoTensaoHST[]): string {
   );
 }
 
+/* ============ Campanha de controle e medicação (Fase 10) ============ */
+
+/** Uma linha da campanha de controle (a gente escolhida pelo técnico de HST). */
+export type LinhaCampanhaHST = {
+  id: string;
+  colaborador_id: number | null;
+  colaborador_nome: string;
+  inicio: string | null;
+  ativo: boolean;
+  fim: string | null;
+  criado_por?: string | null;
+};
+
+/** A medicação que uma pessoa toma (activo=false = pausada, nunca apagada). */
+export type MedicacaoTensaoHST = {
+  id: string;
+  colaborador_id: number | null;
+  colaborador_nome: string;
+  medicamento: string;
+  dosagem: string | null;
+  desde: string | null;
+  regular: boolean;
+  activo: boolean;
+  observacoes: string | null;
+  criado_por?: string | null;
+};
+
+/** Estado do membro da campanha com a tensão já em controle. */
+export type MembroEmControle = {
+  nome: string;
+  ultima: MedicaoTensaoHST;
+  classificacao: ClassificacaoTensao;
+};
+
+/**
+ * Resumo da CAMPANHA DE CONTROLE: a percentagem conta SOBRE o pessoal
+ * escolhido para a campanha (e não sobre todas as medições soltas). Os
+ * membros ficam em três grupos: fila (última medição alta, medem todos
+ * os dias), sem medição nenhuma na campanha (urgente: ninguém sabe a
+ * tensão deles) e em controle (última já normal ou limítrofe).
+ */
+export type ResumoCampanha = {
+  total: number; // membros activos na campanha
+  medidosHoje: number; // membros com pelo menos 1 medição hoje
+  comHta: number; // membros com a ÚLTIMA medição alta
+  pctHta: number; // % da campanha (0 a 100)
+  fila: CampanhaPessoa[];
+  semMedicao: string[];
+  emControlo: MembroEmControle[];
+};
+
+export function resumoCampanha(
+  membros: { colaborador_nome: string }[],
+  medicoes: MedicaoTensaoHST[],
+  hoje: string
+): ResumoCampanha {
+  const nomes = [...new Set(membros.map((p) => (p.colaborador_nome || "").trim()).filter(Boolean))];
+  const proprias = medicoes.filter((m) => nomes.includes(m.colaborador_nome || ""));
+  const ultima: Record<string, MedicaoTensaoHST> = {};
+  for (const m of proprias) {
+    const nome = m.colaborador_nome || "";
+    if (!nome) continue;
+    if (!ultima[nome] || String(m.data_medicao) > String(ultima[nome].data_medicao)) {
+      ultima[nome] = m;
+    }
+  }
+  const fila = campanhaTensao(proprias, hoje);
+  const semMedicao: string[] = [];
+  const emControlo: MembroEmControle[] = [];
+  for (const nome of nomes) {
+    const u = ultima[nome];
+    if (!u) semMedicao.push(nome);
+    else if (!eHta(Number(u.sistolica), Number(u.diastolica))) {
+      emControlo.push({
+        nome,
+        ultima: u,
+        classificacao: classificarTensao(Number(u.sistolica), Number(u.diastolica))
+      });
+    }
+  }
+  emControlo.sort((a, b) => a.nome.localeCompare(b.nome));
+  const medidosHoje = new Set(
+    proprias.filter((m) => diaTensao(m.data_medicao) === hoje).map((m) => m.colaborador_nome || "")
+  ).size;
+  return {
+    total: nomes.length,
+    medidosHoje,
+    comHta: fila.length,
+    pctHta: nomes.length ? Math.round((fila.length / nomes.length) * 100) : 0,
+    fila,
+    semMedicao,
+    emControlo
+  };
+}
+
+/** Números secos de um conjunto de medições (a média e a parte alta). */
+export type EstatisticaTensao = {
+  total: number;
+  alta: number;
+  pctAlta: number;
+  mediaSys: number;
+  mediaDia: number;
+};
+
+export function estatisticaTensao(medicoes: MedicaoTensaoHST[]): EstatisticaTensao {
+  const total = medicoes.length;
+  const altas = medicoes.filter((m) => eHta(Number(m.sistolica), Number(m.diastolica))).length;
+  const somaSys = medicoes.reduce((s, m) => s + (Number(m.sistolica) || 0), 0);
+  const somaDia = medicoes.reduce((s, m) => s + (Number(m.diastolica) || 0), 0);
+  return {
+    total,
+    alta: altas,
+    pctAlta: total ? Math.round((altas / total) * 100) : 0,
+    mediaSys: total ? Math.round(somaSys / total) : 0,
+    mediaDia: total ? Math.round(somaDia / total) : 0
+  };
+}
+
+/**
+ * Estatística desde o início da medicação, comparada com o período
+ * antes dela (mesma pessoa, medições de antes de "desde" vs. de "desde"
+ * em diante). Null quando a medicação ainda não tem medições novas.
+ */
+export function estatisticaMedicacao(
+  medicoes: MedicaoTensaoHST[],
+  desde: string
+): { desde: EstatisticaTensao; antes: EstatisticaTensao } | null {
+  const depois = medicoes.filter((m) => {
+    const d = diaTensao(m.data_medicao);
+    return d && d >= desde;
+  });
+  if (!depois.length) return null;
+  const antes = medicoes.filter((m) => {
+    const d = diaTensao(m.data_medicao);
+    return d && d < desde;
+  });
+  return { desde: estatisticaTensao(depois), antes: estatisticaTensao(antes) };
+}
+
+/* ============ Gráfico comparativo da ficha (Fase 10) ============ */
+
+/** Limiar de hipertensão (HTA Grau 1) que marca o gráfico. */
+export const LIMIAR_HTA_SYS = 140;
+export const LIMIAR_HTA_DIA = 90;
+
+export type PontoGraficoTensao = { x: number; y: number; v: number; iso: string };
+
+/** Coordenadas prontas do gráfico comparativo (sistólica vs. diastólica). */
+export type GraficoTensao = {
+  largura: number;
+  altura: number;
+  escalaMin: number;
+  escalaMax: number;
+  ticks: number[];
+  yTicks: { v: number; y: number }[];
+  sys: PontoGraficoTensao[];
+  dia: PontoGraficoTensao[];
+  yLimiarSys: number;
+  yLimiarDia: number;
+  rotulos: { x: number; texto: string }[];
+};
+
+/** Rótulo curto de data para o eixo X (dd/mm do que está gravado). */
+export function rotuloCurtoTensao(iso: string): string {
+  const s = String(iso || "");
+  return s.length >= 10 ? `${s.slice(8, 10)}/${s.slice(5, 7)}` : "";
+}
+
+/**
+ * Pontos do gráfico comparativo (SVG): duas linhas (sistólica e
+ * diastólica) na MESMA escala, com as linhas de corte 140/90 marcadas.
+ * As medições chegam em ordem ASCENDENTE (a mais antiga à esquerda).
+ */
+export function pontosGraficoTensao(
+  medicoes: MedicaoTensaoHST[],
+  largura = 760,
+  altura = 240
+): GraficoTensao {
+  const padEsq = 36;
+  const padDir = 12;
+  const padTopo = 14;
+  const padBaixo = 24;
+  let min = 60;
+  let max = 160;
+  for (const m of medicoes) {
+    min = Math.min(min, Number(m.sistolica) || min, Number(m.diastolica) || min);
+    max = Math.max(max, Number(m.sistolica) || max, Number(m.diastolica) || max);
+  }
+  const escalaMin = Math.max(40, Math.floor((min - 10) / 20) * 20);
+  const escalaMax = Math.max(LIMIAR_HTA_SYS + 20, Math.ceil((max + 10) / 20) * 20);
+  const ticks: number[] = [];
+  for (let v = escalaMin; v <= escalaMax; v += 20) ticks.push(v);
+  const yDe = (v: number) =>
+    padTopo + ((escalaMax - v) / (escalaMax - escalaMin)) * (altura - padTopo - padBaixo);
+  const n = medicoes.length;
+  const xDe = (i: number) =>
+    n === 1
+      ? (padEsq + (largura - padDir)) / 2
+      : padEsq + (i * (largura - padDir - padEsq)) / (n - 1);
+  const arred = (v: number) => Math.round(v * 10) / 10;
+  const ponto = (m: MedicaoTensaoHST, i: number, campo: "sistolica" | "diastolica"): PontoGraficoTensao => {
+    const v = Number(m[campo]) || 0;
+    return { x: arred(xDe(i)), y: arred(yDe(v)), v, iso: String(m.data_medicao || "") };
+  };
+  // Rótulos do eixo X: espaçados para nunca se tocarem, com o último sempre.
+  const passo = Math.max(1, Math.ceil(n / 10));
+  const rotulos: { x: number; texto: string }[] = [];
+  for (let i = 0; i < n; i += passo) {
+    const texto = rotuloCurtoTensao(String(medicoes[i].data_medicao || ""));
+    if (texto) rotulos.push({ x: arred(xDe(i)), texto });
+  }
+  const ultimaRot = rotuloCurtoTensao(String(medicoes[n - 1]?.data_medicao || ""));
+  if (n > 1 && ultimaRot && !rotulos.some((r) => r.x === arred(xDe(n - 1)))) {
+    rotulos.push({ x: arred(xDe(n - 1)), texto: ultimaRot });
+  }
+  return {
+    largura,
+    altura,
+    escalaMin,
+    escalaMax,
+    ticks,
+    yTicks: ticks.map((v) => ({ v, y: arred(yDe(v)) })),
+    sys: medicoes.map((m, i) => ponto(m, i, "sistolica")),
+    dia: medicoes.map((m, i) => ponto(m, i, "diastolica")),
+    yLimiarSys: arred(yDe(LIMIAR_HTA_SYS)),
+    yLimiarDia: arred(yDe(LIMIAR_HTA_DIA)),
+    rotulos
+  };
+}
+
 /** Nome do mês em português (resumo mensal). */
 export const MESES_HST = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",

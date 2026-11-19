@@ -20,11 +20,13 @@ import {
   csvTensao,
   diaTensao,
   eHta,
+  estatisticaMedicacao,
   fmtDataHst,
   indicadoresResumoMensal,
   medicoesNoPeriodo,
   numeroFmtHst,
   partirNumeroHst,
+  pontosGraficoTensao,
   problemaAccao,
   problemaAcidente,
   problemaArea,
@@ -32,7 +34,9 @@ import {
   problemaEntrega,
   problemaValoresTensao,
   proximoNumeroHst,
+  resumoCampanha,
   resumoTensaoPeriodo,
+  rotuloCurtoTensao,
   statsPainelHst,
   vestirAcidente,
   type AccaoHST,
@@ -552,5 +556,114 @@ describe("diaTensao", () => {
   test("corta o ISO no dia sem deslocar fuso", () => {
     expect(diaTensao("2026-11-13T08:55:00.718Z")).toBe("2026-11-13");
     expect(diaTensao(null)).toBe("");
+  });
+});
+
+describe("resumoCampanha: a % conta SOBRE o pessoal da campanha", () => {
+  const HOJE = "2026-11-14";
+  const membros = [
+    { colaborador_nome: "Olindo" },
+    { colaborador_nome: "Filomeno" },
+    { colaborador_nome: "Novato" }
+  ];
+  const medicoes = [
+    medicao({ id: 1, colaborador_nome: "Olindo", sistolica: 150, diastolica: 90, data_medicao: "2026-11-12T09:00" }),
+    medicao({ id: 2, colaborador_nome: "Filomeno", sistolica: 125, diastolica: 82, data_medicao: `${HOJE}T08:00` }),
+    medicao({ id: 3, colaborador_nome: "Fora da campanha", sistolica: 190, diastolica: 120, data_medicao: `${HOJE}T08:30` })
+  ];
+  const r = resumoCampanha(membros, medicoes, HOJE);
+
+  test("total = 3 membros; quem está fora da campanha NÃO entra", () => {
+    expect(r.total).toBe(3);
+  });
+  test("comHta = 1 e pctHta = 33% da campanha (o 190/120 de fora não conta)", () => {
+    expect(r.comHta).toBe(1);
+    expect(r.pctHta).toBe(33);
+  });
+  test("fila só com o Olindo (última alta, por medir há 2 dias)", () => {
+    expect(r.fila.length).toBe(1);
+    expect(r.fila[0].nome).toBe("Olindo");
+    expect(r.fila[0].estado).toBe("por_medir");
+    expect(r.fila[0].diasSemMedir).toBe(2);
+  });
+  test("medidosHoje = 1 (Filomeno mediu hoje)", () => {
+    expect(r.medidosHoje).toBe(1);
+  });
+  test("emControlo = Filomeno; semMedicao = Novato", () => {
+    expect(r.emControlo.map((m) => m.nome)).toEqual(["Filomeno"]);
+    expect(r.semMedicao).toEqual(["Novato"]);
+  });
+  test("campanha vazia: tudo a zero sem rebentar", () => {
+    const v = resumoCampanha([], medicoes, HOJE);
+    expect(v.total).toBe(0);
+    expect(v.pctHta).toBe(0);
+    expect(v.fila).toEqual([]);
+  });
+});
+
+describe("estatisticaMedicacao: desde o início vs. antes", () => {
+  const medicoes = [
+    medicao({ id: 1, sistolica: 150, diastolica: 95, data_medicao: "2026-08-01T08:00" }),
+    medicao({ id: 2, sistolica: 160, diastolica: 100, data_medicao: "2026-09-04T08:00" }),
+    medicao({ id: 3, sistolica: 135, diastolica: 85, data_medicao: "2026-09-05T08:00" }),
+    medicao({ id: 4, sistolica: 128, diastolica: 82, data_medicao: "2026-09-20T08:00" })
+  ];
+  test("desde 05/09: 2 medições, média 132/84, 0 altas; antes: 2, média 155/98, 2 altas", () => {
+    const est = estatisticaMedicacao(medicoes, "2026-09-05")!;
+    expect(est.desde.total).toBe(2);
+    expect(est.desde.mediaSys).toBe(132);
+    expect(est.desde.mediaDia).toBe(84);
+    expect(est.desde.alta).toBe(0);
+    expect(est.desde.pctAlta).toBe(0);
+    expect(est.antes.total).toBe(2);
+    expect(est.antes.mediaSys).toBe(155);
+    expect(est.antes.mediaDia).toBe(98);
+    expect(est.antes.alta).toBe(2);
+  });
+  test("sem medições depois do início da medicação: null", () => {
+    expect(estatisticaMedicacao(medicoes, "2026-11-01")).toBeNull();
+  });
+  test("média desde o início abaixo da anterior = tendência de melhoria", () => {
+    const est = estatisticaMedicacao(medicoes, "2026-09-05")!;
+    expect(est.desde.mediaSys < est.antes.mediaSys).toBe(true);
+  });
+});
+
+describe("pontosGraficoTensao: o gráfico comparativo", () => {
+  const asc = [
+    medicao({ id: 1, sistolica: 120, diastolica: 80, data_medicao: "2026-11-01T08:00" }),
+    medicao({ id: 2, sistolica: 150, diastolica: 95, data_medicao: "2026-11-05T08:00" }),
+    medicao({ id: 3, sistolica: 135, diastolica: 85, data_medicao: "2026-11-10T08:00" })
+  ];
+  const g = pontosGraficoTensao(asc, 760, 240);
+
+  test("as duas linhas com o mesmo número de pontos", () => {
+    expect(g.sys.length).toBe(3);
+    expect(g.dia.length).toBe(3);
+  });
+  test("as linhas de corte 140/90 ficam dentro da escala", () => {
+    expect(g.escalaMin).toBeLessThanOrEqual(90);
+    expect(g.escalaMax).toBeGreaterThanOrEqual(140);
+    // Em SVG o Y cresce para baixo: o corte de 140 fica ACIMA (menor y) do de 90.
+    expect(g.yLimiarSys).toBeLessThan(g.yLimiarDia);
+  });
+  test("pontos em ordem crescente de X e rótulos dd/mm", () => {
+    const xs = g.sys.map((p) => p.x);
+    expect(xs[0]).toBeLessThan(xs[1]);
+    expect(xs[1]).toBeLessThan(xs[2]);
+    expect(g.rotulos.length).toBeGreaterThanOrEqual(1);
+    expect(g.rotulos.every((r) => /^\d{2}\/\d{2}$/.test(r.texto))).toBe(true);
+  });
+  test("um valor altíssimo não corta o gráfico (a escala acompanha)", () => {
+    const g2 = pontosGraficoTensao([
+      medicao({ id: 9, sistolica: 250, diastolica: 140, data_medicao: "2026-11-01T08:00" })
+    ]);
+    expect(g2.escalaMax).toBeGreaterThanOrEqual(250);
+    expect(g2.yLimiarSys).toBeLessThan(g2.yLimiarDia);
+    expect(g2.yTicks.every((t) => t.y >= 0 && t.y <= 240)).toBe(true);
+  });
+  test("rotuloCurtoTensao corta dd/mm do que está gravado", () => {
+    expect(rotuloCurtoTensao("2026-11-05T08:00")).toBe("05/11");
+    expect(rotuloCurtoTensao("")).toBe("");
   });
 });

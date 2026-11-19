@@ -27,5 +27,11 @@ export default async function PaginaTensaoPessoa({
   const { colab = "" } = await searchParams;
   if (!colab.trim()) redirect("/hst/tensao");
 
-  return <PessoaClient colab={colab} podeApagar={pode(sessao, "hst.tensao", "apagar")} />;
+  return (
+    <PessoaClient
+      colab={colab}
+      podeMexer={pode(sessao, "hst.tensao", "mexer")}
+      podeApagar={pode(sessao, "hst.tensao", "apagar")}
+    />
+  );
 }

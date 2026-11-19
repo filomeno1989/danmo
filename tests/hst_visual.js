@@ -8,7 +8,10 @@
  * investigar/editar, apagar, relatório, acções correctivas com atraso),
  * Áreas de Risco, EPIs (catálogo com stock vermelho, entrega com baixa
  * de stock no POST), Tensão Arterial (cartões com grau certo, ficha por
- * colaborador), Relatórios (links aos papéis), Configurações (contagens,
+ * colaborador, CAMPANHA DE CONTROLE com a % explícita sobre o pessoal
+ * escolhido, gráfico comparativo com as linhas de corte 140/90,
+ * MEDICAÇÃO com estatística desde o início e EDITAR medição por PATCH),
+ * Relatórios (links aos papéis), Configurações (contagens,
  * numeração, limpeza com palavra APAGAR) e os 3 papéis A4
  * (investigação, resumo mensal, listagens).
  *
@@ -43,6 +46,10 @@ const MES_ANTERIOR = String(HOJE.getMonth() || 12).padStart(2, "0");
 const DIA_HOJE = String(HOJE.getDate()).padStart(2, "0");
 const DATA_2ATRAS = (() => {
   const d = new Date(Date.now() - 2 * 86400000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+})();
+const DATA_10ATRAS = (() => {
+  const d = new Date(Date.now() - 10 * 86400000);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 })();
 /** YYYY-MM-DD -> DD/MM/YYYY (igual ao fmtDataHst da lib, sem fuso). */
@@ -244,6 +251,33 @@ const MEDICOES = [
   }
 ];
 
+/* Fase 10: campanha de controle + medicação do Olindo (activo) */
+const CAMPANHA = [
+  {
+    id: "c1",
+    colaborador_id: 2,
+    colaborador_nome: "Olindo J. Pinto",
+    inicio: DATA_10ATRAS,
+    ativo: true,
+    fim: null,
+    criado_por: "Filomeno Manuel Joaquim Alexandre"
+  }
+];
+const MEDICACAO = [
+  {
+    id: "m1",
+    colaborador_id: 2,
+    colaborador_nome: "Olindo J. Pinto",
+    medicamento: "Losartan 50 mg",
+    dosagem: "1 comprimido / dia",
+    desde: DATA_10ATRAS,
+    regular: true,
+    activo: true,
+    observacoes: "Receitado no posto",
+    criado_por: "Filomeno Manuel Joaquim Alexandre"
+  }
+];
+
 const COLABORADORES = [
   { id: 1, name: "Filomeno Manuel Joaquim Alexandre", code: "DM0069", active: true },
   { id: 2, name: "Olindo J. Pinto", code: "DM0011", active: true },
@@ -346,10 +380,46 @@ const LISTA_ACCIDENTES = {
     if (m === "DELETE") return rota.fulfill({ json: { ok: true } });
     return rota.fulfill({ json: { ok: true } });
   });
+  const patchesMedicao = [];
   await contexto.route("**/api/hst/medicoes", async (rota) => {
     const m = rota.request().method();
     if (m === "GET") return rota.fulfill({ json: { ok: true, medicoes: MEDICOES } });
     if (m === "POST") return rota.fulfill({ json: { ok: true, medicao: MEDICOES[0] } });
+    if (m === "PATCH") {
+      patchesMedicao.push(rota.request().postDataJSON());
+      return rota.fulfill({ json: { ok: true, medicao: MEDICOES[1] } });
+    }
+    if (m === "DELETE") return rota.fulfill({ json: { ok: true } });
+    return rota.fulfill({ json: { ok: true } });
+  });
+  const postsCampanha = [];
+  const deletesCampanha = [];
+  await contexto.route(/\/api\/hst\/campanha(\?.*)?$/, async (rota) => {
+    const m = rota.request().method();
+    if (m === "GET") return rota.fulfill({ json: { ok: true, membros: CAMPANHA } });
+    if (m === "POST") {
+      postsCampanha.push(rota.request().postDataJSON());
+      return rota.fulfill({ json: { ok: true, membro: CAMPANHA[0] } });
+    }
+    if (m === "DELETE") {
+      deletesCampanha.push(rota.request().url());
+      return rota.fulfill({ json: { ok: true } });
+    }
+    return rota.fulfill({ json: { ok: true } });
+  });
+  const postsMedicacao = [];
+  const patchesMedicacao = [];
+  await contexto.route(/\/api\/hst\/medicacao(\?.*)?$/, async (rota) => {
+    const m = rota.request().method();
+    if (m === "GET") return rota.fulfill({ json: { ok: true, medicacao: MEDICACAO } });
+    if (m === "POST") {
+      postsMedicacao.push(rota.request().postDataJSON());
+      return rota.fulfill({ json: { ok: true, medicacao: MEDICACAO[0] } });
+    }
+    if (m === "PATCH") {
+      patchesMedicacao.push(rota.request().postDataJSON());
+      return rota.fulfill({ json: { ok: true, medicacao: MEDICACAO[0] } });
+    }
     if (m === "DELETE") return rota.fulfill({ json: { ok: true } });
     return rota.fulfill({ json: { ok: true } });
   });
@@ -535,13 +605,29 @@ const LISTA_ACCIDENTES = {
   ok("Tensão: cartão do Filomeno com Normal (120/80 recalculado)", corpo.includes("Filomeno Manuel Joaquim Alexandre") && corpo.includes("Normal"));
   ok("Tensão: o grau guardado errado do hub NUNCA aparece", !corpo.includes("Limitrofe"));
 
-  // Campanha diária: Olindo (última alta há 2 dias) na fila, Filomeno fora
-  ok("Tensão: painel da campanha diária", corpo.includes("Campanha diária: tensão alta"));
+  // Campanha de CONTROLE aberta (Fase 10): Olindo é membro (com medicação)
+  ok("Tensão: painel da campanha de controle", corpo.includes("Campanha de controle: tensão alta") && corpo.includes("1 na campanha"));
   const contador = (await pg.locator("[data-campanha-contador]").textContent() || "").replace(/\s+/g, " ").trim();
   ok("Tensão: contador do dia (0 de 1 medidos)", contador.includes("0 de 1"), `texto: ${contador}`);
   ok("Tensão: Olindo na fila sem medir há 2 dias", corpo.includes("Não medido há 2 dia(s)"));
   ok("Tensão: fila com estado Falta medir", corpo.includes("Falta medir"));
+  ok("Tensão: a % EXPLÍCITA sobre o pessoal da campanha", corpo.includes("Última medição alta: 1 de 1 (100% da campanha)") && corpo.includes("quem não está na campanha mede normalmente"));
+  ok("Tensão: selo Com medicação no Olindo", corpo.includes("Com medicação"));
+  ok("Tensão: indicador da campanha no painel", corpo.includes("Última medição alta na campanha (pessoas)") && corpo.includes("1 de 1 (100% da campanha)"));
+  ok("Tensão: indicador do período agora EXPLÍCITO (X de Y)", corpo.includes("Tensão alta no período (das medições)") && corpo.includes("1 de 2 (50%)"));
   ok("Tensão: indicadores do período", corpo.includes("Medições no período") && corpo.includes("Média da tensão") && corpo.includes("Medições de hoje"));
+
+  // Gerir a campanha: dialog com o membro e a entrada na campanha
+  await pg.locator('button:has-text("Gerir campanha")').first().click();
+  await pg.waitForTimeout(400);
+  corpo = await pg.content();
+  ok("Tensão: dialog da campanha com o membro", corpo.includes("Campanha de controle da tensão") && corpo.includes("Pessoal na campanha (1)") && corpo.includes("Na campanha desde"));
+  ok("Tensão: tirar da campanha NÃO apaga (aviso no dialog)", corpo.includes("NÃO apaga nada: fica no histórico"));
+  ok("Tensão: campo para entrar na campanha", corpo.includes("Entrar na campanha"));
+  await pg.keyboard.press("Escape");
+  await pg.waitForTimeout(250);
+
+  ok("Tensão: filtros de datas e botões de saída", corpo.includes('aria-label="Data inicial"') && corpo.includes('aria-label="Data final"') && corpo.includes("CSV") && corpo.includes("Relatório"));
   ok("Tensão: filtros de datas e botões de saída", corpo.includes('aria-label="Data inicial"') && corpo.includes('aria-label="Data final"') && corpo.includes("CSV") && corpo.includes("Relatório"));
 
   // CSV do período
@@ -606,6 +692,35 @@ const LISTA_ACCIDENTES = {
   await pg.waitForTimeout(200);
   corpo = await pg.content();
   ok("Ficha: pré-visualização mostra HTA Grau 1 antes de gravar", corpo.includes("HTA Grau 1"));
+  await pg.keyboard.press("Escape");
+  await pg.waitForTimeout(250);
+
+  /* ---------- 9b. Ficha Fase 10: gráfico comparativo + medicação + EDITAR ---------- */
+  ok("Ficha: gráfico comparativo SVG presente", (await pg.locator("[data-grafico-tensao]").count()) === 1);
+  corpo = await pg.content();
+  ok("Ficha: gráfico explica as linhas e o corte 140/90", corpo.includes("140 (HTA)") && corpo.includes("Linha azul: sistólica") && corpo.includes("corte de hipertensão (140/90)"));
+  ok("Ficha: legenda do gráfico com a primeira e a última", corpo.includes("Primeira:") && corpo.includes("Última:"));
+
+  // Medicação: registo, tomada regular, activa e estatística desde o início
+  ok("Ficha: medicação registada (Losartan 50 mg)", corpo.includes("Losartan 50 mg") && corpo.includes("1 comprimido / dia"));
+  ok("Ficha: tomada Regular e estado Activa", corpo.includes(">Regular<") && corpo.includes(">Activa<"));
+  ok("Ficha: estatística desde o início da medicação", corpo.includes(`desde ${fmt2(DATA_10ATRAS)}`) && corpo.includes("média 150/70") && corpo.includes("altas 1 de 1 (100%)"));
+  ok("Ficha: botão de nova medicação", corpo.includes("Nova medicação"));
+
+  // EDITAR medição (o pedido do Filomeno): a MESMA linha é corrigida por PATCH
+  await pg.locator('[aria-label="Editar medição"]').first().click();
+  await pg.waitForTimeout(350);
+  corpo = await pg.content();
+  ok("Ficha: modal de edição abre com os valores", corpo.includes("Editar Medição - Olindo J. Pinto") && (await pg.locator('input[id="mc-sis"]').inputValue()) === "150");
+  await pg.locator('input[id="mc-sis"]').fill("148");
+  await pg.locator('div[role="dialog"] button:has-text("Gravar alterações")').click();
+  await pg.waitForTimeout(700);
+  ok("Ficha: PATCH na MESMA medição (id 2, sem criar linha nova)", patchesMedicao.length === 1 && patchesMedicao[0]?.id === 2 && patchesMedicao[0]?.sistolica === 148, JSON.stringify(patchesMedicao));
+
+  // Medicação: pausar NÃO apaga (PATCH activo=false)
+  await pg.locator('[aria-label="Pausar medicação"]').first().click();
+  await pg.waitForTimeout(700);
+  ok("Ficha: pausar a medicação manda PATCH activo=false", patchesMedicacao.length === 1 && patchesMedicacao[0]?.activo === false, JSON.stringify(patchesMedicacao));
 
   /* ---------- 10. Relatórios ---------- */
   await pg.goto(`${BASE}/hst/relatorios`, { waitUntil: "domcontentloaded" });
@@ -701,6 +816,8 @@ const LISTA_ACCIDENTES = {
   ok("Papel individual: código do colaborador", papel.includes("DM0011"));
   ok("Papel individual: sem quadro coletivo", !papel.includes("Resumo por Colaborador"));
   ok("Papel individual: a medição do Olindo na lista", papel.includes("150") && papel.includes("Queixa de dores de cabeça"));
+  ok("Papel individual: medicação em curso no papel", papel.includes("Medicação em Curso") && papel.includes("Losartan 50 mg") && papel.includes("1 comprimido / dia"));
+  ok("Papel individual: estatística desde o início da medicação", papel.includes("média 150/70") && papel.includes("altas 1 de 1 (100%)"));
 
   /* ---------- 18. Papel do controlo de tensão com PERÍODO ---------- */
   await pgPapel.goto(`${BASE}/imprimir/hst/tensao?de=${DATA_2ATRAS}&ate=${DATA_2ATRAS}`, { waitUntil: "domcontentloaded" });

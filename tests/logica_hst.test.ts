@@ -19,6 +19,7 @@ import {
   classificarTensao,
   csvTensao,
   diaTensao,
+  diasDeCampanha,
   eHta,
   estatisticaMedicacao,
   fmtDataHst,
@@ -33,9 +34,11 @@ import {
   problemaEpi,
   problemaEntrega,
   problemaValoresTensao,
+  proximoNumeroCampanha,
   proximoNumeroHst,
   resumoCampanha,
   resumoTensaoPeriodo,
+  rotuloCampanha,
   rotuloCurtoTensao,
   statsPainelHst,
   vestirAcidente,
@@ -665,5 +668,28 @@ describe("pontosGraficoTensao: o gráfico comparativo", () => {
   test("rotuloCurtoTensao corta dd/mm do que está gravado", () => {
     expect(rotuloCurtoTensao("2026-11-05T08:00")).toBe("05/11");
     expect(rotuloCurtoTensao("")).toBe("");
+  });
+});
+
+describe("campanhas numeradas (Fase 11)", () => {
+  test("rótulo com 2 dígitos: Campanha 01, Campanha 02, Campanha 12", () => {
+    expect(rotuloCampanha(1)).toBe("Campanha 01");
+    expect(rotuloCampanha(2)).toBe("Campanha 02");
+    expect(rotuloCampanha(12)).toBe("Campanha 12");
+  });
+  test("próximo número NUNCA reusa: sem histórico = 1, depois do 1 = 2", () => {
+    expect(proximoNumeroCampanha(undefined)).toBe(1);
+    expect(proximoNumeroCampanha(0)).toBe(1);
+    expect(proximoNumeroCampanha(1)).toBe(2);
+    expect(proximoNumeroCampanha(7)).toBe(8);
+  });
+  test("dia da campanha: o dia de abertura é o dia 1", () => {
+    expect(diasDeCampanha("2026-11-01", "2026-11-01")).toBe(1);
+    expect(diasDeCampanha("2026-11-01", "2026-11-14")).toBe(14);
+  });
+  test("datas malucas: início futuro ou ausente = 0 (sem rebentar)", () => {
+    expect(diasDeCampanha("2026-11-30", "2026-11-14")).toBe(0);
+    expect(diasDeCampanha(null, "2026-11-14")).toBe(0);
+    expect(diasDeCampanha("", "2026-11-14")).toBe(0);
   });
 });

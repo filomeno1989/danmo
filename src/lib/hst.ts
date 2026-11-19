@@ -617,7 +617,7 @@ export function csvTensao(medicoes: MedicaoTensaoHST[]): string {
   );
 }
 
-/* ============ Campanha de controle e medicação (Fase 10) ============ */
+/* ============ Campanha de controle e medicação (Fase 10/11) ============ */
 
 /** Uma linha da campanha de controle (a gente escolhida pelo técnico de HST). */
 export type LinhaCampanhaHST = {
@@ -627,8 +627,43 @@ export type LinhaCampanhaHST = {
   inicio: string | null;
   ativo: boolean;
   fim: string | null;
+  campanha_id?: string | null;
   criado_por?: string | null;
 };
+
+/** A CAMPANHA numerada (Fase 11): Campanha 01, 02... com início, fim e estado. */
+export type CampanhaHST = {
+  id: string;
+  numero: number;
+  inicio: string | null;
+  fim: string | null;
+  estado: "aberta" | "arquivada";
+  criado_por?: string | null;
+};
+
+/** Rótulo do papel e do ecrã: Campanha 01, Campanha 02... */
+export function rotuloCampanha(numero: number): string {
+  return `Campanha ${String(Math.max(1, numero)).padStart(2, "0")}`;
+}
+
+/**
+ * Próximo número de campanha: o MAIOR entre o último gravado e o próprio
+ * anterior (nunca reusa, igual à numeração DAN-HST).
+ */
+export function proximoNumeroCampanha(ultimoGravado: number | undefined): number {
+  return Math.max(ultimoGravado || 0, 0) + 1;
+}
+
+/**
+ * Dia em que a campanha está (contando o dia de abertura como dia 1).
+ * 0 quando a data de abertura não está gravada ou é futura.
+ */
+export function diasDeCampanha(inicio: string | null | undefined, hoje: string): number {
+  const d = String(inicio || "").slice(0, 10);
+  if (!d || d > hoje) return 0;
+  const diff = Math.round((new Date(hoje).getTime() - new Date(d).getTime()) / 86400000);
+  return diff + 1;
+}
 
 /** A medicação que uma pessoa toma (activo=false = pausada, nunca apagada). */
 export type MedicacaoTensaoHST = {

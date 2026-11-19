@@ -3,26 +3,28 @@
  *
  * A campanha do posto de saúde no portal. Duas formas de trabalhar:
  *
- * CAMPANHA DE CONTROLE ABERTA (Fase 10): o técnico escolhe o pessoal
- * que entra no controle e o painel passa a contar SOBRE a campanha:
- * "X de N com a última medição alta (P% da campanha)", quem já mediu
- * hoje, quem nunca mediu e quem já está em controle. Quem não está na
- * campanha mede normalmente para controle pessoal (continua tudo nos
- * cartões e no histórico).
+ * CAMPANHA NUMERADA ABERTA (Fase 11): o técnico ABRE a campanha
+ * (Campanha 01, 02... nunca reusa número), escolhe o pessoal que entra
+ * no controle e o painel passa a contar SOBRE a campanha: "X de N com a
+ * última medição alta (P% da campanha)", quem já mediu hoje, quem nunca
+ * mediu e quem já está em controle, com o dia da campanha à vista e a
+ * medicação de cada membro na linha. Ao ARQUIVAR, a campanha fica no
+ * histórico com o relatório sempre disponível. CSV e papel A4 SÓ DA
+ * CAMPANHA, além do geral. Quem não está na campanha mede normalmente
+ * para controle pessoal (continua tudo nos cartões e no histórico).
  *
  * SEM CAMPANHA: a fila de sempre, com quem tem a última medição alta
  * (indica que devia medir todos os dias) e o estado do dia.
  *
  * Em ambos: indicadores do período com a parte alta EXPLÍCITA (X de Y
- * medições), CSV e papel A4 (individual ou coletivo) para o posto, e o
- * selo "Com medicação" de quem está a tomar medicamento.
+ * medições) e o selo "Com medicação" de quem está a tomar medicamento.
  */
 
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, Download, LoaderCircle, Printer, Save, Stethoscope, Users } from "lucide-react";
+import { Archive, CalendarDays, Download, LoaderCircle, Printer, Save, Stethoscope, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Cabeca, enviar, pedir } from "@/components/oficina/ui-bits";
 import { SelecionarColaborador } from "@/components/oficina/selecionar-colaborador";
@@ -33,13 +35,17 @@ import {
   campanhaTensao,
   classificarTensao,
   csvTensao,
+  diasDeCampanha,
   fmtDataHst,
   medicoesNoPeriodo,
   problemaValoresTensao,
+  proximoNumeroCampanha,
   resumoCampanha,
   resumoTensaoPeriodo,
+  rotuloCampanha,
   semAcentos,
   type CampanhaPessoa,
+  type CampanhaHST,
   type ColaboradorHST,
   type LinhaCampanhaHST,
   type MedicacaoTensaoHST,
@@ -83,19 +89,25 @@ const FORM_VAZIO = {
   observacoes: ""
 };
 
+const FORM_MED_VAZIO = { medicamento: "", dosagem: "", desde: hojeISO(), regular: true };
+
 /** Uma linha pronta da lista de membros da campanha (os 3 grupos). */
 type LinhaMembro = {
   nome: string;
   grupo: "alta" | "novo" | "controlo";
   estado: string;
   detalhe: string;
+  medicacao: string;
   medir: boolean;
 };
 
 export function TensaoClient() {
   const [medicoes, setMedicoes] = useState<MedicaoTensaoHST[] | null>(null);
   const [colabs, setColabs] = useState<ColaboradorHST[]>([]);
+  const [campanha, setCampanha] = useState<CampanhaHST | null>(null);
   const [membros, setMembros] = useState<LinhaCampanhaHST[]>([]);
+  const [arquivadas, setArquivadas] = useState<CampanhaHST[]>([]);
+  const [semCampanha, setSemCampanha] = useState(0);
   const [medicacao, setMedicacao] = useState<MedicacaoTensaoHST[]>([]);
   const [falha, setFalha] = useState("");
   const [pesquisa, setPesquisa] = useState("");
@@ -111,18 +123,36 @@ export function TensaoClient() {
   const [novoMembro, setNovoMembro] = useState("");
   const [aMembro, setAMembro] = useState(false);
 
+  const [modalMed, setModalMed] = useState(false);
+  const [medAlvo, setMedAlvo] = useState("");
+  const [formMed, setFormMed] = useState(FORM_MED_VAZIO);
+  const [aMed, setAMed] = useState(false);
+
   const hoje = useState(hojeISO)[0];
 
   function carregar() {
     pedir<{ medicoes: MedicaoTensaoHST[] }>("/api/hst/medicoes")
       .then((d) => setMedicoes(d.medicoes))
       .catch((e: Error) => setFalha(e.message));
-    pedir<{ membros: LinhaCampanhaHST[] }>("/api/hst/campanha")
-      .then((d) => setMembros(d.membros || []))
-      .catch(() => setMembros([]));
     pedir<{ medicacao: MedicacaoTensaoHST[] }>("/api/hst/medicacao")
       .then((d) => setMedicacao(d.medicacao || []))
       .catch(() => setMedicacao([]));
+    carregarCampanha();
+  }
+  function carregarCampanha() {
+    pedir<{ campanha: CampanhaHST | null; membros: LinhaCampanhaHST[]; arquivadas: CampanhaHST[]; semCampanha: number }>("/api/hst/campanha")
+      .then((d) => {
+        setCampanha(d.campanha || null);
+        setMembros(d.membros || []);
+        setArquivadas(d.arquivadas || []);
+        setSemCampanha(d.semCampanha || 0);
+      })
+      .catch(() => {
+        setCampanha(null);
+        setMembros([]);
+        setArquivadas([]);
+        setSemCampanha(0);
+      });
   }
   useEffect(() => {
     carregar();
@@ -143,20 +173,28 @@ export function TensaoClient() {
     return mapa;
   }, [colabs]);
 
-  /** Pessoas da campanha com medicação activa (selo na linha). */
-  const medicacaoActiva = useMemo(() => {
-    const nomes = new Set(
-      medicacao.filter((m) => m.activo).map((m) => m.colaborador_nome || "")
-    );
-    return nomes;
+  /** Medicação activa por pessoa, pronta para mostrar na linha. */
+  const medDe = useMemo(() => {
+    const mapa: Record<string, string[]> = {};
+    for (const m of medicacao) {
+      if (!m.activo) continue;
+      const nome = m.colaborador_nome || "";
+      if (!nome) continue;
+      const txt = m.dosagem ? `${m.medicamento} (${m.dosagem})` : m.medicamento;
+      (mapa[nome] = mapa[nome] || []).push(txt);
+    }
+    return mapa;
   }, [medicacao]);
 
+  const campanhaAberta = Boolean(campanha && campanha.estado === "aberta");
+  const rotulo = campanha ? rotuloCampanha(campanha.numero) : "";
+  const diaCampanha = campanhaAberta ? diasDeCampanha(campanha?.inicio, hoje) : 0;
+
   /* Campanha aberta: o resumo conta SOBRE o pessoal escolhido. */
-  const campanha = useMemo(
+  const campanhaResumo = useMemo(
     () => resumoCampanha(membros, medicoes || [], hoje),
     [membros, medicoes, hoje]
   );
-  const campanhaAberta = membros.length > 0;
 
   /* Sem campanha: a fila de sempre sobre TODAS as medições. */
   const filaCampanha = useMemo(
@@ -178,37 +216,40 @@ export function TensaoClient() {
       return Math.round((new Date(hoje).getTime() - new Date(d).getTime()) / 86400000);
     };
     const lista: LinhaMembro[] = [];
-    for (const p of campanha.fila) {
+    for (const p of campanhaResumo.fila) {
       const feito = mediuHoje(p.nome);
       lista.push({
         nome: p.nome,
         grupo: "alta",
         estado: feito ? "Medido hoje" : `Não medido há ${p.diasSemMedir} dia(s)`,
         detalhe: `Última: ${p.ultima.sistolica}/${p.ultima.diastolica} em ${fmtDataHst(p.ultima.data_medicao, true)} | ${p.classificacao.texto}`,
+        medicacao: (medDe[p.nome] || []).join(", "),
         medir: !feito
       });
     }
-    for (const nome of campanha.semMedicao) {
+    for (const nome of campanhaResumo.semMedicao) {
       lista.push({
         nome,
         grupo: "novo",
         estado: "Ainda sem medição na campanha",
         detalhe: "Não tem medição nenhuma no portal",
+        medicacao: (medDe[nome] || []).join(", "),
         medir: true
       });
     }
-    for (const m of campanha.emControlo) {
+    for (const m of campanhaResumo.emControlo) {
       const feito = mediuHoje(m.nome);
       lista.push({
         nome: m.nome,
         grupo: "controlo",
         estado: feito ? "Medido hoje" : `Medido há ${dias(m.ultima.data_medicao || "")} dia(s)`,
         detalhe: `Em controle: última ${m.ultima.sistolica}/${m.ultima.diastolica} em ${fmtDataHst(m.ultima.data_medicao, true)} | ${m.classificacao.texto}`,
+        medicacao: (medDe[m.nome] || []).join(", "),
         medir: !feito
       });
     }
     return lista;
-  }, [campanha, medicoes, hoje]);
+  }, [campanhaResumo, medicoes, hoje, medDe]);
 
   /* Período: filtra indicadores, cartões e exportações. */
   const noPeriodo = useMemo(
@@ -219,6 +260,16 @@ export function TensaoClient() {
   const resumoHoje = useMemo(
     () => resumoTensaoPeriodo(medicoesNoPeriodo(medicoes || [], hoje, hoje)),
     [medicoes, hoje]
+  );
+
+  /* Só da campanha: as medições do pessoal escolhido no período. */
+  const nomesMembros = useMemo(
+    () => new Set(membros.map((m) => m.colaborador_nome || "").filter(Boolean)),
+    [membros]
+  );
+  const noPeriodoCampanha = useMemo(
+    () => noPeriodo.filter((m) => nomesMembros.has(m.colaborador_nome || "")),
+    [noPeriodo, nomesMembros]
   );
 
   const cartoes = useMemo(() => {
@@ -293,6 +344,36 @@ export function TensaoClient() {
     }
   }
 
+  async function abrirCampanha() {
+    const proximo = proximoNumeroCampanha(arquivadas[0]?.numero);
+    if (!window.confirm(`Abrir ${rotuloCampanha(proximo)}? O pessoal que já está em controle entra nela automaticamente.`)) return;
+    setAMembro(true);
+    try {
+      await enviar("/api/hst/campanha", { acao: "abrir" }, `${rotuloCampanha(proximo)} aberta.`);
+      setModalCampanha(false);
+      carregarCampanha();
+    } catch {
+      /* toast já avisou */
+    } finally {
+      setAMembro(false);
+    }
+  }
+
+  async function arquivarCampanha() {
+    if (!campanha) return;
+    if (!window.confirm(`Arquivar ${rotulo}? O pessoal sai da fila (fica no histórico) e o relatório continua disponível a qualquer momento.`)) return;
+    setAMembro(true);
+    try {
+      await enviar("/api/hst/campanha", { acao: "arquivar" }, `${rotulo} arquivada.`);
+      setModalCampanha(false);
+      carregarCampanha();
+    } catch {
+      /* toast já avisou */
+    } finally {
+      setAMembro(false);
+    }
+  }
+
   async function entrarCampanha() {
     if (!novoMembro.trim()) {
       toast.warning("Escolhe o colaborador que entra na campanha.");
@@ -301,11 +382,12 @@ export function TensaoClient() {
     setAMembro(true);
     try {
       await enviar("/api/hst/campanha", {
+        acao: "entrar",
         colaborador_id: idDe[novoMembro] ?? null,
         colaborador_nome: novoMembro.trim()
       }, "Colaborador entrou na campanha.");
       setNovoMembro("");
-      carregar();
+      carregarCampanha();
     } catch {
       /* toast já avisou */
     } finally {
@@ -317,21 +399,54 @@ export function TensaoClient() {
     if (!window.confirm(`Tirar ${m.colaborador_nome} da campanha? Fica no histórico, nada é apagado.`)) return;
     try {
       await enviar(`/api/hst/campanha?id=${m.id}`, {}, "Colaborador saiu da campanha.", "DELETE");
-      carregar();
+      carregarCampanha();
     } catch {
       /* toast já avisou */
     }
   }
 
-  function descarregarCSV() {
-    const csv = csvTensao(noPeriodo);
+  function abrirMedDe(nome: string) {
+    setMedAlvo(nome);
+    setFormMed({ ...FORM_MED_VAZIO, desde: hoje });
+    setModalMed(true);
+  }
+
+  async function gravarMed() {
+    if (!formMed.medicamento.trim()) {
+      toast.warning("Indica o medicamento.");
+      return;
+    }
+    setAMed(true);
+    try {
+      await enviar("/api/hst/medicacao", {
+        colaborador_id: idDe[medAlvo] ?? null,
+        colaborador_nome: medAlvo,
+        ...formMed
+      }, "Medicação registada.");
+      setModalMed(false);
+      setMedAlvo("");
+      carregar();
+    } catch {
+      /* toast já avisou */
+    } finally {
+      setAMed(false);
+    }
+  }
+
+  function descarregarCSV(lista: MedicaoTensaoHST[], nome: string) {
+    const csv = csvTensao(lista);
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `tensao-arterial${de ? `-${de}` : ""}${ate ? `-${ate}` : ""}.csv`;
+    a.download = nome;
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  const nomeCsv = () =>
+    `tensao-arterial${de ? `-${de}` : ""}${ate ? `-${ate}` : ""}.csv`;
+  const nomeCsvCampanha = () =>
+    `campanha-${String(campanha?.numero ?? 0).padStart(2, "0")}-tensao${de ? `-${de}` : ""}${ate ? `-${ate}` : ""}.csv`;
 
   const linkPapel = `/imprimir/hst/tensao${de || ate ? `?de=${de}&ate=${ate}` : ""}`;
 
@@ -340,10 +455,11 @@ export function TensaoClient() {
   }
 
   const estadoDia = campanhaAberta
-    ? campanha.medidosHoje === campanha.total && campanha.total > 0
+    ? campanhaResumo.medidosHoje === campanhaResumo.total && campanhaResumo.total > 0
     : medidosHojeFila === filaCampanha.length && filaCampanha.length > 0;
-  const totalDia = campanhaAberta ? campanha.total : filaCampanha.length;
-  const feitosDia = campanhaAberta ? campanha.medidosHoje : medidosHojeFila;
+  const totalDia = campanhaAberta ? campanhaResumo.total : filaCampanha.length;
+  const feitosDia = campanhaAberta ? campanhaResumo.medidosHoje : medidosHojeFila;
+  const proximaCampanha = proximoNumeroCampanha(arquivadas[0]?.numero);
 
   return (
     <div className="space-y-5">
@@ -351,7 +467,7 @@ export function TensaoClient() {
         <Button variant="outline" onClick={() => setModalCampanha(true)}>
           <Users className="size-4" aria-hidden /> Gerir campanha
         </Button>
-        <Button variant="outline" onClick={descarregarCSV}>
+        <Button variant="outline" onClick={() => descarregarCSV(noPeriodo, nomeCsv())}>
           <Download className="size-4" aria-hidden /> CSV
         </Button>
         <Button variant="outline" asChild>
@@ -359,20 +475,32 @@ export function TensaoClient() {
             <Printer className="size-4" aria-hidden /> Relatório
           </Link>
         </Button>
+        {campanhaAberta ? (
+          <>
+            <Button variant="outline" onClick={() => descarregarCSV(noPeriodoCampanha, nomeCsvCampanha())} aria-label="CSV da campanha">
+              <Download className="size-4" aria-hidden /> CSV da campanha
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href={`/imprimir/hst/tensao?campanha=${campanha?.id || ""}`}>
+                <Printer className="size-4" aria-hidden /> Relatório da campanha
+              </Link>
+            </Button>
+          </>
+        ) : null}
         <Button onClick={() => abrirModal()}>Nova Medição</Button>
       </Cabeca>
 
-      {/* Campanha de controle (aberta) ou fila simples (sem campanha) */}
+      {/* Campanha numerada (aberta) ou fila simples (sem campanha) */}
       <section aria-label="Campanha diária" className="card-sombra rounded-lg border border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Stethoscope className="size-4 text-red-600" aria-hidden />
             <h2 className="text-sm font-bold">
-              {campanhaAberta ? "Campanha de controle: tensão alta" : "Campanha diária: tensão alta"}
+              {campanhaAberta ? `${rotulo} de controle: tensão alta` : "Campanha diária: tensão alta"}
             </h2>
             {campanhaAberta ? (
               <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-[0.72rem] font-bold text-sky-800 dark:bg-sky-950/60 dark:text-sky-300" data-campanha-tamanho>
-                {campanha.total} na campanha
+                {campanhaResumo.total} na campanha
               </span>
             ) : null}
           </div>
@@ -391,12 +519,15 @@ export function TensaoClient() {
             {/* A percentagem EXPLÍCITA: sobre o pessoal da campanha */}
             <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-muted px-3 py-2 text-sm" data-campanha-resumo>
               <span className="font-bold">
-                Última medição alta: {campanha.comHta} de {campanha.total} ({campanha.pctHta}% da campanha)
+                Última medição alta: {campanhaResumo.comHta} de {campanhaResumo.total} ({campanhaResumo.pctHta}% da campanha)
               </span>
               <span className="text-xs text-muted-foreground">
-                em controle: {campanha.emControlo.length} | ainda sem medição: {campanha.semMedicao.length} | quem não está na campanha mede normalmente para controle pessoal
+                em controle: {campanhaResumo.emControlo.length} | ainda sem medição: {campanhaResumo.semMedicao.length} | quem não está na campanha mede normalmente para controle pessoal
               </span>
             </div>
+            <p className="mt-1 text-xs text-muted-foreground" data-campanha-periodo>
+              {rotulo} aberta em {fmtDataHst(campanha?.inicio || "", true)} | dia {diaCampanha} da campanha
+            </p>
             {linhasMembros.length === 0 ? (
               <p className="mt-3 text-sm text-muted-foreground">Campanha sem membros. Usa Gerir campanha para escolher o pessoal do controle.</p>
             ) : (
@@ -406,7 +537,6 @@ export function TensaoClient() {
                     key={`${l.grupo}-${l.nome}`}
                     linha={l}
                     codigo={codigoDe[l.nome] || ""}
-                    comMedicacao={medicacaoActiva.has(l.nome)}
                     onMedir={() => abrirModal(l.nome)}
                   />
                 ))}
@@ -416,19 +546,42 @@ export function TensaoClient() {
         ) : (
           <>
             <p className="mt-3 text-xs text-muted-foreground">
-              Sem campanha aberta: a fila junta TODOS os que têm a última medição alta. Abre a campanha em Gerir campanha para escolher o pessoal do controle e a percentagem passar a contar sobre eles.
+              Sem campanha aberta: a fila junta TODOS os que têm a última medição alta. Abre a campanha em Gerir campanha para escolher o pessoal do controle, ter a percentagem sobre eles e poder arquivar com relatório depois.
             </p>
+            {semCampanha > 0 ? (
+              <p className="mt-1 text-xs font-semibold text-amber-600" data-sem-campanha>
+                Já há {semCampanha} pessoa(s) em controle da fase anterior sem número de campanha: ao abrir {rotuloCampanha(proximaCampanha)} entram automaticamente.
+              </p>
+            ) : null}
             {filaCampanha.length === 0 ? (
               <p className="mt-2 text-sm text-muted-foreground">Nenhum colega com a última medição alta. A fila fica vazia até aparecer alguém com tensão alta.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {filaCampanha.map((p) => (
-                  <LinhaCampanha key={p.nome} pessoa={p} codigo={codigoDe[p.nome] || ""} comMedicacao={medicacaoActiva.has(p.nome)} onMedir={() => abrirModal(p.nome)} />
+                  <LinhaCampanha key={p.nome} pessoa={p} codigo={codigoDe[p.nome] || ""} medicacao={(medDe[p.nome] || []).join(", ")} onMedir={() => abrirModal(p.nome)} />
                 ))}
               </ul>
             )}
           </>
         )}
+
+        {/* Campanhas arquivadas: consulta e relatório a qualquer momento */}
+        {arquivadas.length > 0 ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3" data-campanhas-arquivadas>
+            <Archive className="size-4 text-muted-foreground" aria-hidden />
+            <span className="text-xs font-semibold text-muted-foreground">Arquivadas:</span>
+            {arquivadas.map((c) => (
+              <Link
+                key={c.id}
+                href={`/imprimir/hst/tensao?campanha=${c.id}`}
+                className="rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold hover:bg-muted"
+                title="Abrir o relatório desta campanha"
+              >
+                {rotuloCampanha(c.numero)}: {fmtDataHst(c.inicio || "", true)} a {fmtDataHst(c.fim || "", true)} | relatório
+              </Link>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       {/* Indicadores do período */}
@@ -446,9 +599,9 @@ export function TensaoClient() {
         />
         {campanhaAberta ? (
           <Indicador
-            rotulo="Última medição alta na campanha (pessoas)"
-            valor={`${campanha.comHta} de ${campanha.total} (${campanha.pctHta}% da campanha)`}
-            vermelho={campanha.comHta > 0}
+            rotulo={`Última medição alta na ${rotulo} (pessoas)`}
+            valor={`${campanhaResumo.comHta} de ${campanhaResumo.total} (${campanhaResumo.pctHta}% da campanha)`}
+            vermelho={campanhaResumo.comHta > 0}
           />
         ) : null}
         <Indicador rotulo="Dias com registo" valor={String(resumo.diasComMedicao)} />
@@ -492,6 +645,7 @@ export function TensaoClient() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {cartoes.map((c) => {
             const cla = classificarTensao(c.ultima.sistolica, c.ultima.diastolica);
+            const medTxt = (medDe[c.nome] || []).join(", ");
             return (
               <Link
                 key={c.nome}
@@ -502,13 +656,14 @@ export function TensaoClient() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="truncate font-bold">{c.nome}</span>
-                      {medicacaoActiva.has(c.nome) ? (
-                        <span className={SELO_MEDICACAO}>Com medicação</span>
+                      {medTxt ? (
+                        <span className={SELO_MEDICACAO} title={medTxt}>Com medicação</span>
                       ) : null}
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       Última: {fmtDataHst(c.ultima.data_medicao, true)} | {c.total} medição(ões) no período
                     </div>
+                    {medTxt ? <div className="mt-0.5 truncate text-xs text-violet-600">{medTxt}</div> : null}
                   </div>
                   <div className="text-right">
                     <div className={`text-xl font-bold ${CORES_VALOR[cla.cls]}`}>
@@ -588,59 +743,142 @@ export function TensaoClient() {
         </div>
       </Modal>
 
-      {/* Gerir a campanha de controle */}
+      {/* Gerir a campanha numerada: abrir, entrar, medicação, arquivar */}
       <Modal aberto={modalCampanha} fechar={() => setModalCampanha(false)} titulo="Campanha de controle da tensão" largura="max-w-lg">
         <div className="space-y-3">
+          {campanhaAberta ? (
+            <div className="rounded-md bg-muted px-3 py-2 text-sm" data-campanha-gestao>
+              <span className="font-bold">{rotulo} aberta</span> desde {fmtDataHst(campanha?.inicio || "", true)} (dia {diaCampanha}) com {membros.length} pessoa(s). Ao ARQUIVAR, a campanha fica no histórico com relatório disponível a qualquer momento e a próxima abre com o número seguinte. Tirar alguém NÃO apaga nada: fica no histórico com a data de saída.
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              A campanha numerada junta o pessoal escolhido para o controle (mede com acompanhamento e entra na percentagem da campanha). Arquivar NÃO apaga nada: fica no histórico com o relatório. Tirar alguém NÃO apaga nada: fica no histórico com a data de saída.
+            </p>
+          )}
+
+          {campanhaAberta ? (
+            <>
+              <div>
+                <label className="mb-1 block text-xs font-semibold" htmlFor="camp-colab">Entrar na campanha</label>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <SelecionarColaborador
+                      id="camp-colab"
+                      colaboradores={colabs}
+                      value={novoMembro}
+                      onChange={setNovoMembro}
+                    />
+                  </div>
+                  <Button onClick={entrarCampanha} disabled={aMembro}>
+                    {aMembro ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <Users className="size-4" aria-hidden />}
+                    Entrar
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                  Pessoal na campanha ({membros.length})
+                </h3>
+                {membros.length === 0 ? (
+                  <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+                    Escolhe acima quem deve entrar no controle.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {membros.map((m) => (
+                      <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2" data-membro-campanha>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-sm font-bold">{m.colaborador_nome}</span>
+                            {codigoDe[m.colaborador_nome] ? (
+                              <span className="shrink-0 text-xs font-semibold text-muted-foreground">{codigoDe[m.colaborador_nome]}</span>
+                            ) : null}
+                          </div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            Na campanha desde {fmtDataHst(m.inicio || "", true)}
+                          </div>
+                          <div className="mt-0.5 text-xs">
+                            {(medDe[m.colaborador_nome] || []).length > 0 ? (
+                              <span className="text-violet-600">Medicação: {(medDe[m.colaborador_nome] || []).join(", ")}</span>
+                            ) : (
+                              <span className="text-muted-foreground">Sem medicação registada</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          <Button size="sm" variant="outline" onClick={() => abrirMedDe(m.colaborador_nome)} aria-label={`Medicação de ${m.colaborador_nome}`}>
+                            Medicação
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => tirarDaCampanha(m)} aria-label={`Tirar ${m.colaborador_nome} da campanha`}>
+                            Tirar
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={arquivarCampanha} disabled={aMembro} data-arquivar>
+                  <Archive className="size-4" aria-hidden /> Arquivar campanha
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-start gap-2">
+              <Button onClick={abrirCampanha} disabled={aMembro} data-abrir-campanha>
+                {aMembro ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <Users className="size-4" aria-hidden />}
+                Abrir {rotuloCampanha(proximaCampanha)}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                {semCampanha > 0
+                  ? `O pessoal já em controle (${semCampanha} pessoa(s)) entra automaticamente nesta campanha.`
+                  : "Depois de abrir, escolhe aqui o pessoal que entra no controle."}
+              </p>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Medicação de um membro, registada aqui mesmo */}
+      <Modal aberto={modalMed} fechar={() => setModalMed(false)} titulo={`Medicação - ${medAlvo}`} largura="max-w-md">
+        <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            O pessoal escolhido entra no controle (mede com acompanhamento e entra na percentagem da campanha). Quem não entra mede normalmente. Tirar alguém NÃO apaga nada: fica no histórico com a data de saída.
+            Nova medicação para {medAlvo}. A ficha da pessoa mostra a estatística desde o início e a comparação com o período anterior.
           </p>
           <div>
-            <label className="mb-1 block text-xs font-semibold" htmlFor="camp-colab">Entrar na campanha</label>
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <SelecionarColaborador
-                  id="camp-colab"
-                  colaboradores={colabs}
-                  value={novoMembro}
-                  onChange={setNovoMembro}
-                />
-              </div>
-              <Button onClick={entrarCampanha} disabled={aMembro}>
-                {aMembro ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <Users className="size-4" aria-hidden />}
-                Entrar
-              </Button>
+            <label className="mb-1 block text-xs font-semibold" htmlFor="md-nome">Medicamento *</label>
+            <Input id="md-nome" value={formMed.medicamento}
+              onChange={(e) => setFormMed((f) => ({ ...f, medicamento: e.target.value }))} placeholder="Ex.: Losartan 50 mg" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold" htmlFor="md-dos">Dosagem</label>
+              <Input id="md-dos" value={formMed.dosagem}
+                onChange={(e) => setFormMed((f) => ({ ...f, dosagem: e.target.value }))} placeholder="1 comprimido / dia" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold" htmlFor="md-desde">Início *</label>
+              <Input id="md-desde" type="date" value={formMed.desde}
+                onChange={(e) => setFormMed((f) => ({ ...f, desde: e.target.value }))} />
             </div>
           </div>
-          <div>
-            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-              Pessoal na campanha ({membros.length})
-            </h3>
-            {membros.length === 0 ? (
-              <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
-                Campanha fechada. Escolhe acima quem deve entrar no controle.
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {membros.map((m) => (
-                  <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2" data-membro-campanha>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-bold">{m.colaborador_nome}</span>
-                        {codigoDe[m.colaborador_nome] ? (
-                          <span className="shrink-0 text-xs font-semibold text-muted-foreground">{codigoDe[m.colaborador_nome]}</span>
-                        ) : null}
-                      </div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">
-                        Na campanha desde {fmtDataHst(m.inicio || "", true)}{m.criado_por ? ` | por ${m.criado_por}` : ""}
-                      </div>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => tirarDaCampanha(m)} aria-label={`Tirar ${m.colaborador_nome} da campanha`}>
-                      Tirar
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4"
+              checked={formMed.regular}
+              onChange={(e) => setFormMed((f) => ({ ...f, regular: e.target.checked }))}
+              aria-label="Tomada regular"
+            />
+            Tomada regular (todos os dias, como orientado)
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setModalMed(false)}>Cancelar</Button>
+            <Button onClick={gravarMed} disabled={aMed}>
+              {aMed ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : <Save className="size-4" aria-hidden />}
+              Registar
+            </Button>
           </div>
         </div>
       </Modal>
@@ -650,7 +888,7 @@ export function TensaoClient() {
 
 /* ============ Peças ============ */
 
-function LinhaCampanha({ pessoa, codigo, comMedicacao, onMedir }: { pessoa: CampanhaPessoa; codigo: string; comMedicacao: boolean; onMedir: () => void }) {
+function LinhaCampanha({ pessoa, codigo, medicacao, onMedir }: { pessoa: CampanhaPessoa; codigo: string; medicacao: string; onMedir: () => void }) {
   const medido = pessoa.estado === "medido_hoje";
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2" data-campanha-linha>
@@ -658,11 +896,12 @@ function LinhaCampanha({ pessoa, codigo, comMedicacao, onMedir }: { pessoa: Camp
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-bold">{pessoa.nome}</span>
           {codigo ? <span className="shrink-0 text-xs font-semibold text-muted-foreground">{codigo}</span> : null}
-          {comMedicacao ? <span className={SELO_MEDICACAO}>Com medicação</span> : null}
+          {medicacao ? <span className={SELO_MEDICACAO} title={medicacao}>Com medicação</span> : null}
         </div>
         <div className="mt-0.5 text-xs text-muted-foreground">
           Última: {pessoa.ultima.sistolica}/{pessoa.ultima.diastolica} em {fmtDataHst(pessoa.ultima.data_medicao, true)} | {pessoa.classificacao.texto}
         </div>
+        {medicacao ? <div className="mt-0.5 text-xs text-violet-600">Medicação: {medicacao}</div> : null}
       </div>
       <div className="flex items-center gap-2">
         <span className={`rounded-full px-2.5 py-0.5 text-[0.72rem] font-bold ${medido ? CORES_CLS.normal : CORES_CLS.alta}`} data-estado-campanha>
@@ -678,7 +917,7 @@ function LinhaCampanha({ pessoa, codigo, comMedicacao, onMedir }: { pessoa: Camp
   );
 }
 
-function LinhaMembro({ linha, codigo, comMedicacao, onMedir }: { linha: LinhaMembro; codigo: string; comMedicacao: boolean; onMedir: () => void }) {
+function LinhaMembro({ linha, codigo, onMedir }: { linha: LinhaMembro; codigo: string; onMedir: () => void }) {
   const corBorda =
     linha.grupo === "alta"
       ? "border-red-300 dark:border-red-900/60"
@@ -701,9 +940,10 @@ function LinhaMembro({ linha, codigo, comMedicacao, onMedir }: { linha: LinhaMem
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-bold">{linha.nome}</span>
           {codigo ? <span className="shrink-0 text-xs font-semibold text-muted-foreground">{codigo}</span> : null}
-          {comMedicacao ? <span className={SELO_MEDICACAO}>Com medicação</span> : null}
+          {linha.medicacao ? <span className={SELO_MEDICACAO} title={linha.medicacao}>Com medicação</span> : null}
         </div>
         <div className="mt-0.5 text-xs text-muted-foreground">{linha.detalhe}</div>
+        {linha.medicacao ? <div className="mt-0.5 text-xs text-violet-600">Medicação: {linha.medicacao}</div> : null}
       </div>
       <div className="flex items-center gap-2">
         <span className={`rounded-full px-2.5 py-0.5 text-[0.72rem] font-bold ${corEstado}`} data-estado-campanha>

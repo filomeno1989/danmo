@@ -21,18 +21,23 @@ import {
   fmtDataHst,
   medicoesNoPeriodo,
   resumoTensaoPeriodo,
+  rotuloCampanha,
+  type CampanhaHST,
   type ColaboradorHST,
+  type LinhaCampanhaHST,
   type MedicacaoTensaoHST,
   type MedicaoTensaoHST
 } from "@/lib/hst";
 import { BotaoImprimirHst } from "../botao-imprimir";
 
-type Props = { colab: string; de: string; ate: string };
+type Props = { colab: string; de: string; ate: string; campanha: string };
 
-export function TensaoImprimir({ colab, de, ate }: Props) {
+export function TensaoImprimir({ colab, de, ate, campanha: campanhaId }: Props) {
   const [medicoes, setMedicoes] = useState<MedicaoTensaoHST[] | null>(null);
   const [colabs, setColabs] = useState<ColaboradorHST[]>([]);
   const [medicacao, setMedicacao] = useState<MedicacaoTensaoHST[]>([]);
+  const [campanha, setCampanha] = useState<CampanhaHST | null>(null);
+  const [membrosCampanha, setMembrosCampanha] = useState<LinhaCampanhaHST[]>([]);
   const [falha, setFalha] = useState("");
 
   useEffect(() => {
@@ -40,15 +45,18 @@ export function TensaoImprimir({ colab, de, ate }: Props) {
     Promise.all([
       pedir<{ medicoes: MedicaoTensaoHST[] }>("/api/hst/medicoes"),
       pedir<{ colaboradores: ColaboradorHST[] }>("/api/hst/colaboradores"),
-      pedir<{ medicacao: MedicacaoTensaoHST[] }>(
-        colab ? `/api/hst/medicacao?colab=${encodeURIComponent(colab)}` : "/api/hst/medicacao"
-      ).catch(() => ({ medicacao: [] as MedicacaoTensaoHST[] }))
+      pedir<{ medicacao: MedicacaoTensaoHST[] }>("/api/hst/medicacao").catch(() => ({ medicacao: [] as MedicacaoTensaoHST[] })),
+      campanhaId
+        ? pedir<{ campanha: CampanhaHST; membros: LinhaCampanhaHST[] }>(`/api/hst/campanha?id=${campanhaId}`)
+        : Promise.resolve({ campanha: null as CampanhaHST | null, membros: [] as LinhaCampanhaHST[] })
     ])
-      .then(([med, col, med2]) => {
+      .then(([med, col, med2, camp]) => {
         if (!vivo) return;
         setMedicoes(med.medicoes || []);
         setColabs(col.colaboradores || []);
         setMedicacao((med2.medicacao || []).filter((m) => m.activo));
+        setCampanha(camp.campanha || null);
+        setMembrosCampanha(camp.membros || []);
       })
       .catch((e: Error) => {
         if (vivo) setFalha(e.message);
@@ -56,13 +64,35 @@ export function TensaoImprimir({ colab, de, ate }: Props) {
     return () => {
       vivo = false;
     };
-  }, [colab]);
+  }, [colab, campanhaId]);
 
-  const dentro = useMemo(
-    () => (medicoes ? medicoesNoPeriodo(medicoes, de, ate).filter((m) => !colab || m.colaborador_nome === colab) : []),
-    [medicoes, de, ate, colab]
+  /** Hoje local (YYYY-MM-DD): o fim da campanha aberta é hoje. */
+  const hojeLocal = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+
+  const modoCampanha = Boolean(campanhaId && campanha);
+  const nomesCampanha = useMemo(
+    () => new Set(membrosCampanha.map((m) => m.colaborador_nome || "").filter(Boolean)),
+    [membrosCampanha]
   );
+  const inicioCampanha = modoCampanha ? campanha?.inicio || "" : de;
+  const fimCampanha = modoCampanha ? campanha?.fim || hojeLocal : ate;
+
+  const dentro = useMemo(() => {
+    const base = medicoes ? medicoesNoPeriodo(medicoes, inicioCampanha, fimCampanha) : [];
+    if (modoCampanha) return base.filter((m) => nomesCampanha.has(m.colaborador_nome || ""));
+    return base.filter((m) => !colab || m.colaborador_nome === colab);
+  }, [medicoes, inicioCampanha, fimCampanha, modoCampanha, nomesCampanha, colab]);
   const resumo = useMemo(() => resumoTensaoPeriodo(dentro), [dentro]);
+
+  const medicacaoVisivel = useMemo(() => {
+    let lista = medicacao;
+    if (colab) lista = lista.filter((m) => m.colaborador_nome === colab);
+    if (modoCampanha) lista = lista.filter((m) => nomesCampanha.has(m.colaborador_nome || ""));
+    return lista;
+  }, [medicacao, colab, modoCampanha, nomesCampanha]);
 
   const porPessoa = useMemo(() => {
     const mapa: Record<string, { nome: string; ultima: MedicaoTensaoHST; total: number; somaSys: number; somaDia: number; hta: number }> = {};
@@ -93,6 +123,37 @@ export function TensaoImprimir({ colab, de, ate }: Props) {
     return mapa;
   }, [colabs]);
 
+  /* Uma linha por pessoa da campanha: entrada, saída, números e medicação. */
+  const linhasCampanha = useMemo(() => {
+    if (!modoCampanha) return [];
+    return [...membrosCampanha]
+      .sort((a, b) => (a.colaborador_nome || "").localeCompare(b.colaborador_nome || ""))
+      .map((m) => {
+        const nome = m.colaborador_nome || "";
+        const proprias = dentro.filter((x) => x.colaborador_nome === nome);
+        const total = proprias.length;
+        const somaSys = proprias.reduce((s, x) => s + (Number(x.sistolica) || 0), 0);
+        const somaDia = proprias.reduce((s, x) => s + (Number(x.diastolica) || 0), 0);
+        const altas = proprias.filter((x) => classificarTensao(Number(x.sistolica), Number(x.diastolica)).cls === "alta").length;
+        const ultima = proprias[0];
+        const meds = medicacaoVisivel
+          .filter((x) => x.colaborador_nome === nome)
+          .map((x) => x.medicamento)
+          .join(", ");
+        return {
+          nome,
+          codigo: codigoDe[nome] || "",
+          entrada: fmtDataHst(m.inicio || "", true),
+          saida: m.ativo ? "" : fmtDataHst(m.fim || "", true),
+          total: String(total),
+          ultima: ultima ? `${ultima.sistolica}/${ultima.diastolica} em ${fmtDataHst(ultima.data_medicao, true)}` : "-",
+          media: total ? `${Math.round(somaSys / total)}/${Math.round(somaDia / total)}` : "-",
+          altas: total ? `${altas} de ${total} (${Math.round((altas / total) * 100)}%)` : "-",
+          med: meds || "-"
+        };
+      });
+  }, [modoCampanha, membrosCampanha, dentro, codigoDe, medicacaoVisivel]);
+
   if (falha) {
     return (
       <div className="p-10 text-center text-sm text-destructive">
@@ -110,10 +171,14 @@ export function TensaoImprimir({ colab, de, ate }: Props) {
   }
 
   const individual = Boolean(colab);
-  const volta = individual ? `/hst/tensao/pessoa?colab=${encodeURIComponent(colab)}` : "/hst/tensao";
-  const periodo = de || ate
-    ? `Período: ${de ? fmtDataHst(de) : "início"} a ${ate ? fmtDataHst(ate) : "hoje"}`
-    : "Período: todos os registos";
+  const volta = individual
+    ? `/hst/tensao/pessoa?colab=${encodeURIComponent(colab)}`
+    : "/hst/tensao";
+  const periodo = modoCampanha
+    ? `Período da ${rotuloCampanha(campanha?.numero || 1)}: ${inicioCampanha ? fmtDataHst(inicioCampanha) : "início"} a ${campanha?.fim ? fmtDataHst(campanha.fim) : "hoje (em curso)"}`
+    : de || ate
+      ? `Período: ${de ? fmtDataHst(de) : "início"} a ${ate ? fmtDataHst(ate) : "hoje"}`
+      : "Período: todos os registos";
 
   const linha = (rotulo: string, valor: string, vermelho = false) => (
     <tr>
@@ -140,11 +205,18 @@ export function TensaoImprimir({ colab, de, ate }: Props) {
         </header>
 
         <h1 className="mt-4 rounded border border-slate-300 bg-slate-100 py-2 text-center text-base font-black">
-          {individual ? `Controlo de Tensão Arterial - ${colab}` : "Controlo de Tensão Arterial (Campanha)"}
+          {individual
+            ? `Controlo de Tensão Arterial - ${colab}`
+            : modoCampanha
+              ? `${rotuloCampanha(campanha?.numero || 1)} de Controle da Tensão Arterial`
+              : "Controlo de Tensão Arterial (Campanha)"}
         </h1>
         <p className="mt-1 text-center text-[0.72rem] text-slate-600">
           {periodo}
           {individual && codigoDe[colab] ? ` | Colaborador: ${codigoDe[colab]}` : ""}
+          {modoCampanha
+            ? ` | ${membrosCampanha.length} pessoa(s) na campanha | Estado: ${campanha?.estado === "arquivada" ? "Arquivada" : "Aberta"}`
+            : ""}
         </p>
 
         <section className="mt-4">
@@ -162,7 +234,45 @@ export function TensaoImprimir({ colab, de, ate }: Props) {
           </table>
         </section>
 
-        {individual && medicacao.length > 0 && (
+        {modoCampanha && linhasCampanha.length > 0 && (
+          <section className="mt-5" data-campanha-pessoal>
+            <h2 className="mb-2 border-b border-slate-300 pb-1 text-[0.7rem] font-bold uppercase tracking-wide">
+              Pessoal da {rotuloCampanha(campanha?.numero || 1)}
+            </h2>
+            <table className="w-full border-collapse text-[0.75rem]">
+              <thead>
+                <tr className="bg-slate-900 text-white" style={{ printColorAdjust: "exact" }}>
+                  <th className="border border-slate-900 px-2 py-1 text-left">Colaborador</th>
+                  <th className="border border-slate-900 px-2 py-1 text-left">Código</th>
+                  <th className="border border-slate-900 px-2 py-1 text-left">Entrada</th>
+                  <th className="border border-slate-900 px-2 py-1 text-left">Saída</th>
+                  <th className="border border-slate-900 px-2 py-1 text-center">Medições</th>
+                  <th className="border border-slate-900 px-2 py-1 text-left">Última</th>
+                  <th className="border border-slate-900 px-2 py-1 text-center">Média</th>
+                  <th className="border border-slate-900 px-2 py-1 text-center">Altas</th>
+                  <th className="border border-slate-900 px-2 py-1 text-left">Medicação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {linhasCampanha.map((l) => (
+                  <tr key={l.nome}>
+                    <td className="border border-slate-300 px-2 py-1 font-bold">{l.nome}</td>
+                    <td className="border border-slate-300 px-2 py-1">{l.codigo || "-"}</td>
+                    <td className="border border-slate-300 px-2 py-1">{l.entrada}</td>
+                    <td className="border border-slate-300 px-2 py-1">{l.saida || "-"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center">{l.total}</td>
+                    <td className="border border-slate-300 px-2 py-1">{l.ultima}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center">{l.media}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center">{l.altas}</td>
+                    <td className="border border-slate-300 px-2 py-1">{l.med}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {(individual || modoCampanha) && medicacaoVisivel.length > 0 && (
           <section className="mt-5" data-tensao-medicacao>
             <h2 className="mb-2 border-b border-slate-300 pb-1 text-[0.7rem] font-bold uppercase tracking-wide">
               Medicação em Curso
@@ -170,6 +280,7 @@ export function TensaoImprimir({ colab, de, ate }: Props) {
             <table className="w-full border-collapse text-[0.75rem]">
               <thead>
                 <tr className="bg-slate-900 text-white" style={{ printColorAdjust: "exact" }}>
+                  {modoCampanha && <th className="border border-slate-900 px-2 py-1 text-left">Colaborador</th>}
                   <th className="border border-slate-900 px-2 py-1 text-left">Medicamento</th>
                   <th className="border border-slate-900 px-2 py-1 text-left">Dosagem</th>
                   <th className="border border-slate-900 px-2 py-1 text-left">Desde</th>
@@ -178,13 +289,17 @@ export function TensaoImprimir({ colab, de, ate }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {medicacao.map((m) => {
+                {medicacaoVisivel.map((m) => {
+                  const pessoa = modoCampanha ? m.colaborador_nome : colab;
                   const est = estatisticaMedicacao(
-                    (medicoes || []).filter((x) => x.colaborador_nome === colab),
+                    (medicoes || []).filter((x) => x.colaborador_nome === pessoa),
                     String(m.desde || "")
                   );
                   return (
                     <tr key={m.id}>
+                      {modoCampanha && (
+                        <td className="border border-slate-300 px-2 py-1 font-bold">{m.colaborador_nome}</td>
+                      )}
                       <td className="border border-slate-300 px-2 py-1 font-bold">{m.medicamento}</td>
                       <td className="border border-slate-300 px-2 py-1">{m.dosagem || "-"}</td>
                       <td className="border border-slate-300 px-2 py-1">{fmtDataHst(m.desde || "", true)}</td>

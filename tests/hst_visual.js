@@ -251,7 +251,26 @@ const MEDICOES = [
   }
 ];
 
-/* Fase 10: campanha de controle + medicação do Olindo (activo) */
+/* Fase 11: CAMPANHAS numeradas (Campanha 02 aberta, Campanha 01 arquivada)
+   + medicação do Olindo (activo). Os ids são uuid (o papel só aceita uuid). */
+const ID_CAMP = "aaaaaaaa-0000-4000-8000-000000000000";
+const ID_ARQ = "aaaaaaaa-0000-4000-8000-000000000009";
+const CAMPANHA_ABERTA = {
+  id: ID_CAMP,
+  numero: 2,
+  inicio: DATA_10ATRAS,
+  fim: null,
+  estado: "aberta",
+  criado_por: "Filomeno Manuel Joaquim Alexandre"
+};
+const CAMPANHA_ARQUIVADA = {
+  id: ID_ARQ,
+  numero: 1,
+  inicio: DATA_10ATRAS,
+  fim: DATA_2ATRAS,
+  estado: "arquivada",
+  criado_por: "Filomeno Manuel Joaquim Alexandre"
+};
 const CAMPANHA = [
   {
     id: "c1",
@@ -260,6 +279,7 @@ const CAMPANHA = [
     inicio: DATA_10ATRAS,
     ativo: true,
     fim: null,
+    campanha_id: ID_CAMP,
     criado_por: "Filomeno Manuel Joaquim Alexandre"
   }
 ];
@@ -396,13 +416,20 @@ const LISTA_ACCIDENTES = {
   const deletesCampanha = [];
   await contexto.route(/\/api\/hst\/campanha(\?.*)?$/, async (rota) => {
     const m = rota.request().method();
-    if (m === "GET") return rota.fulfill({ json: { ok: true, membros: CAMPANHA } });
+    const url = rota.request().url();
+    if (m === "GET") {
+      if (url.includes(`id=${ID_CAMP}`)) return rota.fulfill({ json: { ok: true, campanha: CAMPANHA_ABERTA, membros: CAMPANHA } });
+      if (url.includes(`id=${ID_ARQ}`)) return rota.fulfill({ json: { ok: true, campanha: CAMPANHA_ARQUIVADA, membros: [] } });
+      return rota.fulfill({
+        json: { ok: true, campanha: CAMPANHA_ABERTA, membros: CAMPANHA, arquivadas: [CAMPANHA_ARQUIVADA], semCampanha: 0 }
+      });
+    }
     if (m === "POST") {
       postsCampanha.push(rota.request().postDataJSON());
       return rota.fulfill({ json: { ok: true, membro: CAMPANHA[0] } });
     }
     if (m === "DELETE") {
-      deletesCampanha.push(rota.request().url());
+      deletesCampanha.push(url);
       return rota.fulfill({ json: { ok: true } });
     }
     return rota.fulfill({ json: { ok: true } });
@@ -605,29 +632,48 @@ const LISTA_ACCIDENTES = {
   ok("Tensão: cartão do Filomeno com Normal (120/80 recalculado)", corpo.includes("Filomeno Manuel Joaquim Alexandre") && corpo.includes("Normal"));
   ok("Tensão: o grau guardado errado do hub NUNCA aparece", !corpo.includes("Limitrofe"));
 
-  // Campanha de CONTROLE aberta (Fase 10): Olindo é membro (com medicação)
-  ok("Tensão: painel da campanha de controle", corpo.includes("Campanha de controle: tensão alta") && corpo.includes("1 na campanha"));
+  // Campanha de CONTROLE NUMERADA aberta (Fase 11): Campanha 02, Olindo membro
+  ok("Tensão: painel da campanha NUMERADA", corpo.includes("Campanha 02 de controle: tensão alta") && corpo.includes("1 na campanha"));
   const contador = (await pg.locator("[data-campanha-contador]").textContent() || "").replace(/\s+/g, " ").trim();
   ok("Tensão: contador do dia (0 de 1 medidos)", contador.includes("0 de 1"), `texto: ${contador}`);
   ok("Tensão: Olindo na fila sem medir há 2 dias", corpo.includes("Não medido há 2 dia(s)"));
   ok("Tensão: fila com estado Falta medir", corpo.includes("Falta medir"));
   ok("Tensão: a % EXPLÍCITA sobre o pessoal da campanha", corpo.includes("Última medição alta: 1 de 1 (100% da campanha)") && corpo.includes("quem não está na campanha mede normalmente"));
+  ok("Tensão: dia da campanha à vista (aberta há 10 dias)", corpo.includes("aberta em") && corpo.includes("dia 11 da campanha"));
+  ok("Tensão: medicação VISÍVEL na linha do membro", corpo.includes("Medicação: Losartan 50 mg (1 comprimido / dia)"));
   ok("Tensão: selo Com medicação no Olindo", corpo.includes("Com medicação"));
-  ok("Tensão: indicador da campanha no painel", corpo.includes("Última medição alta na campanha (pessoas)") && corpo.includes("1 de 1 (100% da campanha)"));
+  ok("Tensão: indicador da campanha numerada no painel", corpo.includes("Última medição alta na Campanha 02 (pessoas)") && corpo.includes("1 de 1 (100% da campanha)"));
   ok("Tensão: indicador do período agora EXPLÍCITO (X de Y)", corpo.includes("Tensão alta no período (das medições)") && corpo.includes("1 de 2 (50%)"));
   ok("Tensão: indicadores do período", corpo.includes("Medições no período") && corpo.includes("Média da tensão") && corpo.includes("Medições de hoje"));
+  ok("Tensão: CSV e Relatório SÓ DA CAMPANHA à mão", corpo.includes("CSV da campanha") && corpo.includes("Relatório da campanha") && corpo.includes(`/imprimir/hst/tensao?campanha=${ID_CAMP}`));
+  ok("Tensão: campanha arquivada com relatório a um clique", corpo.includes("Arquivadas:") && corpo.includes("Campanha 01") && corpo.includes(`?campanha=${ID_ARQ}`));
 
-  // Gerir a campanha: dialog com o membro e a entrada na campanha
+  // Gerir a campanha: dialog do ciclo de vida (aberta, medicação, arquivar)
   await pg.locator('button:has-text("Gerir campanha")').first().click();
   await pg.waitForTimeout(400);
   corpo = await pg.content();
   ok("Tensão: dialog da campanha com o membro", corpo.includes("Campanha de controle da tensão") && corpo.includes("Pessoal na campanha (1)") && corpo.includes("Na campanha desde"));
+  ok("Tensão: dialog diz que a Campanha 02 está aberta", corpo.includes("Campanha 02 aberta"));
   ok("Tensão: tirar da campanha NÃO apaga (aviso no dialog)", corpo.includes("NÃO apaga nada: fica no histórico"));
   ok("Tensão: campo para entrar na campanha", corpo.includes("Entrar na campanha"));
+
+  // Medicação de um membro registada AQUI MESMO (o campo que não se via)
+  await pg.locator('[aria-label="Medicação de Olindo J. Pinto"]').click();
+  await pg.waitForTimeout(350);
+  corpo = await pg.content();
+  ok("Tensão: modal de medicação do membro abre", corpo.includes("Medicação - Olindo J. Pinto") && corpo.includes("Nova medicação para Olindo J. Pinto"));
+  await pg.locator('input[id="md-nome"]').fill("Hidroclorotiazida 25 mg");
+  await pg.locator('div[role="dialog"] button:has-text("Registar")').click();
+  await pg.waitForTimeout(600);
+  ok("Tensão: POST da medicação capturado com o colaborador", postsMedicacao.length === 1 && postsMedicacao[0]?.colaborador_nome === "Olindo J. Pinto" && postsMedicacao[0]?.medicamento === "Hidroclorotiazida 25 mg", JSON.stringify(postsMedicacao));
+
+  // Arquivar a campanha: fica no histórico, nada é apagado
+  await pg.locator("[data-arquivar]").click();
+  await pg.waitForTimeout(600);
+  ok("Tensão: arquivar mandou POST acao=arquivar", postsCampanha.length === 1 && postsCampanha[0]?.acao === "arquivar", JSON.stringify(postsCampanha));
   await pg.keyboard.press("Escape");
   await pg.waitForTimeout(250);
 
-  ok("Tensão: filtros de datas e botões de saída", corpo.includes('aria-label="Data inicial"') && corpo.includes('aria-label="Data final"') && corpo.includes("CSV") && corpo.includes("Relatório"));
   ok("Tensão: filtros de datas e botões de saída", corpo.includes('aria-label="Data inicial"') && corpo.includes('aria-label="Data final"') && corpo.includes("CSV") && corpo.includes("Relatório"));
 
   // CSV do período
@@ -640,6 +686,18 @@ const LISTA_ACCIDENTES = {
   await descTen.saveAs(CAMINHO_CSV_TEN);
   const bufTen = fs.readFileSync(CAMINHO_CSV_TEN);
   ok("Tensão: CSV com BOM, cabeçalho e hora separada", bufTen[0] === 0xef && bufTen.toString("utf8").includes("Data;Hora;Colaborador;Sistolica;Diastolica") && bufTen.toString("utf8").includes("08:55"));
+
+  // CSV SÓ DA CAMPANHA (Fase 11): só o pessoal escolhido
+  const [descCamp] = await Promise.all([
+    pg.waitForEvent("download", { timeout: 30000 }),
+    pg.locator('button[aria-label="CSV da campanha"]').click()
+  ]);
+  ok("Tensão: CSV DA CAMPANHA com nome campanha-02-tensao", descCamp.suggestedFilename().startsWith("campanha-02-tensao"), descCamp.suggestedFilename());
+  const CAMINHO_CSV_CAMP = "/tmp/campanha-teste.csv";
+  await descCamp.saveAs(CAMINHO_CSV_CAMP);
+  const bufCamp = fs.readFileSync(CAMINHO_CSV_CAMP);
+  // A hora 08:55 é da medição do Filomeno; no CSV da campanha só entra o Olindo (09:00).
+  ok("Tensão: CSV da campanha só tem o pessoal dela (Olindo, sem a medição do Filomeno)", bufCamp.toString("utf8").includes("09:00") && !bufCamp.toString("utf8").includes("08:55"));
 
   // Filtro por classificação alta
   await pg.locator('select[aria-label="Filtrar por classificação"]').selectOption("alta");
@@ -818,6 +876,16 @@ const LISTA_ACCIDENTES = {
   ok("Papel individual: a medição do Olindo na lista", papel.includes("150") && papel.includes("Queixa de dores de cabeça"));
   ok("Papel individual: medicação em curso no papel", papel.includes("Medicação em Curso") && papel.includes("Losartan 50 mg") && papel.includes("1 comprimido / dia"));
   ok("Papel individual: estatística desde o início da medicação", papel.includes("média 150/70") && papel.includes("altas 1 de 1 (100%)"));
+
+  /* ---------- 17b. Papel DA CAMPANHA numerada (A4) ---------- */
+  await pgPapel.goto(`${BASE}/imprimir/hst/tensao?campanha=${ID_CAMP}`, { waitUntil: "domcontentloaded" });
+  await pgPapel.waitForTimeout(1400);
+  papel = await pgPapel.content();
+  ok("Papel campanha: título numerado e estado", papel.includes("Campanha 02 de Controle da Tensão Arterial") && papel.includes("Estado: Aberta"));
+  ok("Papel campanha: período da campanha", papel.includes("Período da Campanha 02:"));
+  ok("Papel campanha: quadro do pessoal da campanha", papel.includes("Pessoal da Campanha 02") && papel.includes("Olindo J. Pinto") && papel.includes("DM0011"));
+  ok("Papel campanha: medicação em curso por pessoa", papel.includes("Losartan 50 mg") && papel.includes("Regular"));
+  ok("Papel campanha: medições do pessoal em lista", papel.includes("Medições do Período (por ordem de data)") && papel.includes("150"));
 
   /* ---------- 18. Papel do controlo de tensão com PERÍODO ---------- */
   await pgPapel.goto(`${BASE}/imprimir/hst/tensao?de=${DATA_2ATRAS}&ate=${DATA_2ATRAS}`, { waitUntil: "domcontentloaded" });
